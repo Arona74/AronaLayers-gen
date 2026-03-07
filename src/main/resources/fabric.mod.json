@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "crlayers",
-  "version": "1.0.6b",
+  "version": "${version}",
   "name": "CR Layers Generator",
   "description": "Generate Conquest Reforged terrain layers automatically",
   "authors": [
@@ -16,7 +16,9 @@
       "io.arona74.crlayers.CRLayers"
     ]
   },
-  "mixins": [],
+  "mixins": [
+    "crlayers.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.15.0",
     "minecraft": "1.20.1",

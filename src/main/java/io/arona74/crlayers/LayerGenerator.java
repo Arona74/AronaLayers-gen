@@ -6,6 +6,7 @@ import net.minecraft.block.Blocks;
 import net.minecraft.block.enums.DoubleBlockHalf;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Properties;
+import net.minecraft.text.Text;
 import net.minecraft.util.WorldSavePath;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
@@ -13,6 +14,7 @@ import net.minecraft.world.Heightmap;
 
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Simplified chunk-based layer generator using distance-from-edge algorithm
@@ -22,6 +24,10 @@ public class LayerGenerator {
     private final BlockMappingRegistry mappingRegistry;
     private final PlantMappingRegistry plantMappingRegistry;
     private final PlantDataStorage plantDataStorage;
+
+    // Async generation tracking
+    private static volatile CompletableFuture<Integer> currentAsyncGeneration = null;
+    private static volatile boolean cancelRequested = false;
     
     public LayerGenerator(ServerWorld world) {
         this.world = world;
@@ -91,8 +97,9 @@ public class LayerGenerator {
         Map<BlockPos, Integer> layerValues = calculateLayerValues(
             validSurfaceHeights,  // Only calculate for valid positions
             allSurfaceHeights,    // But use full heightmap for distance calculations
-            edges, 
-            chunksToProcess
+            edges,
+            chunksToProcess,
+            new HashMap<>()       // No existing layers for batch processing
         );
         CRLayers.LOGGER.info("Calculated {} positions with layers", layerValues.size());
         
@@ -105,6 +112,299 @@ public class LayerGenerator {
         
         CRLayers.LOGGER.info("Generation complete! Generated {} blocks", blocksGenerated);
         return blocksGenerated;
+    }
+
+    /**
+     * Cancel any ongoing async layer generation
+     * @return true if there was an operation to cancel, false otherwise
+     */
+    public static boolean cancelAsyncGeneration() {
+        if (currentAsyncGeneration != null && !currentAsyncGeneration.isDone()) {
+            cancelRequested = true;
+            currentAsyncGeneration.cancel(true);
+            currentAsyncGeneration = null;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Check if an async generation is currently running
+     */
+    public static boolean isAsyncGenerationRunning() {
+        return currentAsyncGeneration != null && !currentAsyncGeneration.isDone();
+    }
+
+    /**
+     * Generate layers asynchronously to avoid freezing the server
+     * @return CompletableFuture that completes when generation is done, returns number of blocks generated
+     */
+    public CompletableFuture<Integer> generateLayersAsync(BlockPos center, int chunkRadius, boolean replacePlants, net.minecraft.server.command.ServerCommandSource source) {
+        // Check if already running
+        if (isAsyncGenerationRunning()) {
+            CRLayers.LOGGER.warn("Async generation already in progress!");
+            return CompletableFuture.completedFuture(0);
+        }
+
+        CRLayers.LOGGER.info("Starting ASYNC layer generation - Mode: {}, Max Distance: {}",
+            LayerConfig.MODE, LayerConfig.MAX_LAYER_DISTANCE);
+
+        cancelRequested = false;
+
+        long totalStartTime = System.currentTimeMillis();
+        long phaseStartTime = totalStartTime;
+
+        // PHASE 1-3: Collect all world data on MAIN THREAD (must be synchronous for thread safety)
+        ChunkPos centerChunk = new ChunkPos(center);
+        Set<ChunkPos> chunksToProcess = new HashSet<>();
+
+        for (int dx = -chunkRadius; dx <= chunkRadius; dx++) {
+            for (int dz = -chunkRadius; dz <= chunkRadius; dz++) {
+                ChunkPos chunkPos = new ChunkPos(centerChunk.x + dx, centerChunk.z + dz);
+                if (world.isChunkLoaded(chunkPos.x, chunkPos.z)) {
+                    chunksToProcess.add(chunkPos);
+                }
+            }
+        }
+
+        CRLayers.LOGGER.info("Processing {} loaded chunks", chunksToProcess.size());
+        if (chunksToProcess.isEmpty()) {
+            return CompletableFuture.completedFuture(0);
+        }
+
+        if (source != null) {
+            source.sendFeedback(() -> Text.literal(String.format("§7[1/5] Collecting data from %d chunks...", chunksToProcess.size())), false);
+        }
+
+        // Collect surface heights on main thread
+        phaseStartTime = System.currentTimeMillis();
+        Map<BlockPos, Integer> allSurfaceHeights = new HashMap<>();
+        for (ChunkPos chunkPos : chunksToProcess) {
+            collectAllSurfaceHeights(chunkPos, allSurfaceHeights);
+        }
+        long phase1Time = System.currentTimeMillis() - phaseStartTime;
+        CRLayers.LOGGER.info("Collected {} surface positions in {}ms", allSurfaceHeights.size(), phase1Time);
+
+        if (source != null) {
+            final long p1Time = phase1Time;
+            source.sendFeedback(() -> Text.literal(String.format("§7[2/5] Collected %d surface positions §8(%dms)", allSurfaceHeights.size(), p1Time)), false);
+        }
+
+        // Identify edges (no world access, just data processing)
+        phaseStartTime = System.currentTimeMillis();
+        Map<BlockPos, Integer> edges = identifyEdges(allSurfaceHeights);
+        long phase2Time = System.currentTimeMillis() - phaseStartTime;
+        CRLayers.LOGGER.info("Identified {} edges in {}ms", edges.size(), phase2Time);
+
+        if (source != null) {
+            final long p2Time = phase2Time;
+            source.sendFeedback(() -> Text.literal(String.format("§7[3/5] Identified %d edges §8(%dms)", edges.size(), p2Time)), false);
+        }
+
+        if (edges.isEmpty()) {
+            CRLayers.LOGGER.warn("No edges found");
+            return CompletableFuture.completedFuture(0);
+        }
+
+        // Collect valid surface data on main thread
+        phaseStartTime = System.currentTimeMillis();
+        Map<BlockPos, Integer> validSurfaceHeights = new HashMap<>();
+        Map<BlockPos, Block> surfaceBlocks = new HashMap<>();
+        for (ChunkPos chunkPos : chunksToProcess) {
+            collectValidSurfaceData(chunkPos, validSurfaceHeights, surfaceBlocks);
+        }
+        long phase3Time = System.currentTimeMillis() - phaseStartTime;
+        CRLayers.LOGGER.info("Collected {} valid positions in {}ms", validSurfaceHeights.size(), phase3Time);
+
+        if (source != null) {
+            final long p3Time = phase3Time;
+            source.sendFeedback(() -> Text.literal(String.format("§7[4/5] Collected %d valid positions §8(%dms)", validSurfaceHeights.size(), p3Time)), false);
+        }
+
+        if (validSurfaceHeights.isEmpty()) {
+            return CompletableFuture.completedFuture(0);
+        }
+
+        // PHASE 4: Now do the CALCULATION async (CPU-intensive, no world access)
+        final long calcStartTime = System.currentTimeMillis();
+        CompletableFuture<Integer> future = CompletableFuture.supplyAsync(() -> {
+            if (cancelRequested) {
+                CRLayers.LOGGER.info("Async generation cancelled before calculation");
+                return new AsyncGenerationResult(new HashMap<>(), new HashMap<>());
+            }
+
+            Map<BlockPos, Integer> layerValues = calculateLayerValues(
+                validSurfaceHeights,
+                allSurfaceHeights,
+                edges,
+                chunksToProcess,
+                new HashMap<>()
+            );
+            long phase4Time = System.currentTimeMillis() - calcStartTime;
+            CRLayers.LOGGER.info("Calculated {} layer positions in {}ms", layerValues.size(), phase4Time);
+
+            // Send progress update on main thread
+            if (source != null) {
+                final long p4Time = phase4Time;
+                world.getServer().execute(() ->
+                    source.sendFeedback(() -> Text.literal(String.format("§7[5/5] Calculated %d positions §8(%dms) §7- placing blocks...", layerValues.size(), p4Time)), false)
+                );
+            }
+
+            return new AsyncGenerationResult(layerValues, surfaceBlocks);
+
+        }).thenApplyAsync(result -> {
+            // PHASE 5: Place blocks on main server thread
+            if (result.layerValues.isEmpty()) {
+                return 0;
+            }
+
+            // Place all blocks (we're already on main thread via thenApplyAsync)
+            int blocksPlaced = 0;
+
+            for (Map.Entry<BlockPos, Integer> entry : result.layerValues.entrySet()) {
+                BlockPos surfacePos = entry.getKey();
+                int layerCount = entry.getValue();
+                Block surfaceBlock = result.surfaceBlocks.get(surfacePos);
+
+                if (surfaceBlock == null) continue;
+
+                Block layerBlock = mappingRegistry.getLayerBlock(surfaceBlock, layerCount);
+                if (layerBlock == null) continue;
+
+                BlockPos layerPos = surfacePos.up();
+                BlockState existingState = world.getBlockState(layerPos);
+                Block existingBlock = existingState.getBlock();
+
+                // Handle plant replacement
+                if (replacePlants && !existingState.isAir()) {
+
+                    if (plantMappingRegistry.isConquestPlant(existingBlock)) {
+                        continue;
+                    }
+
+                    if (plantMappingRegistry.isReplaceablePlant(existingBlock)) {
+                        boolean isTallPlant = isTallPlant(existingBlock);
+
+                        if (isTallPlant) {
+                            BlockPos upperPos = layerPos.up();
+                            BlockState upperState = world.getBlockState(upperPos);
+                            Block upperPlantBlock = upperState.getBlock();
+                            plantDataStorage.storePlant(upperPos, upperPlantBlock);
+                        }
+
+                        plantDataStorage.storePlant(layerPos, existingBlock);
+                        if (isTallPlant) {
+                            plantDataStorage.storeTallPlant(layerPos, true);
+                        }
+
+                        BlockState layerState = layerBlock.getDefaultState();
+                        if (layerState.contains(Properties.LAYERS)) {
+                            layerState = layerState.with(Properties.LAYERS, layerCount);
+                        }
+                        // Check if we should waterlog
+                        if (layerState.contains(Properties.WATERLOGGED) && existingState.getBlock() == Blocks.WATER) {
+                            layerState = layerState.with(Properties.WATERLOGGED, true);
+                        }
+
+                        world.setBlockState(layerPos, layerState, 3);
+                        blocksPlaced++;
+
+                        if (isTallPlant) {
+                            BlockPos upperPos = layerPos.up();
+                            world.setBlockState(upperPos, Blocks.AIR.getDefaultState(), 3);
+                        }
+                    }
+                } else if (existingState.isAir() || existingState.getBlock() == Blocks.WATER) {
+                    BlockState layerState = layerBlock.getDefaultState();
+                    if (layerState.contains(Properties.LAYERS)) {
+                        layerState = layerState.with(Properties.LAYERS, layerCount);
+                    }
+                    // Check if we should waterlog
+                    if (layerState.contains(Properties.WATERLOGGED) && existingState.getBlock() == Blocks.WATER) {
+                        layerState = layerState.with(Properties.WATERLOGGED, true);
+                    }
+
+                    world.setBlockState(layerPos, layerState, 3);
+                    blocksPlaced++;
+                }
+            }
+
+            // Save plant data
+            if (replacePlants && blocksPlaced > 0) {
+                plantDataStorage.save();
+            }
+
+            long totalTime = System.currentTimeMillis() - totalStartTime;
+            CRLayers.LOGGER.info("Async generation complete! Generated {} blocks in {}ms", blocksPlaced, totalTime);
+
+            // Send completion message to chat
+            if (source != null) {
+                final int blocks = blocksPlaced;
+                final long time = totalTime;
+                source.sendFeedback(() -> Text.literal(String.format("§aAsync generation complete! Generated %d blocks §7(total: %dms)", blocks, time)), true);
+            }
+
+            return blocksPlaced;
+        }, world.getServer()).whenComplete((result, throwable) -> {
+            // Clear the tracking when done (success or failure)
+            currentAsyncGeneration = null;
+            cancelRequested = false;
+        });
+
+        // Store and return the future
+        currentAsyncGeneration = future;
+        return future;
+    }
+
+    /**
+     * Helper class to hold async generation results
+     */
+    private static class AsyncGenerationResult {
+        final Map<BlockPos, Integer> layerValues;
+        final Map<BlockPos, Block> surfaceBlocks;
+
+        AsyncGenerationResult(Map<BlockPos, Integer> layerValues, Map<BlockPos, Block> surfaceBlocks) {
+            this.layerValues = layerValues;
+            this.surfaceBlocks = surfaceBlocks;
+        }
+    }
+
+    /**
+     * Scan neighboring chunks for existing layer blocks
+     * This allows smoothing to see layers from already-processed chunks
+     */
+    private Map<BlockPos, Integer> scanExistingLayers(Set<ChunkPos> chunksToAnalyze,
+                                                       ChunkPos centerChunk,
+                                                       Map<BlockPos, Integer> surfaceHeights) {
+        Map<BlockPos, Integer> existingLayers = new HashMap<>();
+
+        for (Map.Entry<BlockPos, Integer> entry : surfaceHeights.entrySet()) {
+            BlockPos surfacePos = entry.getKey();
+            ChunkPos posChunk = new ChunkPos(surfacePos);
+
+            // Only scan neighboring chunks, not the center chunk (we're recalculating it)
+            if (posChunk.equals(centerChunk)) continue;
+            if (!chunksToAnalyze.contains(posChunk)) continue;
+
+            // Check for a layer block above the surface
+            BlockPos layerPos = surfacePos.up();
+            BlockState layerState = world.getBlockState(layerPos);
+
+            if (layerState.isAir()) continue;
+
+            // Check if it's a layer block with LAYERS property
+            if (layerState.contains(Properties.LAYERS)) {
+                int layers = layerState.get(Properties.LAYERS);
+                existingLayers.put(surfacePos, layers);
+                if (existingLayers.size() <= 3) {
+                    CRLayers.LOGGER.info("  Found existing layer at {} (Y={}) with value {}", surfacePos, surfacePos.getY(), layers);
+                }
+            }
+        }
+
+        CRLayers.LOGGER.info("Found {} existing layers in neighboring chunks (center chunk: {})", existingLayers.size(), centerChunk);
+        return existingLayers;
     }
 
     /**
@@ -124,6 +424,13 @@ public class LayerGenerator {
                     allHeights.put(surfacePos, surfacePos.getY());
                     uniqueYLevels.add(surfacePos.getY());
                     foundInChunk++;
+
+                    // Debug: log underwater positions
+                    if (surfacePos.getY() < 63 && foundInChunk <= 3) {
+                        BlockState surfaceState = world.getBlockState(surfacePos);
+                        CRLayers.LOGGER.info("  Found underwater surface at {} Y={} block={}",
+                            surfacePos, surfacePos.getY(), surfaceState.getBlock());
+                    }
                 } else {
                     nullSurface++;
                 }
@@ -154,8 +461,8 @@ public class LayerGenerator {
                 
                 // Apply filters for valid placement
                 if (!canGenerateLayersOn(surfaceBlock)) continue;
-                if (hasWaterNearby(surfacePos)) continue;
-                
+                // Allow generation in water - waterlogging will be handled during placement
+
                 surfaceHeights.put(surfacePos, surfacePos.getY());
                 surfaceBlocks.put(surfacePos, surfaceBlock);
             }
@@ -199,15 +506,20 @@ public class LayerGenerator {
             collectValidSurfaceData(chunk, validSurfaceHeights, surfaceBlocks);
         }
         
+        // Scan neighboring chunks for existing layers (to enable smoothing across chunks)
+        Map<BlockPos, Integer> existingLayers = scanExistingLayers(chunksToAnalyze, chunkPos, allSurfaceHeights);
+
         // Calculate layers only for center chunk
         // Pass BOTH validSurfaceHeights (where to place) and allSurfaceHeights (for distances)
+        // Also pass existingLayers so smoothing can see neighbor values during calculation
         Set<ChunkPos> centerOnly = new HashSet<>();
         centerOnly.add(chunkPos);
         Map<BlockPos, Integer> layerValues = calculateLayerValues(
             validSurfaceHeights,   // Only calculate for valid positions
             allSurfaceHeights,     // But use full heightmap for distance calculations
-            edges, 
-            centerOnly
+            edges,
+            centerOnly,
+            existingLayers         // Pre-existing layers from neighbors
         );
         
         // Place layers
@@ -296,7 +608,7 @@ public class LayerGenerator {
             if (validNeighborsChecked > 0) {
                 positionsWithNeighbors++;
             }
-            
+
             if (hasLowerNeighbor) {
                 edges.put(pos, height);
                 edgesFound++;
@@ -315,17 +627,25 @@ public class LayerGenerator {
     private Map<BlockPos, Integer> calculateLayerValues(Map<BlockPos, Integer> validPositions,
                                                         Map<BlockPos, Integer> fullHeightmap,
                                                         Map<BlockPos, Integer> edges,
-                                                        Set<ChunkPos> targetChunks) {
+                                                        Set<ChunkPos> targetChunks,
+                                                        Map<BlockPos, Integer> existingLayers) {
 
-        Map<BlockPos, Integer> layerValues = new HashMap<>();
+        // Initialize with existing layers from neighbors (for smoothing across chunks)
+        Map<BlockPos, Integer> layerValues = new HashMap<>(existingLayers);
 
         // Get all unique Y levels
         Set<Integer> allYLevels = new HashSet<>(fullHeightmap.values());
         List<Integer> sortedYLevels = new ArrayList<>(allYLevels);
         Collections.sort(sortedYLevels, Collections.reverseOrder()); // Highest to lowest
 
-        if (sortedYLevels.size() < 2) {
-            CRLayers.LOGGER.info("Not enough Y levels to process");
+        if (sortedYLevels.isEmpty()) {
+            CRLayers.LOGGER.info("No Y levels to process");
+            return layerValues;
+        }
+
+        // Allow processing even with 1 Y level if we have existing layers to spread
+        if (sortedYLevels.size() == 1 && existingLayers.isEmpty()) {
+            CRLayers.LOGGER.info("Only 1 Y level and no existing layers - skipping");
             return layerValues;
         }
 
@@ -348,26 +668,29 @@ public class LayerGenerator {
         // Process each Y level from highest to lowest
         for (int i = 0; i < sortedYLevels.size(); i++) {
             int currentY = sortedYLevels.get(i);
-            
-            // Skip generation on highest and lowest Y levels, but still classify them
-            boolean isHighest = (i == 0);
-            boolean isLowest = (i == sortedYLevels.size() - 1);
-            boolean shouldGenerate = !isHighest && !isLowest;
-            
-            CRLayers.LOGGER.info("Processing Y level {} (generate={})", currentY, shouldGenerate);
-            
+
             // Step 1: Classify blocks at this Y level
             Set<BlockPos> hBlocks = new HashSet<>();
             Set<BlockPos> eBlocks = new HashSet<>();
             Set<BlockPos> lBlocks = new HashSet<>();
-            
-            classifyBlocksAtYLevel(currentY, fullHeightmap, xzToHeight, validPositions, 
+
+            classifyBlocksAtYLevel(currentY, fullHeightmap, xzToHeight, validPositions,
                 targetChunks, previousEBlocks, hBlocks, eBlocks, lBlocks);
-            
+
             CRLayers.LOGGER.info("Y={}: H={}, E={}, L={}", currentY, hBlocks.size(), eBlocks.size(), lBlocks.size());
-            
-            // Only generate layers if not highest/lowest
-            if (shouldGenerate) {
+
+            // Always process all Y levels (including lowest)
+            CRLayers.LOGGER.info("Processing Y level {}", currentY);
+
+            // STEP 1: Top generation - apply inverse gradients for E-to-E paths (if enabled)
+            // This creates hills on flat plateaus at any Y-level
+            if (LayerConfig.TOP_GENERATION && !eBlocks.isEmpty() && !lBlocks.isEmpty()) {
+                spreadTopGenerationLayers(currentY, eBlocks, lBlocks, layerValues);
+            }
+
+            // STEP 2: Normal generation - spread from H blocks (if they exist)
+            // This creates the standard downward gradient from higher terrain
+            if (!hBlocks.isEmpty()) {
                 // Determine effective max distance based on mode
                 int effectiveMaxDistance = LayerConfig.MAX_LAYER_DISTANCE;
                 if (LayerConfig.MODE == LayerConfig.GenerationMode.EXTENDED) {
@@ -376,16 +699,15 @@ public class LayerGenerator {
                     effectiveMaxDistance = LayerConfig.MAX_LAYER_DISTANCE * 3;
                 }
 
-                // Step 2: Spread layers from H blocks
                 spreadLayersFromHBlocks(currentY, hBlocks, lBlocks, eBlocks, layerValues,
                     effectiveMaxDistance);
-
-                // Step 3: Smoothing passes
-                for (int cycle = 0; cycle < LayerConfig.SMOOTHING_CYCLES; cycle++) {
-                    smoothingPass(currentY, lBlocks, hBlocks, eBlocks, layerValues);
-                }
             }
-            
+
+            // STEP 3: Smoothing passes (apply to all generated layers)
+            for (int cycle = 0; cycle < LayerConfig.SMOOTHING_CYCLES; cycle++) {
+                smoothingPass(currentY, lBlocks, hBlocks, eBlocks, layerValues);
+            }
+
             // Remember E blocks for next (lower) Y level
             previousEBlocks = eBlocks;
         }
@@ -472,6 +794,45 @@ public class LayerGenerator {
                 }
             }
         }
+
+        // Also check neighboring chunks for E blocks so smoothing can see them
+        for (Map.Entry<BlockPos, Integer> entry : fullHeightmap.entrySet()) {
+            if (entry.getValue() != currentY) continue;
+
+            BlockPos pos = entry.getKey();
+            ChunkPos posChunk = new ChunkPos(pos);
+
+            // Only process positions NOT in target chunks (neighboring chunks only)
+            if (targetChunks.contains(posChunk)) continue;
+
+            // Skip if already classified
+            if (hBlocks.contains(pos) || eBlocks.contains(pos)) continue;
+
+            // Check if this position has lower or missing neighbors
+            boolean hasLowerNeighbor = false;
+            boolean hasMissingNeighbor = false;
+
+            int[] offsets = {-1, 0, 1};
+            for (int dx : offsets) {
+                for (int dz : offsets) {
+                    if (dx == 0 && dz == 0) continue;
+
+                    String key = (pos.getX() + dx) + "," + (pos.getZ() + dz);
+                    Integer neighborHeight = xzToHeight.get(key);
+
+                    if (neighborHeight == null) {
+                        hasMissingNeighbor = true;
+                    } else if (neighborHeight < currentY) {
+                        hasLowerNeighbor = true;
+                    }
+                }
+            }
+
+            // Add to E blocks if it's an edge (for neighbor detection during smoothing)
+            if (hasLowerNeighbor || hasMissingNeighbor) {
+                eBlocks.add(pos);
+            }
+        }
     }
 
     /**
@@ -484,17 +845,26 @@ public class LayerGenerator {
                             Set<BlockPos> hBlocks,
                             Set<BlockPos> eBlocks,
                             Map<BlockPos, Integer> layerValues) {
-        
+
         Map<BlockPos, Integer> newValues = new HashMap<>();
-        
+
+        // Check if this is a flat area (no H or E blocks)
+        boolean isFlatArea = hBlocks.isEmpty() && eBlocks.isEmpty();
+
+        // Removed verbose logging for each Y level
+
         int[][] cardinalOffsets = {
             { 1, 0 },  // East
             { -1, 0 }, // West
             { 0, 1 },  // South
             { 0, -1 }  // North
         };
-        
+
+        int debugCount = 0;
         for (BlockPos lBlock : lBlocks) {
+            boolean isDebugPos = isFlatArea && debugCount < 3;
+            if (isFlatArea) debugCount++; // Increment for every L block in flat areas
+
             // Get existing value (from spreading phase)
             Integer existingValue = layerValues.get(lBlock);
 
@@ -523,11 +893,26 @@ public class LayerGenerator {
                 }
             }
 
-            // Require at least two valid cardinal neighbors
-            if (count < 2) continue;
+            if (isDebugPos) {
+                CRLayers.LOGGER.info("  DEBUG pos {}: count={}, maxValue={}, existingValue={}",
+                    lBlock, count, maxCardinalNeighborValue, existingValue);
+            }
+
+            // For flat areas, allow smoothing with just 1 neighbor to enable spreading
+            // For normal terrain, require at least 2 neighbors to prevent artifacts
+            int requiredNeighbors = isFlatArea ? 1 : 2;
+            if (count < requiredNeighbors) {
+                if (isDebugPos) {
+                    CRLayers.LOGGER.info("    Skipped - not enough neighbors (need {}, have {})", requiredNeighbors, count);
+                }
+                continue;
+            }
 
             // Only smooth if max cardinal neighbor value is at least 2
             if (maxCardinalNeighborValue >= 2) {
+                if (isDebugPos) {
+                    CRLayers.LOGGER.info("    Smoothing - avg will be calculated from sum={}, count={}", sum, count);
+                }
                 double average = (double) sum / count;
                 int value;
 
@@ -566,15 +951,19 @@ public class LayerGenerator {
                         }
                     }
                 }
+            } else {
+                if (isDebugPos) {
+                    CRLayers.LOGGER.info("    Skipped - maxCardinalNeighborValue too low ({})", maxCardinalNeighborValue);
+                }
             }
         }
-        
+
         // Apply new values
         layerValues.putAll(newValues);
     }
 
     /**
-     * Spread layers from all H blocks in 8 directions
+     * Spread layers from all H blocks in 4 cardinal directions
      */
     private void spreadLayersFromHBlocks(int currentY,
                                         Set<BlockPos> hBlocks,
@@ -642,6 +1031,76 @@ public class LayerGenerator {
         }
     }
 
+    /**
+     * Spread inverse gradient layers from E blocks for top generation mode
+     * Creates small hills between E blocks on the highest Y-level
+     */
+    private void spreadTopGenerationLayers(int currentY,
+                                           Set<BlockPos> eBlocks,
+                                           Set<BlockPos> lBlocks,
+                                           Map<BlockPos, Integer> layerValues) {
+
+        // 4 cardinal directions: N, E, S, W
+        int[][] directions = {
+            {0, -1},  // N
+            {1, 0},   // E
+            {0, 1},   // S
+            {-1, 0},  // W
+        };
+
+        // Track path statistics
+        Map<Integer, Integer> pathLengthCounts = new HashMap<>();
+        int totalPaths = 0;
+        int pathsWithHills = 0;
+
+        for (BlockPos eBlock : eBlocks) {
+            for (int[] dir : directions) {
+                // Walk in this direction and collect L blocks until hitting another E block
+                List<BlockPos> pathLBlocks = new ArrayList<>();
+                boolean foundOtherEBlock = false;
+
+                for (int step = 1; step <= 100; step++) { // Max 100 blocks search
+                    BlockPos checkPos = new BlockPos(
+                        eBlock.getX() + dir[0] * step,
+                        currentY,
+                        eBlock.getZ() + dir[1] * step
+                    );
+
+                    // Found another E block - valid path!
+                    if (eBlocks.contains(checkPos)) {
+                        foundOtherEBlock = true;
+                        break;
+                    }
+
+                    // If not an L block, stop searching
+                    if (!lBlocks.contains(checkPos)) {
+                        break;
+                    }
+
+                    pathLBlocks.add(checkPos);
+                }
+
+                totalPaths++;
+
+                // Only apply inverse gradient if we found a complete E-to-E path
+                if (foundOtherEBlock && !pathLBlocks.isEmpty()) {
+                    int pathLength = pathLBlocks.size();
+                    pathLengthCounts.put(pathLength, pathLengthCounts.getOrDefault(pathLength, 0) + 1);
+                    pathsWithHills++;
+                    applyInverseGradient(pathLBlocks, layerValues);
+                }
+            }
+        }
+
+        // Log statistics
+        if (pathsWithHills > 0) {
+            CRLayers.LOGGER.info("Y={}: TOP GENERATION - Processed {} E-to-E paths ({} with hills). Path lengths: {}",
+                currentY, totalPaths, pathsWithHills, formatPathStats(pathLengthCounts));
+        } else {
+            CRLayers.LOGGER.info("Y={}: TOP GENERATION - No valid E-to-E paths found", currentY);
+        }
+    }
+
     private String formatPathStats(Map<Integer, Integer> pathLengthCounts) {
         StringBuilder sb = new StringBuilder();
         pathLengthCounts.entrySet().stream()
@@ -672,6 +1131,26 @@ public class LayerGenerator {
         }
     }
 
+    /**
+     * Apply inverse gradient to a path of L blocks (for top generation mode)
+     * Creates a hill effect with low values at edges and high values in the middle
+     */
+    private void applyInverseGradient(List<BlockPos> path, Map<BlockPos, Integer> layerValues) {
+        int availableBlocks = path.size();
+        int[] gradient = getInverseGradient(availableBlocks);
+
+        for (int i = 0; i < path.size() && i < gradient.length; i++) {
+            BlockPos pos = path.get(i);
+            int newValue = gradient[i];
+
+            // Take max of existing and new value (when multiple paths overlap)
+            Integer existing = layerValues.get(pos);
+            if (existing == null || newValue > existing) {
+                layerValues.put(pos, newValue);
+            }
+        }
+    }
+
     private int[] getGradient(int space) {
         // EXTREME mode: use extreme gradients with triple repeated values
         if (LayerConfig.MODE == LayerConfig.GenerationMode.EXTREME) {
@@ -688,24 +1167,122 @@ public class LayerGenerator {
         return new int[0];
     }
 
-    private int[] getNormalGradient(int space) {
-        // BASIC mode: linear gradients
+    /**
+     * Get inverse gradient for top generation mode
+     * Selects appropriate gradient based on generation mode
+     */
+    private int[] getInverseGradient(int space) {
+        if (LayerConfig.MODE == LayerConfig.GenerationMode.EXTREME) {
+            return getInverseExtremeGradient(space);
+        }
+        if (LayerConfig.MODE == LayerConfig.GenerationMode.EXTENDED) {
+            return getInverseExtendedGradient(space);
+        }
+        // BASIC mode
+        return getInverseBasicGradient(space);
+    }
+
+    /**
+     * EXTREME inverse gradient for top generation
+     * Creates very wide, very gradual hills with repeated values (up to 7)
+     */
+    private int[] getInverseExtremeGradient(int space) {
+        // Symmetric hill patterns with repeated values reaching up to 7
+        if (space >= 21) {
+            return new int[]{1, 1, 2, 2, 3, 3, 4, 4, 5, 6, 7, 6, 5, 4, 4, 3, 3, 2, 2, 1, 1};
+        } else if (space >= 20) {
+            return new int[]{1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 6, 5, 4, 3, 3, 2, 2, 1, 1, 1};
+        } else if (space >= 19) {
+            return new int[]{1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 6, 5, 4, 3, 3, 2, 2, 1, 1};
+        } else if (space >= 18) {
+            return new int[]{1, 1, 2, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 2, 1, 1, 1};
+        } else if (space >= 17) {
+            return new int[]{1, 1, 2, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 2, 1, 1};
+        } else if (space >= 16) {
+            return new int[]{1, 1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1, 1, 1};
+        } else if (space >= 15) {
+            return new int[]{1, 1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1, 1};
+        } else {
+            // Fall back to extended for smaller spaces
+            return getInverseExtendedGradient(space);
+        }
+    }
+
+    /**
+     * EXTENDED inverse gradient for top generation
+     * Creates wider, more gradual hills with repeated values (up to 7)
+     */
+    private int[] getInverseExtendedGradient(int space) {
+        // Symmetric hill patterns with repeated values reaching up to 7
+        if (space >= 14) {
+            return new int[]{1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1};
+        } else if (space >= 13) {
+            return new int[]{1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1};
+        } else if (space >= 12) {
+            return new int[]{1, 2, 3, 4, 5, 6, 6, 5, 4, 3, 2, 1};
+        } else if (space >= 11) {
+            return new int[]{1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1};
+        } else if (space >= 10) {
+            return new int[]{1, 2, 3, 4, 5, 5, 4, 3, 2, 1};
+        } else if (space >= 9) {
+            return new int[]{1, 2, 3, 4, 5, 4, 3, 2, 1};
+        } else if (space >= 8) {
+            return new int[]{1, 2, 3, 5, 5, 3, 2, 1};
+        } else {
+            // Fall back to basic for smaller spaces
+            return getInverseBasicGradient(space);
+        }
+    }
+
+    /**
+     * BASIC inverse gradient for top generation
+     * Creates a symmetric hill: low at edges, high in the middle (up to 7)
+     */
+    private int[] getInverseBasicGradient(int space) {
+        // Symmetric hill patterns reaching up to 7
         if (space >= 7) {
-            return new int[]{7, 6, 5, 4, 3, 2, 1};
+            return new int[]{1, 3, 5, 7, 5, 3, 1};
         } else if (space == 6) {
-            return new int[]{7, 6, 5, 3, 2, 1};
+            return new int[]{1, 3, 5, 5, 3, 1};
         } else if (space == 5) {
-            return new int[]{6, 5, 4, 2, 1};
+            return new int[]{1, 3, 5, 3, 1};
         } else if (space == 4) {
-            return new int[]{7, 5, 3, 1};
+            return new int[]{2, 5, 5, 2};
         } else if (space == 3) {
-            return new int[]{6, 4, 2};
+            return new int[]{2, 5, 2};
         } else if (space == 2) {
-            return new int[]{5, 2};
+            return new int[]{4, 4};
         } else if (space == 1) {
             return new int[]{4};
         }
         return new int[0];
+    }
+
+    /**
+     * EXTREME mode gradients with triple repeated values
+     * Creates very gradual transitions: 7,7,7,6,6,6,5,5,5,4,4,4,3,3,3,2,2,2,1,1,1
+     */
+    private int[] getExtremeNormalGradient(int space) {
+        // Extreme gradients with triple repetition for very long distances (15-21 blocks)
+        if (space >= 21) {
+            return new int[]{7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1};
+        } else if (space >= 20) {
+            return new int[]{7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 1, 1, 1};
+        } else if (space >= 19) {
+            return new int[]{7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 3, 3, 3, 2, 2, 1, 1, 1};
+        } else if (space >= 18) {
+            return new int[]{7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 1, 1};
+        } else if (space >= 17) {
+            return new int[]{7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 3, 3, 3, 2, 2, 1, 1};
+        } else if (space >= 16) {
+            return new int[]{7, 7, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 2, 2, 1, 1};
+        } else if (space >= 15) {
+            return new int[]{7, 7, 6, 6, 5, 5, 4, 4, 4, 3, 3, 2, 2, 1, 1};
+        }
+        // For space <= 14, fall back to extended gradients
+        else {
+            return getExtendedNormalGradient(space);
+        }
     }
 
     /**
@@ -735,31 +1312,24 @@ public class LayerGenerator {
         }
     }
 
-    /**
-     * EXTREME mode gradients with triple repeated values
-     * Creates very gradual transitions: 7,7,7,6,6,6,5,5,5,4,4,4,3,3,3,2,2,2,1,1,1
-     */
-    private int[] getExtremeNormalGradient(int space) {
-        // Extreme gradients with triple repetition for very long distances (15-21 blocks)
-        if (space >= 21) {
-            return new int[]{7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 2, 1, 1, 1};
-        } else if (space >= 20) {
-            return new int[]{7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 1, 1, 1};
-        } else if (space >= 19) {
-            return new int[]{7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 3, 3, 3, 2, 2, 1, 1, 1};
-        } else if (space >= 18) {
-            return new int[]{7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 1, 1};
-        } else if (space >= 17) {
-            return new int[]{7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 3, 3, 3, 2, 2, 1, 1};
-        } else if (space >= 16) {
-            return new int[]{7, 7, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 2, 2, 1, 1};
-        } else if (space >= 15) {
-            return new int[]{7, 7, 6, 6, 5, 5, 4, 4, 4, 3, 3, 2, 2, 1, 1};
+    private int[] getNormalGradient(int space) {
+        // BASIC mode: linear gradients
+        if (space >= 7) {
+            return new int[]{7, 6, 5, 4, 3, 2, 1};
+        } else if (space == 6) {
+            return new int[]{7, 6, 5, 3, 2, 1};
+        } else if (space == 5) {
+            return new int[]{6, 5, 4, 2, 1};
+        } else if (space == 4) {
+            return new int[]{7, 5, 3, 1};
+        } else if (space == 3) {
+            return new int[]{6, 4, 2};
+        } else if (space == 2) {
+            return new int[]{5, 2};
+        } else if (space == 1) {
+            return new int[]{4};
         }
-        // For space <= 14, fall back to extended gradients
-        else {
-            return getExtendedNormalGradient(space);
-        }
+        return new int[0];
     }
     
     /**
@@ -783,10 +1353,10 @@ public class LayerGenerator {
             
             BlockPos layerPos = surfacePos.up();
             BlockState existingState = world.getBlockState(layerPos);
-            
+            Block existingBlock = existingState.getBlock();
+
             // Handle plant replacement
             if (replacePlants && !existingState.isAir()) {
-                Block existingBlock = existingState.getBlock();
                 
                 if (plantMappingRegistry.isConquestPlant(existingBlock)) {
                     continue; // Skip existing conquest plants
@@ -811,6 +1381,10 @@ public class LayerGenerator {
                     BlockState layerState = layerBlock.getDefaultState();
                     if (layerState.contains(Properties.LAYERS)) {
                         layerState = layerState.with(Properties.LAYERS, Math.min(layerCount, 8));
+                    }
+                    // Check if we should waterlog
+                    if (layerState.contains(Properties.WATERLOGGED) && existingState.getBlock() == Blocks.WATER) {
+                        layerState = layerState.with(Properties.WATERLOGGED, true);
                     }
                     world.setBlockState(layerPos, layerState);
 
@@ -863,13 +1437,17 @@ public class LayerGenerator {
             }
             
             // Normal placement
-            if (existingState.isAir() || existingState.isReplaceable()) {
+            if (existingState.isAir() || existingState.isReplaceable() || existingState.getBlock() == Blocks.WATER) {
                 BlockState layerState = layerBlock.getDefaultState();
-                
+
                 if (layerState.contains(Properties.LAYERS)) {
                     layerState = layerState.with(Properties.LAYERS, Math.min(layerCount, 8));
                 }
-                
+                // Check if we should waterlog
+                if (layerState.contains(Properties.WATERLOGGED) && existingState.getBlock() == Blocks.WATER) {
+                    layerState = layerState.with(Properties.WATERLOGGED, true);
+                }
+
                 world.setBlockState(layerPos, layerState);
                 blocksGenerated++;
             }
@@ -990,12 +1568,13 @@ public class LayerGenerator {
                block == Blocks.LILAC ||
                block == Blocks.ROSE_BUSH ||
                block == Blocks.PEONY ||
+               block == Blocks.TALL_SEAGRASS ||
                block.getDefaultState().contains(Properties.DOUBLE_BLOCK_HALF);
     }
     
     private BlockPos findSurfaceBlock(BlockPos pos) {
-        // Start from world surface heightmap
-        int surfaceY = world.getTopY(Heightmap.Type.WORLD_SURFACE, pos.getX(), pos.getZ());
+        // Start from ocean floor heightmap (includes underwater terrain)
+        int surfaceY = world.getTopY(Heightmap.Type.OCEAN_FLOOR, pos.getX(), pos.getZ());
         BlockPos surfacePos = new BlockPos(pos.getX(), surfaceY, pos.getZ());
         
         // Walk down to find actual solid terrain (skip air, plants, leaves)
@@ -1008,9 +1587,21 @@ public class LayerGenerator {
                 surfacePos = surfacePos.down();
                 continue;
             }
-            
+
+            // Skip water to find solid ground underneath
+            if (block == Blocks.WATER) {
+                surfacePos = surfacePos.down();
+                continue;
+            }
+
             // Skip leaves
             if (block.getDefaultState().isIn(net.minecraft.registry.tag.BlockTags.LEAVES)) {
+                surfacePos = surfacePos.down();
+                continue;
+            }
+
+            // Skip logs (wood blocks)
+            if (block.getDefaultState().isIn(net.minecraft.registry.tag.BlockTags.LOGS)) {
                 surfacePos = surfacePos.down();
                 continue;
             }
@@ -1028,19 +1619,26 @@ public class LayerGenerator {
                 block.getDefaultState().isIn(net.minecraft.registry.tag.BlockTags.SAPLINGS) ||
                 block == Blocks.TALL_GRASS ||
                 block == Blocks.GRASS ||
+                block == Blocks.TALL_SEAGRASS ||
+                block == Blocks.SEAGRASS ||
                 block == Blocks.FERN ||
                 block == Blocks.LARGE_FERN ||
                 block == Blocks.DEAD_BUSH) {
                 surfacePos = surfacePos.down();
                 continue;
             }
-            
+
+            // Accept dirt_path as valid surface (even though it's not a full cube)
+            if (block == Blocks.DIRT_PATH) {
+                return surfacePos;
+            }
+
             // Skip non-full blocks (slabs, stairs, etc.)
             if (!state.isFullCube(world, surfacePos)) {
                 surfacePos = surfacePos.down();
                 continue;
             }
-            
+
             // Found solid surface block
             return surfacePos;
         }
@@ -1052,42 +1650,6 @@ public class LayerGenerator {
         // Check if the block has a mapping in the config file
         return mappingRegistry.hasMapping(block);
     }
-    
-    private boolean hasWaterNearby(BlockPos surfacePos) {
-        BlockPos layerPos = surfacePos.up();
-        BlockState stateAbove = world.getBlockState(layerPos);
-        
-        if (stateAbove.getBlock() == Blocks.WATER) return true;
-        
-        BlockState surfaceState = world.getBlockState(surfacePos);
-        if (surfaceState.getBlock() == Blocks.WATER) return true;
-        
-        if (surfaceState.contains(Properties.WATERLOGGED) && surfaceState.get(Properties.WATERLOGGED)) {
-            return true;
-        }
-        
-        BlockPos[] adjacentPositions = {
-            surfacePos.north(),
-            surfacePos.south(),
-            surfacePos.east(),
-            surfacePos.west()
-        };
-        
-        for (BlockPos adjacent : adjacentPositions) {
-            BlockState adjacentState = world.getBlockState(adjacent);
-            
-            if (adjacentState.getBlock() == Blocks.WATER) return true;
-            
-            if (adjacentState.contains(Properties.WATERLOGGED) && adjacentState.get(Properties.WATERLOGGED)) {
-                return true;
-            }
-            
-            BlockState adjacentAbove = world.getBlockState(adjacent.up());
-            if (adjacentAbove.getBlock() == Blocks.WATER) return true;
-        }
-        
-        return false;
-    }
 
     /**
      * Export debug data showing Y levels and layer values in a grid
@@ -1098,20 +1660,22 @@ public class LayerGenerator {
     public String debugExport(BlockPos center, int radius) {
         StringBuilder logOutput = new StringBuilder();
         StringBuilder fileOutput = new StringBuilder();
-        
+
         int minX = center.getX() - radius;
         int maxX = center.getX() + radius;
         int minZ = center.getZ() - radius;
         int maxZ = center.getZ() + radius;
-        
-        // Collect ALL surface heights (unfiltered)
+
+        // Collect ALL surface heights from a LARGER area (radius + 3 blocks buffer)
+        // This ensures edge detection works correctly at visualization boundaries
+        int buffer = 3;
         Map<BlockPos, Integer> allSurfaceHeights = new HashMap<>();
-        
-        for (int x = minX; x <= maxX; x++) {
-            for (int z = minZ; z <= maxZ; z++) {
+
+        for (int x = minX - buffer; x <= maxX + buffer; x++) {
+            for (int z = minZ - buffer; z <= maxZ + buffer; z++) {
                 BlockPos columnPos = new BlockPos(x, 0, z);
                 BlockPos surfacePos = findSurfaceBlock(columnPos);
-                
+
                 if (surfacePos != null) {
                     allSurfaceHeights.put(surfacePos, surfacePos.getY());
                 }
@@ -1131,7 +1695,7 @@ public class LayerGenerator {
                     BlockState surfaceState = world.getBlockState(surfacePos);
                     Block surfaceBlock = surfaceState.getBlock();
                     
-                    if (canGenerateLayersOn(surfaceBlock) && !hasWaterNearby(surfacePos)) {
+                    if (canGenerateLayersOn(surfaceBlock)) {
                         validSurfaceHeights.put(surfacePos, surfacePos.getY());
                         surfaceBlocks.put(surfacePos, surfaceBlock);
                     }
@@ -1185,17 +1749,40 @@ public class LayerGenerator {
         fileOutput.append("\n");
         
         // Calculate what layers WOULD be placed with current algorithm
-        Set<ChunkPos> targetChunks = new HashSet<>();
-        targetChunks.add(new ChunkPos(center));
-        
+        // Process chunks sequentially like actual generation to match behavior
+        Set<ChunkPos> allChunksInArea = new HashSet<>();
+        for (Map.Entry<BlockPos, Integer> entry : allSurfaceHeights.entrySet()) {
+            allChunksInArea.add(new ChunkPos(entry.getKey()));
+        }
+
         Map<BlockPos, Integer> edges = identifyEdges(allSurfaceHeights);
-        
-        Map<BlockPos, Integer> calculatedLayers = calculateLayerValues(
-            validSurfaceHeights,
-            allSurfaceHeights,
-            edges,
-            targetChunks
-        );
+        Map<BlockPos, Integer> calculatedLayers = new HashMap<>();
+
+        // Process each chunk sequentially (like actual generation)
+        for (ChunkPos chunkPos : allChunksInArea) {
+            Set<ChunkPos> singleChunk = new HashSet<>();
+            singleChunk.add(chunkPos);
+
+            // Scan for existing layers from neighbors (including already-processed chunks in this debug run)
+            Map<BlockPos, Integer> existingLayers = scanExistingLayers(allChunksInArea, chunkPos, allSurfaceHeights);
+
+            // Also include layers we've already calculated in previous iterations
+            existingLayers.putAll(calculatedLayers);
+
+            Map<BlockPos, Integer> chunkLayers = calculateLayerValues(
+                validSurfaceHeights,
+                allSurfaceHeights,
+                edges,
+                singleChunk,
+                existingLayers
+            );
+
+            // Add this chunk's layers to the overall result
+            calculatedLayers.putAll(chunkLayers);
+        }
+
+        // Use allChunksInArea for classification (all chunks in visualization area)
+        Set<ChunkPos> targetChunks = allChunksInArea;
         
         // Create XZ lookup for heightmap
         Map<String, Integer> xzToHeight = new HashMap<>();

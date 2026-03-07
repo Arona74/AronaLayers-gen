@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew build:*)",
+      "Bash(unzip:*)",
+      "Bash(.gradlew build:*)",
+      "Bash(cmd /c \"gradlew.bat build\")",
+      "Bash(powershell -Command \"./gradlew.bat build\")",
+      "Bash(powershell -Command:*)",
+      "Bash(python3:*)",
+      "Bash(python:*)",
+      "Bash(dir /s /b \"c:\\\\Users\\\\alexa\\\\.gradle\\\\caches\")",
+      "Bash(findstr:*)",
+      "Bash(javap:*)",
+      "Bash(dir:*)"
+    ]
+  }
+}

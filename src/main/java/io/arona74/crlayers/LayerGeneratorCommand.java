@@ -1,6 +1,7 @@
 package io.arona74.crlayers;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -28,7 +29,21 @@ public class LayerGeneratorCommand {
                 .executes(LayerGeneratorCommand::executeRemoveWithRadius))
             .executes(LayerGeneratorCommand::executeRemoveDefault)
         );
-        
+
+        // Async generation command (doesn't freeze server)
+        dispatcher.register(CommandManager.literal("generateLayersAsync")
+            .requires(source -> source.hasPermissionLevel(2))
+            .then(CommandManager.argument("chunkRadius", IntegerArgumentType.integer(1, 32))
+                .executes(LayerGeneratorCommand::executeAsyncWithRadius))
+            .executes(LayerGeneratorCommand::executeAsyncDefault)
+        );
+
+        // Cancel async generation command
+        dispatcher.register(CommandManager.literal("cancelLayerGeneration")
+            .requires(source -> source.hasPermissionLevel(2))
+            .executes(LayerGeneratorCommand::executeCancel)
+        );
+
         // Configuration commands
         dispatcher.register(CommandManager.literal("layerConfig")
             .requires(source -> source.hasPermissionLevel(2))
@@ -76,6 +91,10 @@ public class LayerGeneratorCommand {
                         return builder.buildFuture();
                     })
                     .executes(LayerGeneratorCommand::setSmoothingPriority)))
+
+            .then(CommandManager.literal("topGeneration")
+                .then(CommandManager.argument("enabled", BoolArgumentType.bool())
+                    .executes(LayerGeneratorCommand::setTopGeneration)))
 
             .then(CommandManager.literal("reload")
                 .executes(LayerGeneratorCommand::reloadConfig))
@@ -157,9 +176,93 @@ public class LayerGeneratorCommand {
             return 0;
         }
     }
-    
+
+    // ==================== Async Generation Commands ====================
+
+    private static int executeAsyncDefault(CommandContext<ServerCommandSource> context) {
+        return executeAsync(context, 3, true);
+    }
+
+    private static int executeAsyncWithRadius(CommandContext<ServerCommandSource> context) {
+        int chunkRadius = IntegerArgumentType.getInteger(context, "chunkRadius");
+        return executeAsync(context, chunkRadius, true);
+    }
+
+    private static int executeAsync(CommandContext<ServerCommandSource> context, int chunkRadius, boolean replacePlants) {
+        ServerCommandSource source = context.getSource();
+
+        if (!(source.getEntity() instanceof ServerPlayerEntity player)) {
+            source.sendError(Text.literal("This command can only be used by players"));
+            return 0;
+        }
+
+        BlockPos playerPos = player.getBlockPos();
+
+        String configInfo = String.format("Mode: %s, Distance: %d blocks",
+            LayerConfig.MODE.name(),
+            LayerConfig.MAX_LAYER_DISTANCE);
+        source.sendFeedback(() -> Text.literal("§7" + configInfo), false);
+
+        int blockRadius = chunkRadius * 16;
+        String message = String.format("§eStarting ASYNC generation in %d chunk radius (~%d blocks)...", chunkRadius, blockRadius);
+        source.sendFeedback(() -> Text.literal(message), false);
+        source.sendFeedback(() -> Text.literal("§7Generation running in background - server won't freeze!"), false);
+
+        LayerGenerator generator = new LayerGenerator(player.getServerWorld());
+
+        try {
+            long startTime = System.currentTimeMillis();
+
+            generator.generateLayersAsync(playerPos, chunkRadius, replacePlants, source)
+                .thenAccept(blocksGenerated -> {
+                    long duration = System.currentTimeMillis() - startTime;
+
+                    if (blocksGenerated == 0) {
+                        source.sendFeedback(() -> Text.literal("§eNo layers generated."), false);
+                    } else {
+                        source.sendFeedback(() -> Text.literal(
+                            String.format("§aAsync generation complete! Generated %d blocks §7(took %dms)",
+                            blocksGenerated, duration)), true);
+                    }
+                })
+                .exceptionally(e -> {
+                    CRLayers.LOGGER.error("Error in async generation", e);
+                    source.sendError(Text.literal("§cAsync generation error: " + e.getMessage()));
+                    return null;
+                });
+
+            source.sendFeedback(() -> Text.literal("§aGeneration started! You can continue playing."), false);
+            return 1;
+
+        } catch (Exception e) {
+            CRLayers.LOGGER.error("Error starting async generation", e);
+            source.sendError(Text.literal("§cError: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    // ==================== Cancel Command ====================
+
+    private static int executeCancel(CommandContext<ServerCommandSource> context) {
+        ServerCommandSource source = context.getSource();
+
+        try {
+            if (LayerGenerator.cancelAsyncGeneration()) {
+                source.sendFeedback(() -> Text.literal("§eAsync layer generation cancelled!"), false);
+                return 1;
+            } else {
+                source.sendFeedback(() -> Text.literal("§7No async generation is currently running."), false);
+                return 0;
+            }
+        } catch (Exception e) {
+            CRLayers.LOGGER.error("Error cancelling generation", e);
+            source.sendError(Text.literal("§cError cancelling generation: " + e.getMessage()));
+            return 0;
+        }
+    }
+
     // ==================== Removal Commands ====================
-    
+
     private static int executeRemoveDefault(CommandContext<ServerCommandSource> context) {
         return executeRemove(context, 3, true); // Always restore plants
     }
@@ -206,7 +309,7 @@ public class LayerGeneratorCommand {
     
     private static int showConfig(CommandContext<ServerCommandSource> context) {
         ServerCommandSource source = context.getSource();
-        
+
         source.sendFeedback(() -> Text.literal("§6=== Layer Configuration ==="), false);
         source.sendFeedback(() -> Text.literal(String.format(
             "§eMode: §f%s", LayerConfig.MODE.name())), false);
@@ -221,13 +324,17 @@ public class LayerGeneratorCommand {
         source.sendFeedback(() -> Text.literal(String.format(
             "§eSmoothing Priority: §f%s", LayerConfig.SMOOTHING_PRIORITY.name())), false);
 
+        String topGenStatus = LayerConfig.TOP_GENERATION ? "§aENABLED" : "§cDISABLED";
+        source.sendFeedback(() -> Text.literal(String.format(
+            "§eTop Generation: %s", topGenStatus)), false);
+
         String modeDesc = switch (LayerConfig.MODE) {
             case BASIC -> "§7Linear gradient up to 7: 7→6→5→4→3→2→1";
             case EXTENDED -> "§7Gradual steps up to 14: 7,7→6,6→5,5→4,4→3,3→2,2→1,1";
             case EXTREME -> "§7Very gradual steps up to 21: 7,7,7→6,6,6→5,5,5→4,4,4→3,3,3→2,2,2→1,1,1";
         };
         source.sendFeedback(() -> Text.literal(modeDesc), false);
-        
+
         return 1;
     }
     
@@ -334,6 +441,28 @@ public class LayerGeneratorCommand {
         LayerConfig.save();
         source.sendFeedback(() -> Text.literal(
             String.format("§aSet smoothing priority to: §f%s", priority.name())), true);
+
+        return 1;
+    }
+
+    private static int setTopGeneration(CommandContext<ServerCommandSource> context) {
+        ServerCommandSource source = context.getSource();
+        boolean enabled = BoolArgumentType.getBool(context, "enabled");
+
+        LayerConfig.TOP_GENERATION = enabled;
+        LayerConfig.save();
+
+        String status = enabled ? "§aENABLED" : "§cDISABLED";
+        source.sendFeedback(() -> Text.literal(
+            String.format("§aTop generation mode: %s", status)), true);
+
+        if (enabled) {
+            source.sendFeedback(() -> Text.literal(
+                "§7The highest Y-level will now generate inverse gradient hills between edges"), false);
+        } else {
+            source.sendFeedback(() -> Text.literal(
+                "§7The highest Y-level will be skipped (default behavior)"), false);
+        }
 
         return 1;
     }

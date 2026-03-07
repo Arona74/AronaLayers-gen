@@ -1,0 +1,7 @@
+{
+  "_comment": "Extra foliage mappings. Format: 'minecraft:surface_block': 'conquest:foliage_block'. Foliage is placed above layers when the position is empty.",
+  "mappings": {
+    "minecraft:grass_block": "conquest:grass",
+    "minecraft:dirt": "conquest:grass"
+  }
+}

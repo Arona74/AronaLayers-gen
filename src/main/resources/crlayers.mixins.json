@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "io.arona74.crlayers.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "NoiseBasedChunkGeneratorMixin",
+    "ChunkGeneratorMixin",
+    "ThreadedAnvilChunkStorageMixin",
+    "PlantBlockMixin",
+    "TreeFeatureMixin",
+    "TreeSoilMixin",
+    "SnowBlockMixin"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
