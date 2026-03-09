@@ -1,7 +1,7 @@
-package io.arona74.crlayers.mixin;
+package io.arona74.aronalayersgen.mixin;
 
-import io.arona74.crlayers.CRLayers;
-import io.arona74.crlayers.injection.RandomStateHolder;
+import io.arona74.aronalayersgen.AronaLayersGen;
+import io.arona74.aronalayersgen.injection.RandomStateHolder;
 import net.minecraft.server.world.ThreadedAnvilChunkStorage;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Mixin to capture the RandomState when ThreadedAnvilChunkStorage is initialized.
- * This allows us to access RTFRandomState during chunk generation.
+ * Allows access to RTFRandomState during chunk generation.
  */
 @Mixin(ThreadedAnvilChunkStorage.class)
 public class ThreadedAnvilChunkStorageMixin {
@@ -24,10 +24,8 @@ public class ThreadedAnvilChunkStorageMixin {
         at = @At("TAIL")
     )
     private void onInit(CallbackInfo ci) {
-        // The noiseConfig field is RandomState in Mojang mappings
-        // Capture it for use during chunk generation
         if (noiseConfig != null) {
-            CRLayers.LOGGER.info("[TACS Mixin] Capturing NoiseConfig/RandomState: {}", noiseConfig.getClass().getName());
+            AronaLayersGen.LOGGER.info("[TACS Mixin] Capturing NoiseConfig/RandomState: {}", noiseConfig.getClass().getName());
             RandomStateHolder.setRandomState(noiseConfig);
         }
     }

@@ -1,11 +1,11 @@
-package io.arona74.crlayers.mixin;
+package io.arona74.aronalayersgen.mixin;
 
-import io.arona74.crlayers.CRLayers;
-import io.arona74.crlayers.LayerConfig;
-import io.arona74.crlayers.injection.PreStructureHeightmapStorage;
-import io.arona74.crlayers.injection.RTFCompat;
-import io.arona74.crlayers.injection.RTFLayerInjector;
-import io.arona74.crlayers.injection.RandomStateHolder;
+import io.arona74.aronalayersgen.AronaLayersGen;
+import io.arona74.aronalayersgen.LayerConfig;
+import io.arona74.aronalayersgen.injection.PreStructureHeightmapStorage;
+import io.arona74.aronalayersgen.injection.RTFCompat;
+import io.arona74.aronalayersgen.injection.RTFLayerInjector;
+import io.arona74.aronalayersgen.injection.RandomStateHolder;
 import net.minecraft.world.ChunkRegion;
 import net.minecraft.world.biome.source.BiomeAccess;
 import net.minecraft.world.chunk.Chunk;
@@ -20,17 +20,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Mixin to inject layer generation after carving but before features.
- * This ensures layers are placed before plants/trees are generated.
+ * Ensures layers are placed before plants/trees are generated (CARVERS mode).
  */
 @Mixin(NoiseChunkGenerator.class)
 public class ChunkGeneratorMixin {
 
-    /**
-     * Inject after carvers are applied but before features.
-     * The carve method is called during the CARVERS chunk status.
-     *
-     * NoiseConfig in Yarn = RandomState in Mojang mappings
-     */
     @Inject(
         method = "carve",
         at = @At("RETURN")
@@ -43,13 +37,11 @@ public class ChunkGeneratorMixin {
                                   Chunk chunk,
                                   GenerationStep.Carver carverStep,
                                   CallbackInfo ci) {
-        // Only process if RTF injection is enabled
         if (!LayerConfig.RTF_LAYER_INJECTION) {
             return;
         }
 
-        // Capture heightmap snapshot before structures are placed (for structure_no_layers).
-        // Must happen before the POST_FEATURES early return since both modes need this data.
+        // Capture heightmap snapshot before structures (for structure_no_layers)
         if (LayerConfig.STRUCTURE_NO_LAYERS) {
             PreStructureHeightmapStorage.captureHeightmap(chunk);
         }
@@ -60,24 +52,20 @@ public class ChunkGeneratorMixin {
         }
 
         try {
-            // Pre-compute structure bounding boxes for this chunk (including cross-chunk refs)
             RTFLayerInjector.prepareStructureBounds(chunk, chunkRegion);
 
-            // NoiseConfig is RandomState - check if it's RTFRandomState
             if (RTFCompat.isRTFAvailable()) {
-                // Try using the noiseConfig directly (it's the RandomState)
                 if (noiseConfig != null) {
-                    CRLayers.LOGGER.debug("[ChunkGen] Injecting layers after carve for chunk {},{}",
+                    AronaLayersGen.LOGGER.debug("[ChunkGen] Injecting layers after carve for chunk {},{}",
                         chunk.getPos().x, chunk.getPos().z);
                     RTFCompat.injectLayersWithRTF(chunk, noiseConfig);
                 } else if (RandomStateHolder.hasRTFRandomState()) {
-                    // Fallback to cached RandomState
                     Object randomState = RandomStateHolder.getRandomState();
                     RTFCompat.injectLayersWithRTF(chunk, randomState);
                 }
             }
         } catch (Exception e) {
-            CRLayers.LOGGER.debug("[ChunkGen] Layer injection failed: {}", e.getMessage());
+            AronaLayersGen.LOGGER.debug("[ChunkGen] Layer injection failed: {}", e.getMessage());
         } finally {
             RTFLayerInjector.clearStructureBounds();
         }

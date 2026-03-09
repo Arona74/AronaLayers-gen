@@ -1,7 +1,7 @@
-package io.arona74.crlayers.mixin;
+package io.arona74.aronalayersgen.mixin;
 
-import io.arona74.crlayers.LayerConfig;
-import io.arona74.crlayers.injection.RTFLayerInjector;
+import io.arona74.aronalayersgen.LayerConfig;
+import io.arona74.aronalayersgen.injection.RTFLayerInjector;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.PlantBlock;
 import net.minecraft.util.math.BlockPos;
@@ -16,7 +16,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /**
  * Makes layer blocks transparent to plant placement checks.
  * When plant_injection is enabled, PlantBlock.canPlaceAt() looks through
- * layer blocks to the actual surface below and delegates canPlantOnTop there.
+ * layer blocks to the actual surface below.
+ * Only meaningful when Conquest Reforged is the active backend.
  */
 @Mixin(PlantBlock.class)
 public abstract class PlantBlockMixin {
@@ -38,7 +39,6 @@ public abstract class PlantBlockMixin {
         BlockState belowState = world.getBlockState(belowPos);
 
         if (RTFLayerInjector.hasLayerProperty(belowState)) {
-            // Look through the layer to the actual surface
             BlockPos surfacePos = belowPos.down();
             BlockState surfaceState = world.getBlockState(surfacePos);
             cir.setReturnValue(canPlantOnTop(surfaceState, world, surfacePos));

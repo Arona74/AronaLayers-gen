@@ -1,4 +1,4 @@
-package io.arona74.crlayers;
+package io.arona74.aronalayersgen;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -16,13 +16,13 @@ import java.util.Map;
  */
 public class ConfigLoader {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path CONFIG_DIR = FabricLoader.getInstance().getConfigDir().resolve("crlayers");
+    private static final Path CONFIG_DIR = FabricLoader.getInstance().getConfigDir().resolve("aronalayersgen");
 
     /**
-     * Load mappings from a JSON config file
-     * First tries to load from the config directory, then falls back to resources
-     * @param configFileName The name of the config file (e.g., "block_mappings.json")
-     * @return Map of vanilla block IDs to Conquest Reforged block IDs
+     * Load mappings from a JSON config file.
+     * First tries to load from the config directory, then falls back to resources.
+     * @param configFileName The name of the config file (e.g., "cr_block_mappings.json")
+     * @return Map of vanilla block IDs to layer block IDs
      */
     public static Map<String, String> loadMappings(String configFileName) {
         Map<String, String> mappings = new HashMap<>();
@@ -32,39 +32,33 @@ public class ConfigLoader {
         if (Files.exists(externalConfigPath)) {
             try {
                 mappings = loadMappingsFromFile(externalConfigPath);
-                CRLayers.LOGGER.info("Loaded mappings from external config: {}", externalConfigPath);
+                AronaLayersGen.LOGGER.info("Loaded mappings from external config: {}", externalConfigPath);
                 return mappings;
             } catch (IOException e) {
-                CRLayers.LOGGER.error("Failed to load external config file: {}", externalConfigPath, e);
+                AronaLayersGen.LOGGER.error("Failed to load external config file: {}", externalConfigPath, e);
             }
         }
 
         // Fall back to resource file
         try {
             mappings = loadMappingsFromResource(configFileName);
-            CRLayers.LOGGER.info("Loaded mappings from resource: {}", configFileName);
+            AronaLayersGen.LOGGER.info("Loaded mappings from resource: {}", configFileName);
 
             // Create external config file for user customization
             createExternalConfig(configFileName, mappings);
         } catch (IOException e) {
-            CRLayers.LOGGER.error("Failed to load resource config file: {}", configFileName, e);
+            AronaLayersGen.LOGGER.error("Failed to load resource config file: {}", configFileName, e);
         }
 
         return mappings;
     }
 
-    /**
-     * Load mappings from a file path
-     */
     private static Map<String, String> loadMappingsFromFile(Path filePath) throws IOException {
         try (Reader reader = Files.newBufferedReader(filePath)) {
             return parseMappingsJson(reader);
         }
     }
 
-    /**
-     * Load mappings from a resource file
-     */
     private static Map<String, String> loadMappingsFromResource(String resourceName) throws IOException {
         InputStream inputStream = ConfigLoader.class.getClassLoader().getResourceAsStream(resourceName);
         if (inputStream == null) {
@@ -76,9 +70,6 @@ public class ConfigLoader {
         }
     }
 
-    /**
-     * Parse JSON mappings from a reader
-     */
     private static Map<String, String> parseMappingsJson(Reader reader) {
         Map<String, String> mappings = new HashMap<>();
 
@@ -93,20 +84,15 @@ public class ConfigLoader {
         return mappings;
     }
 
-    /**
-     * Create an external config file for user customization
-     */
     private static void createExternalConfig(String configFileName, Map<String, String> defaultMappings) {
         try {
-            // Create config directory if it doesn't exist
             if (!Files.exists(CONFIG_DIR)) {
                 Files.createDirectories(CONFIG_DIR);
-                CRLayers.LOGGER.info("Created config directory: {}", CONFIG_DIR);
+                AronaLayersGen.LOGGER.info("Created config directory: {}", CONFIG_DIR);
             }
 
             Path configPath = CONFIG_DIR.resolve(configFileName);
 
-            // Only create if it doesn't exist
             if (!Files.exists(configPath)) {
                 JsonObject root = new JsonObject();
                 root.addProperty("_comment",
@@ -122,16 +108,13 @@ public class ConfigLoader {
                     GSON.toJson(root, writer);
                 }
 
-                CRLayers.LOGGER.info("Created default config file: {}", configPath);
+                AronaLayersGen.LOGGER.info("Created default config file: {}", configPath);
             }
         } catch (IOException e) {
-            CRLayers.LOGGER.error("Failed to create external config file", e);
+            AronaLayersGen.LOGGER.error("Failed to create external config file", e);
         }
     }
 
-    /**
-     * Save mappings to an external config file
-     */
     public static void saveMappings(String configFileName, Map<String, String> mappings) throws IOException {
         if (!Files.exists(CONFIG_DIR)) {
             Files.createDirectories(CONFIG_DIR);
@@ -153,6 +136,6 @@ public class ConfigLoader {
             GSON.toJson(root, writer);
         }
 
-        CRLayers.LOGGER.info("Saved mappings to config file: {}", configPath);
+        AronaLayersGen.LOGGER.info("Saved mappings to config file: {}", configPath);
     }
 }

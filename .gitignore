@@ -32,3 +32,6 @@ bin/
 
 run/
 remappedSrc/
+
+# others
+.claude/

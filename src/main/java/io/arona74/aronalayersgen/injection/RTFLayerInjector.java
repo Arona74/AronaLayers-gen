@@ -1,7 +1,7 @@
-package io.arona74.crlayers.injection;
+package io.arona74.aronalayersgen.injection;
 
-import io.arona74.crlayers.CRLayers;
-import io.arona74.crlayers.LayerConfig;
+import io.arona74.aronalayersgen.AronaLayersGen;
+import io.arona74.aronalayersgen.LayerConfig;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.util.math.BlockPos;
@@ -49,7 +49,7 @@ public class RTFLayerInjector {
      * Logic (from RTF):
      * - depth = height * worldHeight - (int)(height * worldHeight)
      * - layers = round(depth * 8)
-     * - Then we subtract 1 as per user request
+     * - Then subtract 1 as per user request
      *
      * @param height RTF cell height (0-1 normalized)
      * @param worldHeight RTF world height from Levels
@@ -75,7 +75,6 @@ public class RTFLayerInjector {
 
     /**
      * Inject layers for a single position using RTF Cell data with snow-layer logic.
-     * Calculates the layer count from RTF height data, then delegates to shared helper.
      *
      * @param chunk The chunk being generated
      * @param worldX World X coordinate
@@ -88,19 +87,16 @@ public class RTFLayerInjector {
      */
     public static boolean injectLayerAt(Chunk chunk, int worldX, int worldZ, int worldHeight,
                                       float height, boolean isRiver, boolean isSubmerged) {
-        // Skip rivers (unless underwater layers are enabled)
         if (isRiver && !LayerConfig.UNDERWATER_LAYERS) {
             debugSkipRiver++;
             return false;
         }
 
-        // Skip underwater unless configured
         if (isSubmerged && !LayerConfig.UNDERWATER_LAYERS) {
             debugSkipSubmerged++;
             return false;
         }
 
-        // Detect snowy biome for skipReduction parameter
         int localX = worldX & 15;
         int localZ = worldZ & 15;
         Heightmap.Type hmType = (chunk instanceof WorldChunk)
@@ -116,16 +112,13 @@ public class RTFLayerInjector {
 
         boolean useSnowLayers = isSnowyBiome && LayerConfig.IMPROVE_SNOWY_BIOMES;
 
-        // Calculate layer count using RTF's fractional height
         int layerCount = calculateLayerCount(height, worldHeight, useSnowLayers);
 
-        // Delegate to shared placement logic
         return LayerPlacementHelper.injectLayerAt(chunk, worldX, worldZ, layerCount, useSnowLayers);
     }
 
     // ========== RTF-specific: Chunk-level Processing ==========
 
-    // Debug counters (RTF-specific: river, submerged)
     private static int debugSkipRiver = 0;
     private static int debugSkipSubmerged = 0;
     private static boolean debugLogged = false;
@@ -144,7 +137,6 @@ public class RTFLayerInjector {
         int cellsProcessed = 0;
         int cellsNull = 0;
 
-        // Reset debug counters
         debugSkipRiver = 0;
         debugSkipSubmerged = 0;
         LayerPlacementHelper.debugSkipSnowy = 0;
@@ -168,7 +160,7 @@ public class RTFLayerInjector {
                         if (LayerConfig.DEBUG_LOGGING) {
                             if (!debugLogged) {
                                 debugLogged = true;
-                                CRLayers.LOGGER.info("[RTF DEBUG] Snow-layer mode, worldHeight={}", worldHeight);
+                                AronaLayersGen.LOGGER.info("[RTF DEBUG] Snow-layer mode, worldHeight={}", worldHeight);
                             }
                             if ((localX == 0 && localZ == 0) || (localX == 15 && localZ == 0) ||
                                 (localX == 0 && localZ == 15) || (localX == 15 && localZ == 15) ||
@@ -176,7 +168,7 @@ public class RTFLayerInjector {
                                 float scaledHeight = cell.height * worldHeight;
                                 float depth = scaledHeight - (int) scaledHeight;
                                 int layers = Math.round(depth * 8) - 1;
-                                CRLayers.LOGGER.info("[RTF DEBUG] Cell at local {},{}: height={}, scaled={}, depth={}, layers={}",
+                                AronaLayersGen.LOGGER.info("[RTF DEBUG] Cell at local {},{}: height={}, scaled={}, depth={}, layers={}",
                                     localX, localZ, cell.height, scaledHeight, depth, layers);
                             }
                         }
@@ -195,7 +187,7 @@ public class RTFLayerInjector {
         }
 
         if (LayerConfig.DEBUG_LOGGING) {
-            CRLayers.LOGGER.info("[RTF] Chunk {},{}: cells={}, null={}, layers={} | skips: river={}, submerged={}, snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
+            AronaLayersGen.LOGGER.info("[RTF] Chunk {},{}: cells={}, null={}, layers={} | skips: river={}, submerged={}, snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
                 chunk.getPos().x, chunk.getPos().z, cellsProcessed, cellsNull, layersPlaced,
                 debugSkipRiver, debugSkipSubmerged,
                 LayerPlacementHelper.debugSkipSnowy, LayerPlacementHelper.debugSkipNoSurface,
@@ -225,17 +217,11 @@ public class RTFLayerInjector {
 
     // ========== RTF Data Types ==========
 
-    /**
-     * Interface for accessing RTF Cell data.
-     */
     @FunctionalInterface
     public interface CellAccessor {
         CellData getCell(int worldX, int worldZ);
     }
 
-    /**
-     * Simplified Cell data for layer calculation.
-     */
     public static class CellData {
         public final float height;
         public final boolean isRiver;

@@ -1,13 +1,13 @@
-package io.arona74.crlayers.mixin;
+package io.arona74.aronalayersgen.mixin;
 
-import io.arona74.crlayers.CRLayers;
-import io.arona74.crlayers.LayerConfig;
-import io.arona74.crlayers.injection.VanillaLayerInjector;
-import io.arona74.crlayers.injection.PlantConversionHelper;
-import io.arona74.crlayers.injection.PreStructureHeightmapStorage;
-import io.arona74.crlayers.injection.RTFCompat;
-import io.arona74.crlayers.injection.RTFLayerInjector;
-import io.arona74.crlayers.injection.RandomStateHolder;
+import io.arona74.aronalayersgen.AronaLayersGen;
+import io.arona74.aronalayersgen.LayerConfig;
+import io.arona74.aronalayersgen.injection.VanillaLayerInjector;
+import io.arona74.aronalayersgen.injection.PlantConversionHelper;
+import io.arona74.aronalayersgen.injection.PreStructureHeightmapStorage;
+import io.arona74.aronalayersgen.injection.RTFCompat;
+import io.arona74.aronalayersgen.injection.RTFLayerInjector;
+import io.arona74.aronalayersgen.injection.RandomStateHolder;
 import java.util.Set;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.chunk.WorldChunk;
@@ -28,10 +28,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(WorldChunk.class)
 public class NoiseBasedChunkGeneratorMixin {
 
-    /**
-     * Inject when a WorldChunk is created, which happens after generation completes.
-     * In POST_FEATURES mode, this is where primary layer injection happens.
-     */
     @Inject(
         method = "<init>(Lnet/minecraft/server/world/ServerWorld;Lnet/minecraft/world/chunk/ProtoChunk;Lnet/minecraft/world/chunk/WorldChunk$EntityLoader;)V",
         at = @At("RETURN")
@@ -49,20 +45,14 @@ public class NoiseBasedChunkGeneratorMixin {
                 boolean isPostFeaturesMode = LayerConfig.INJECTION_MODE == LayerConfig.InjectionMode.POST_FEATURES;
 
                 if (rtfAvailable) {
-                    // RTF is available: use RTF injection
                     if (isPostFeaturesMode) {
-                        // POST_FEATURES mode: Do primary injection here, after structures are placed.
-                        CRLayers.LOGGER.debug("[POST_FEATURES] Injecting layers for chunk {},{}",
+                        AronaLayersGen.LOGGER.debug("[POST_FEATURES] Injecting layers for chunk {},{}",
                             chunk.getPos().x, chunk.getPos().z);
                         RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
                     } else {
-                        // CARVERS mode: Layers were placed earlier (after carvers).
-                        // Run correction pass to fix any that became mismatched.
+                        // CARVERS mode: layers placed earlier, run correction pass
                         RTFLayerInjector.correctMismatchedLayers(chunk);
-
-                        // Fallback: if carve-stage injection didn't run (e.g. first chunk),
-                        // try a full RTF injection now. Already-placed layers won't be
-                        // overwritten because injectLayerAt skips non-air positions.
+                        // Fallback injection for chunks that missed the carvers phase
                         RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
                     }
                 } else if (LayerConfig.LAYER_INJECTION) {
@@ -70,12 +60,10 @@ public class NoiseBasedChunkGeneratorMixin {
                     VanillaLayerInjector.injectLayers(chunk, null);
                 }
             } else {
-                // Vanilla injection (heightmap-based fallback)
                 VanillaLayerInjector.injectLayers(chunk, null);
             }
 
-            // structure_no_layers: compare pre-structure heightmap with post-structure
-            // heightmap and remove layers where structures changed the terrain.
+            // structure_no_layers: remove layers where structures changed the terrain
             if (LayerConfig.RTF_LAYER_INJECTION && LayerConfig.STRUCTURE_NO_LAYERS) {
                 Set<Integer> changedColumns = PreStructureHeightmapStorage.getChangedColumns(chunk);
                 if (changedColumns != null && !changedColumns.isEmpty()) {
@@ -83,12 +71,12 @@ public class NoiseBasedChunkGeneratorMixin {
                 }
             }
 
-            // Convert vanilla plants above layers to conquest equivalents
+            // Convert vanilla plants above layers to conquest equivalents (CR only)
             if (LayerConfig.PLANT_INJECTION) {
                 PlantConversionHelper.convertPlantsAboveLayers(chunk);
             }
         } catch (Exception e) {
-            CRLayers.LOGGER.error("Failed to process layers for chunk", e);
+            AronaLayersGen.LOGGER.error("Failed to process layers for chunk", e);
         }
     }
 }

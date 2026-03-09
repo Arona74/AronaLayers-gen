@@ -1,8 +1,12 @@
-package io.arona74.crlayers.injection;
+package io.arona74.aronalayersgen.injection;
 
-import io.arona74.crlayers.BlockMappingRegistry;
-import io.arona74.crlayers.CRLayers;
-import io.arona74.crlayers.LayerConfig;
+import io.arona74.aronalayersgen.AronaLayersGen;
+import io.arona74.aronalayersgen.BlockMappingRegistry;
+import io.arona74.aronalayersgen.FoliageMappingRegistry;
+import io.arona74.aronalayersgen.LayerConfig;
+import io.arona74.aronalayersgen.PlantMappingRegistry;
+import io.arona74.aronalayersgen.RockMappingRegistry;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
@@ -33,8 +37,47 @@ import net.minecraft.world.gen.structure.Structure;
  * Shared helper for layer placement logic used by both RTF and vanilla injectors.
  * Contains registry access, property handling, decoration placement, structure detection,
  * and the core per-column injection logic.
+ *
+ * Supports two layer backends:
+ * - Conquest Reforged (conquest mod): cr_block_mappings.json, full feature set
+ *   (rocks, foliage, plant conversion, custom "layer" property 1-4)
+ * - VanillaLayerPlus (vanillalayerplus mod): vp_block_mappings.json, basic layers only
+ *   (uses standard vanilla LAYERS property 1-8)
+ *
+ * If neither mod is present, no block mappings are available and injection is a no-op.
  */
 public class LayerPlacementHelper {
+
+    // ========== Mod Backend Detection ==========
+
+    public enum ModBackend {
+        CONQUEST_REFORGED,
+        VANILLA_LAYER_PLUS,
+        NONE
+    }
+
+    private static ModBackend detectedBackend = null;
+
+    public static ModBackend getBackend() {
+        if (detectedBackend == null) {
+            FabricLoader loader = FabricLoader.getInstance();
+            if (loader.isModLoaded("conquest")) {
+                detectedBackend = ModBackend.CONQUEST_REFORGED;
+                AronaLayersGen.LOGGER.info("[AronaLayersGen] Detected backend: Conquest Reforged");
+            } else if (loader.isModLoaded("vanillalayerplus")) {
+                detectedBackend = ModBackend.VANILLA_LAYER_PLUS;
+                AronaLayersGen.LOGGER.info("[AronaLayersGen] Detected backend: VanillaLayerPlus");
+            } else {
+                detectedBackend = ModBackend.NONE;
+                AronaLayersGen.LOGGER.warn("[AronaLayersGen] No supported layer mod detected (conquest or vanillalayerplus). Layer injection will be inactive.");
+            }
+        }
+        return detectedBackend;
+    }
+
+    public static boolean isConquestReforged() {
+        return getBackend() == ModBackend.CONQUEST_REFORGED;
+    }
 
     // ========== Registry Access ==========
 
@@ -42,7 +85,12 @@ public class LayerPlacementHelper {
 
     public static BlockMappingRegistry getMappingRegistry() {
         if (mappingRegistry == null) {
-            mappingRegistry = new BlockMappingRegistry();
+            String configFile = switch (getBackend()) {
+                case CONQUEST_REFORGED -> "cr_block_mappings.json";
+                case VANILLA_LAYER_PLUS -> "vp_block_mappings.json";
+                case NONE -> "cr_block_mappings.json"; // fallback, will return empty
+            };
+            mappingRegistry = new BlockMappingRegistry(configFile);
         }
         return mappingRegistry;
     }
@@ -55,41 +103,41 @@ public class LayerPlacementHelper {
         return getMappingRegistry().getLayerBlock(surfaceBlock, layerCount);
     }
 
-    private static io.arona74.crlayers.PlantMappingRegistry plantRegistry;
+    private static PlantMappingRegistry plantRegistry;
 
-    public static io.arona74.crlayers.PlantMappingRegistry getPlantRegistry() {
+    public static PlantMappingRegistry getPlantRegistry() {
         if (plantRegistry == null) {
-            plantRegistry = new io.arona74.crlayers.PlantMappingRegistry();
+            plantRegistry = new PlantMappingRegistry();
         }
         return plantRegistry;
     }
 
-    private static io.arona74.crlayers.RockMappingRegistry rockRegistry;
+    private static RockMappingRegistry rockRegistry;
 
-    public static io.arona74.crlayers.RockMappingRegistry getRockRegistry() {
+    public static RockMappingRegistry getRockRegistry() {
         if (rockRegistry == null) {
-            rockRegistry = new io.arona74.crlayers.RockMappingRegistry();
+            rockRegistry = new RockMappingRegistry();
         }
         return rockRegistry;
     }
 
-    private static io.arona74.crlayers.FoliageMappingRegistry foliageRegistry;
+    private static FoliageMappingRegistry foliageRegistry;
 
-    public static io.arona74.crlayers.FoliageMappingRegistry getFoliageRegistry() {
+    public static FoliageMappingRegistry getFoliageRegistry() {
         if (foliageRegistry == null) {
-            foliageRegistry = new io.arona74.crlayers.FoliageMappingRegistry();
+            foliageRegistry = new FoliageMappingRegistry();
         }
         return foliageRegistry;
     }
 
     // ========== Property Handling ==========
 
-    // Cache for CR's custom "layer" property lookup per block
+    // Cache for CR's custom "layer" property lookup per block (values 1-4)
     private static final HashMap<Block, IntProperty> crLayerPropertyCache = new HashMap<>();
 
     /**
      * Find CR's custom "layer" IntProperty on a block (values 1-4).
-     * Returns null if the block doesn't have it.
+     * Returns null if the block doesn't have it (e.g. VP blocks use vanilla LAYERS).
      */
     public static IntProperty getCRLayerProperty(Block block) {
         if (crLayerPropertyCache.containsKey(block)) {
@@ -121,13 +169,13 @@ public class LayerPlacementHelper {
      * Map CR's "layer" property (1-4) back to snow-layer equivalents (1-8).
      */
     public static int crLayerToSnowLayers(int crLayer) {
-        switch (crLayer) {
-            case 1: return 1;
-            case 2: return 2;
-            case 3: return 4;
-            case 4: return 6;
-            default: return 1;
-        }
+        return switch (crLayer) {
+            case 1 -> 1;
+            case 2 -> 2;
+            case 3 -> 4;
+            case 4 -> 6;
+            default -> 1;
+        };
     }
 
     /**
@@ -170,9 +218,6 @@ public class LayerPlacementHelper {
 
     // ========== Block Utilities ==========
 
-    /**
-     * Check if a block state is a tall (two-block) plant.
-     */
     public static boolean isTallPlant(BlockState state) {
         return state.contains(Properties.DOUBLE_BLOCK_HALF);
     }
@@ -214,7 +259,7 @@ public class LayerPlacementHelper {
     private static final HashMap<Block, IntProperty> densityPropertyCache = new HashMap<>();
 
     /**
-     * Find the "density" IntProperty on a block.
+     * Find the "density" IntProperty on a block (used by CR rock blocks).
      * Returns null if the block doesn't have it.
      */
     public static IntProperty getDensityProperty(Block block) {
@@ -234,11 +279,6 @@ public class LayerPlacementHelper {
 
     // ========== Hashing Utilities ==========
 
-    /**
-     * Mix two coordinates into a well-distributed hash.
-     * Uses murmur3-style finalizer to break linear patterns.
-     * The seed parameter allows producing independent hashes for different uses.
-     */
     public static long mixHash(int x, int z, long seed) {
         long h = seed ^ ((long) x * 0xFF51AFD7ED558CCDL) ^ ((long) z * 0xC4CEB9FE1A85EC53L);
         h ^= (h >>> 33);
@@ -249,10 +289,6 @@ public class LayerPlacementHelper {
         return h;
     }
 
-    /**
-     * Calculate rock density based on the configured mode.
-     * Uses a separate hash from the chance roll to avoid bit correlation.
-     */
     public static int calculateRockDensity(int worldX, int worldZ) {
         long densityHash = mixHash(worldX, worldZ, 0x517CC1B727220A95L);
         if (LayerConfig.ROCK_DENSITY_MODE == LayerConfig.RockDensityMode.RANDOM) {
@@ -273,33 +309,22 @@ public class LayerPlacementHelper {
         }
     }
 
-    // ========== Decoration Placement ==========
+    // ========== Decoration Placement (Conquest Reforged only) ==========
 
-    /**
-     * Try to place a rock block above a layer.
-     * Uses a position-based hash for deterministic chance and density selection.
-     */
     public static void tryPlaceRock(Chunk chunk, BlockPos rockPos, Block surfaceBlock, int worldX, int worldZ, BlockPos layerReadPos) {
-        if (!getRockRegistry().hasMapping(surfaceBlock)) {
-            return;
-        }
+        if (!isConquestReforged()) return;
+        if (!getRockRegistry().hasMapping(surfaceBlock)) return;
 
         BlockState aboveState = chunk.getBlockState(rockPos);
         boolean underwaterRock = aboveState.getBlock() == Blocks.WATER;
-        if (!aboveState.isAir() && !underwaterRock) {
-            return;
-        }
+        if (!aboveState.isAir() && !underwaterRock) return;
 
         long hash = mixHash(worldX, worldZ, 0x9E3779B97F4A7C15L);
         float chance = ((hash >>> 16) & 0xFFFF) / 65536.0f;
-        if (chance >= LayerConfig.CHANCE_TO_PLACE_ROCKS) {
-            return;
-        }
+        if (chance >= LayerConfig.CHANCE_TO_PLACE_ROCKS) return;
 
         Block rockBlock = getRockRegistry().getRockBlock(surfaceBlock);
-        if (rockBlock == null) {
-            return;
-        }
+        if (rockBlock == null) return;
 
         int density = calculateRockDensity(worldX, worldZ);
 
@@ -329,35 +354,24 @@ public class LayerPlacementHelper {
         chunk.setBlockState(rockPos, rockState, false);
 
         if (LayerConfig.DEBUG_LOGGING) {
-            CRLayers.LOGGER.info("[Rock] Placed {} with density {} at {}",
+            AronaLayersGen.LOGGER.info("[Rock] Placed {} with density {} at {}",
                 net.minecraft.registry.Registries.BLOCK.getId(rockBlock), density, rockPos);
         }
     }
 
-    /**
-     * Try to place extra foliage above a layer.
-     * Only places if the position above the layer is air (not occupied by rock, plant, etc.).
-     */
     public static void tryPlaceExtraFoliage(Chunk chunk, BlockPos foliagePos, Block surfaceBlock, int worldX, int worldZ, BlockPos layerReadPos) {
-        if (!getFoliageRegistry().hasMapping(surfaceBlock)) {
-            return;
-        }
+        if (!isConquestReforged()) return;
+        if (!getFoliageRegistry().hasMapping(surfaceBlock)) return;
 
         BlockState aboveState = chunk.getBlockState(foliagePos);
-        if (!aboveState.isAir()) {
-            return;
-        }
+        if (!aboveState.isAir()) return;
 
         long hash = mixHash(worldX, worldZ, 0x6C62272E07BB0142L);
         float chance = ((hash >>> 16) & 0xFFFF) / 65536.0f;
-        if (chance >= LayerConfig.CHANCE_TO_PLACE_EXTRA_FOLIAGE) {
-            return;
-        }
+        if (chance >= LayerConfig.CHANCE_TO_PLACE_EXTRA_FOLIAGE) return;
 
         Block foliageBlock = getFoliageRegistry().getFoliageBlock(surfaceBlock);
-        if (foliageBlock == null) {
-            return;
-        }
+        if (foliageBlock == null) return;
 
         BlockState foliageState = foliageBlock.getDefaultState();
 
@@ -370,61 +384,28 @@ public class LayerPlacementHelper {
         chunk.setBlockState(foliagePos, foliageState, false);
 
         if (LayerConfig.DEBUG_LOGGING) {
-            CRLayers.LOGGER.info("[Foliage] Placed {} at {}",
+            AronaLayersGen.LOGGER.info("[Foliage] Placed {} at {}",
                 net.minecraft.registry.Registries.BLOCK.getId(foliageBlock), foliagePos);
         }
     }
 
     // ========== Structure Detection ==========
 
-    /**
-     * Set of blocks commonly used in structure foundations and floors.
-     */
     private static final java.util.Set<Block> STRUCTURE_BLOCKS = java.util.Set.of(
-        Blocks.COBBLESTONE,
-        Blocks.MOSSY_COBBLESTONE,
-        Blocks.STONE_BRICKS,
-        Blocks.MOSSY_STONE_BRICKS,
-        Blocks.CRACKED_STONE_BRICKS,
-        Blocks.CHISELED_STONE_BRICKS,
-        Blocks.OAK_PLANKS,
-        Blocks.SPRUCE_PLANKS,
-        Blocks.BIRCH_PLANKS,
-        Blocks.JUNGLE_PLANKS,
-        Blocks.ACACIA_PLANKS,
-        Blocks.DARK_OAK_PLANKS,
-        Blocks.MANGROVE_PLANKS,
-        Blocks.CHERRY_PLANKS,
-        Blocks.BAMBOO_PLANKS,
-        Blocks.OAK_LOG,
-        Blocks.SPRUCE_LOG,
-        Blocks.BIRCH_LOG,
-        Blocks.JUNGLE_LOG,
-        Blocks.ACACIA_LOG,
-        Blocks.DARK_OAK_LOG,
-        Blocks.STRIPPED_OAK_LOG,
-        Blocks.STRIPPED_SPRUCE_LOG,
-        Blocks.STRIPPED_BIRCH_LOG,
-        Blocks.STRIPPED_JUNGLE_LOG,
-        Blocks.STRIPPED_ACACIA_LOG,
-        Blocks.STRIPPED_DARK_OAK_LOG,
-        Blocks.BRICKS,
-        Blocks.STONE,
-        Blocks.SMOOTH_STONE,
-        Blocks.POLISHED_ANDESITE,
-        Blocks.POLISHED_DIORITE,
-        Blocks.POLISHED_GRANITE,
-        Blocks.DEEPSLATE_BRICKS,
-        Blocks.DEEPSLATE_TILES,
-        Blocks.SANDSTONE,
-        Blocks.SMOOTH_SANDSTONE,
-        Blocks.CUT_SANDSTONE,
-        Blocks.RED_SANDSTONE,
-        Blocks.SMOOTH_RED_SANDSTONE,
-        Blocks.NETHER_BRICKS,
-        Blocks.BLACKSTONE,
-        Blocks.POLISHED_BLACKSTONE,
-        Blocks.POLISHED_BLACKSTONE_BRICKS,
+        Blocks.COBBLESTONE, Blocks.MOSSY_COBBLESTONE, Blocks.STONE_BRICKS,
+        Blocks.MOSSY_STONE_BRICKS, Blocks.CRACKED_STONE_BRICKS, Blocks.CHISELED_STONE_BRICKS,
+        Blocks.OAK_PLANKS, Blocks.SPRUCE_PLANKS, Blocks.BIRCH_PLANKS, Blocks.JUNGLE_PLANKS,
+        Blocks.ACACIA_PLANKS, Blocks.DARK_OAK_PLANKS, Blocks.MANGROVE_PLANKS,
+        Blocks.CHERRY_PLANKS, Blocks.BAMBOO_PLANKS,
+        Blocks.OAK_LOG, Blocks.SPRUCE_LOG, Blocks.BIRCH_LOG, Blocks.JUNGLE_LOG,
+        Blocks.ACACIA_LOG, Blocks.DARK_OAK_LOG,
+        Blocks.STRIPPED_OAK_LOG, Blocks.STRIPPED_SPRUCE_LOG, Blocks.STRIPPED_BIRCH_LOG,
+        Blocks.STRIPPED_JUNGLE_LOG, Blocks.STRIPPED_ACACIA_LOG, Blocks.STRIPPED_DARK_OAK_LOG,
+        Blocks.BRICKS, Blocks.STONE, Blocks.SMOOTH_STONE, Blocks.POLISHED_ANDESITE,
+        Blocks.POLISHED_DIORITE, Blocks.POLISHED_GRANITE, Blocks.DEEPSLATE_BRICKS,
+        Blocks.DEEPSLATE_TILES, Blocks.SANDSTONE, Blocks.SMOOTH_SANDSTONE, Blocks.CUT_SANDSTONE,
+        Blocks.RED_SANDSTONE, Blocks.SMOOTH_RED_SANDSTONE, Blocks.NETHER_BRICKS,
+        Blocks.BLACKSTONE, Blocks.POLISHED_BLACKSTONE, Blocks.POLISHED_BLACKSTONE_BRICKS,
         Blocks.END_STONE_BRICKS
     );
 
@@ -432,12 +413,8 @@ public class LayerPlacementHelper {
         return STRUCTURE_BLOCKS.contains(block);
     }
 
-    // ThreadLocal storage for pre-computed structure bounding boxes.
     private static final ThreadLocal<List<BlockBox>> structureBoundsLocal = new ThreadLocal<>();
 
-    /**
-     * Collect all structure piece bounding boxes that may overlap this chunk.
-     */
     public static void prepareStructureBounds(Chunk chunk, ChunkRegion region) {
         if (!LayerConfig.STRUCTURE_INJECTION) {
             structureBoundsLocal.remove();
@@ -476,11 +453,11 @@ public class LayerPlacementHelper {
                 }
             }
         } catch (Exception e) {
-            CRLayers.LOGGER.debug("[Structure] Error collecting structure bounds: {}", e.getMessage());
+            AronaLayersGen.LOGGER.debug("[Structure] Error collecting structure bounds: {}", e.getMessage());
         }
 
         if (LayerConfig.DEBUG_LOGGING && !bounds.isEmpty()) {
-            CRLayers.LOGGER.info("[Structure] Chunk {},{}: found {} structure piece bounds",
+            AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: found {} structure piece bounds",
                 chunk.getPos().x, chunk.getPos().z, bounds.size());
         }
 
@@ -491,37 +468,24 @@ public class LayerPlacementHelper {
         structureBoundsLocal.remove();
     }
 
-    /**
-     * Check if there's a solid block (ceiling) within maxHeight blocks above the given position.
-     */
     public static boolean hasEnclosingCeiling(Chunk chunk, BlockPos pos, int maxHeight) {
         for (int dy = 1; dy <= maxHeight; dy++) {
             BlockPos checkPos = pos.up(dy);
             BlockState state = chunk.getBlockState(checkPos);
 
-            if (state.isAir() || state.getBlock() == Blocks.WATER) {
-                continue;
-            }
-
-            if (!state.isOpaque()) {
-                continue;
-            }
+            if (state.isAir() || state.getBlock() == Blocks.WATER) continue;
+            if (!state.isOpaque()) continue;
 
             return true;
         }
         return false;
     }
 
-    /**
-     * Check if a position is inside any structure piece's bounding box.
-     */
     public static boolean isInsideStructure(Chunk chunk, BlockPos pos) {
         List<BlockBox> bounds = structureBoundsLocal.get();
         if (bounds != null) {
             for (BlockBox box : bounds) {
-                if (box.contains(pos)) {
-                    return true;
-                }
+                if (box.contains(pos)) return true;
             }
             return false;
         }
@@ -530,9 +494,7 @@ public class LayerPlacementHelper {
             for (StructureStart start : chunk.getStructureStarts().values()) {
                 if (start == StructureStart.DEFAULT) continue;
                 for (StructurePiece piece : start.getChildren()) {
-                    if (piece.getBoundingBox().contains(pos)) {
-                        return true;
-                    }
+                    if (piece.getBoundingBox().contains(pos)) return true;
                 }
             }
         } catch (Exception e) {
@@ -541,10 +503,6 @@ public class LayerPlacementHelper {
         return false;
     }
 
-    /**
-     * Check if a position contains water - either a water source block
-     * or a waterlogged block.
-     */
     public static boolean isWaterAt(Chunk chunk, BlockPos pos) {
         BlockState state = chunk.getBlockState(pos);
         if (state.getBlock() == Blocks.WATER) return true;
@@ -553,7 +511,6 @@ public class LayerPlacementHelper {
 
     // ========== Core Layer Placement ==========
 
-    // Debug counters (shared across injectors)
     public static int debugSkipSnowy = 0;
     public static int debugSkipNoSurface = 0;
     public static int debugSkipNoMapping = 0;
@@ -564,8 +521,7 @@ public class LayerPlacementHelper {
 
     /**
      * Inject a layer at a single position.
-     * This is the core shared placement logic used by both RTF and vanilla injectors.
-     * The caller is responsible for calculating the layerCount.
+     * Core shared placement logic used by both RTF and vanilla injectors.
      *
      * @param chunk The chunk being generated
      * @param worldX World X coordinate
@@ -578,15 +534,11 @@ public class LayerPlacementHelper {
         int localX = worldX & 15;
         int localZ = worldZ & 15;
 
-        // Auto-detect heightmap type: WG variant for ProtoChunk, regular for WorldChunk
         boolean isWorldChunk = chunk instanceof WorldChunk;
         Heightmap.Type hmType = isWorldChunk
             ? Heightmap.Type.OCEAN_FLOOR : Heightmap.Type.OCEAN_FLOOR_WG;
         int surfaceY = chunk.getHeightmap(hmType).get(localX, localZ);
 
-        // Determine post-features context: WorldChunk means all features (plants, trees,
-        // structures) are already placed, regardless of the injection_mode config setting.
-        // This affects tree canopy scan-down and plant replacement behavior.
         boolean isPostFeaturesContext = (LayerConfig.INJECTION_MODE == LayerConfig.InjectionMode.POST_FEATURES)
             || isWorldChunk;
 
@@ -595,21 +547,18 @@ public class LayerPlacementHelper {
             return false;
         }
 
-        // Detect snowy biome
         boolean isSnowyBiome = false;
         {
-            BlockPos biomePos = new BlockPos(worldX, surfaceY - 1, worldZ);
             RegistryEntry<Biome> biome = chunk.getBiomeForNoiseGen(localX >> 2, surfaceY >> 2, localZ >> 2);
+            BlockPos biomePos = new BlockPos(worldX, surfaceY - 1, worldZ);
             isSnowyBiome = biome.value().isCold(biomePos);
         }
 
-        // Skip snowy biomes if configured
         if (LayerConfig.SKIP_SNOWY_BIOMES && isSnowyBiome) {
             debugSkipSnowy++;
             return false;
         }
 
-        // Override useSnowLayers based on biome detection
         if (isSnowyBiome && LayerConfig.IMPROVE_SNOWY_BIOMES) {
             useSnowLayers = true;
         }
@@ -618,19 +567,14 @@ public class LayerPlacementHelper {
         BlockState surfaceState = chunk.getBlockState(surfacePos);
         Block surfaceBlock = surfaceState.getBlock();
 
-        // In improve_snowy_biomes mode, convert snow_block surfaces to snow_layers(8)
-        // Must happen before scan-down which would skip past the snow_block
         if (useSnowLayers && surfaceBlock == Blocks.SNOW_BLOCK) {
             chunk.setBlockState(surfacePos, Blocks.SNOW.getDefaultState().with(Properties.LAYERS, 8), false);
             if (LayerConfig.DEBUG_LOGGING) {
-                CRLayers.LOGGER.info("[Snow] Converted snow_block to snow_layers(8) at {}", surfacePos);
+                AronaLayersGen.LOGGER.info("[Snow] Converted snow_block to snow_layers(8) at {}", surfacePos);
             }
             return true;
         }
 
-        // In post-features context, the OCEAN_FLOOR heightmap may include tree leaves and
-        // logs since they block movement. Scan downward to find the actual terrain
-        // surface (a block with a layer mapping) beneath any tree canopy.
         if (isPostFeaturesContext && !getMappingRegistry().hasMapping(surfaceBlock)) {
             boolean found = false;
             for (int dy = 1; dy <= 30; dy++) {
@@ -654,7 +598,6 @@ public class LayerPlacementHelper {
             }
         }
 
-        // Check if this block type has a layer mapping
         if (!getMappingRegistry().hasMapping(surfaceBlock)) {
             debugSkipNoMapping++;
             return false;
@@ -666,15 +609,12 @@ public class LayerPlacementHelper {
             debugSkipLayerZero++;
         }
 
-        // Position above the surface (where layer or rock/foliage would go)
         BlockPos abovePos = surfacePos.up();
 
-        // Skip positions inside structure bounding boxes (villages, etc.)
         if (LayerConfig.STRUCTURE_INJECTION && isInsideStructure(chunk, abovePos)) {
             return false;
         }
 
-        // Skip if there's a ceiling above (enclosed space detection)
         if (LayerConfig.STRUCTURE_INJECTION && LayerConfig.ENCLOSED_SPACE_CHECK) {
             if (hasEnclosingCeiling(chunk, abovePos, LayerConfig.ENCLOSED_SPACE_HEIGHT)) {
                 debugSkipEnclosed++;
@@ -683,28 +623,24 @@ public class LayerPlacementHelper {
         }
 
         BlockState existingState = chunk.getBlockState(abovePos);
-
-        // Check if position is underwater
         boolean underwater = existingState.getBlock() == Blocks.WATER;
 
-        // Try to place a layer if layerCount > 0
         Block replacedPlant = null;
         if (layerCount > 0) {
-            // Get the layer block: use snow in improve_snowy_biomes mode, otherwise block mapping
             Block layerBlock = useSnowLayers ? Blocks.SNOW : getMappingRegistry().getLayerBlock(surfaceBlock, layerCount);
             if (layerBlock == null) {
                 debugSkipNoLayerBlock++;
             } else {
-                // In POST_FEATURES mode with PLANT_INJECTION, we can replace plants with layers.
                 boolean replacedTallPlant = false;
                 if (!existingState.isAir() && !underwater) {
-                    // In improve_snowy_biomes mode, allow replacing snow_block with snow layers
                     boolean isSnowBlockReplacement = useSnowLayers
                         && existingState.getBlock() == Blocks.SNOW_BLOCK;
 
                     boolean isSeagrass = existingState.getBlock() == Blocks.SEAGRASS
                         || existingState.getBlock() == Blocks.TALL_SEAGRASS;
-                    boolean canReplacePlant = isPostFeaturesContext
+                    // Plant replacement only supported with Conquest Reforged backend
+                    boolean canReplacePlant = isConquestReforged()
+                        && isPostFeaturesContext
                         && getPlantRegistry().isReplaceablePlant(existingState.getBlock())
                         && (!isSeagrass || LayerConfig.REPLACE_SEA_GRASS);
 
@@ -737,22 +673,19 @@ public class LayerPlacementHelper {
                 chunk.setBlockState(abovePos, layerState, false);
                 layerPlaced = true;
 
-                // Replace dirt_path with the full-block equivalent of the layer
                 if (LayerConfig.REPLACE_DIRT_PATH && surfaceBlock == Blocks.DIRT_PATH) {
                     Block fullBlock = getFullBlock(layerBlock);
                     if (fullBlock != null) {
                         chunk.setBlockState(surfacePos, fullBlock.getDefaultState(), false);
                         if (LayerConfig.DEBUG_LOGGING) {
-                            CRLayers.LOGGER.info("[DirtPath] Replaced dirt_path at {} with {}",
+                            AronaLayersGen.LOGGER.info("[DirtPath] Replaced dirt_path at {} with {}",
                                 surfacePos, net.minecraft.registry.Registries.BLOCK.getId(fullBlock));
                         }
                     }
                 }
 
-                // If we replaced a plant and plant_injection is enabled, place the converted
-                // conquest plant above the layer. Without plant_injection, the plant is simply
-                // removed to make room for the layer.
-                if (replacedPlant != null && LayerConfig.PLANT_INJECTION) {
+                // Plant conversion: only supported with Conquest Reforged
+                if (replacedPlant != null && isConquestReforged() && LayerConfig.PLANT_INJECTION) {
                     Block conquestPlant = getPlantRegistry().getConquestPlant(replacedPlant);
                     if (conquestPlant != null) {
                         BlockPos plantPos = abovePos.up();
@@ -781,16 +714,11 @@ public class LayerPlacementHelper {
                 }
             }
         } else {
-            // No layer to place - check if existing block above surface is non-air
-            // (plant, block, etc.) and skip rock/foliage in that case
             if (!existingState.isAir() && !underwater) {
                 return false;
             }
         }
 
-        // Place rocks/foliage: position depends on whether a layer was placed
-        // With layer: rock/foliage goes above the layer (abovePos.up())
-        // Without layer: rock/foliage goes directly above the surface (abovePos)
         BlockPos decorPos = layerPlaced ? abovePos.up() : abovePos;
 
         if (replacedPlant == null && LayerConfig.PLACE_ROCKS) {
@@ -806,10 +734,6 @@ public class LayerPlacementHelper {
 
     // ========== Correction Passes ==========
 
-    /**
-     * Correction pass that runs at WorldChunk creation (after all generation is complete).
-     * Fixes layers that were placed based on pre-FEATURES surface blocks.
-     */
     public static void correctMismatchedLayers(Chunk chunk) {
         BlockMappingRegistry registry = getMappingRegistry();
         int corrected = 0;
@@ -937,14 +861,11 @@ public class LayerPlacementHelper {
         }
 
         if ((corrected > 0 || removed > 0 || waterlogged > 0 || structureCleanup > 0) && LayerConfig.DEBUG_LOGGING) {
-            CRLayers.LOGGER.info("[Correction] Chunk {},{}: corrected={}, removed={}, waterlogged={}, structureCleanup={}",
+            AronaLayersGen.LOGGER.info("[Correction] Chunk {},{}: corrected={}, removed={}, waterlogged={}, structureCleanup={}",
                 chunk.getPos().x, chunk.getPos().z, corrected, removed, waterlogged, structureCleanup);
         }
     }
 
-    /**
-     * Remove layers at columns where structures changed the heightmap.
-     */
     public static void removeLayersAtColumns(Chunk chunk, Set<Integer> changedColumns) {
         int removed = 0;
         int preserved = 0;
@@ -979,7 +900,7 @@ public class LayerPlacementHelper {
         }
 
         if ((removed > 0 || preserved > 0) && LayerConfig.DEBUG_LOGGING) {
-            CRLayers.LOGGER.info("[StructureNoLayers] Chunk {},{}: removed={}, preserved={} (had plants above)",
+            AronaLayersGen.LOGGER.info("[StructureNoLayers] Chunk {},{}: removed={}, preserved={} (had plants above)",
                 chunk.getPos().x, chunk.getPos().z, removed, preserved);
         }
     }
