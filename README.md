@@ -1,124 +1,96 @@
-# CR Layers Generator
+# Arona Layers Generator
 
-A Fabric mod for Minecraft 1.20.1 that automatically generates/removes Conquest Reforged terrain layers based on the surrounding blocks.
+A Fabric mod for Minecraft 1.20.1 that automatically generates terrain layer blocks during worldgen using ReTerraForged terrain data or vanilla heightmap analysis.
 
 ## Features
 
-- **Three Generation Modes**: BASIC (linear), EXTENDED (2x distance), EXTREME (3x distance)
-- **Smart Height Detection**: Uses neighbor block heights to determine appropriate layer counts
-- **Plant Handling**: Automatically replaces and restores vanilla plants with Conquest Reforged variants
-- **Configurable System**: JSON-based configuration for easy customization
-- **Preset System**: Quick configuration presets for different generation styles
-- **Conquest Reforged Integration**: Maps vanilla blocks to their Conquest Reforged layer equivalents
-
-## Installation
-
-1. Install Fabric Loader 0.15.11+ for Minecraft 1.20.1
-2. Install Fabric API 0.92.2+
-3. Install Conquest Reforged mod
-4. Place this mod's JAR file in your mods folder
-
-## Commands
-
-### Layer Generation
-```
-/generateLayers [chunkRadius]
-```
-Generate layers in the specified chunk radius (default: 3, max: 32). Automatically handles plant replacement.
-
-```
-/removeLayers [chunkRadius]
-```
-Remove layers in the specified chunk radius (default: 3, max: 32). Automatically restores original plants.
-
-### Configuration
-```
-/layerConfig show                           # Display current configuration
-/layerConfig mode <basic|extended|extreme>  # Set generation mode
-/layerConfig distance <blocks>              # Set max layer distance (3-25)
-/layerConfig edgeThreshold <blocks>         # Set edge height threshold (1-5)
-/layerConfig smoothingCycles <cycles>       # Set smoothing cycles (0-20)
-/layerConfig roundingMode <up|down|nearest> # Set rounding mode
-/layerConfig smoothingPriority <up|down>    # Set smoothing priority
-/layerConfig preset <basic|extended|extreme> # Apply preset configuration
-/layerConfig reload                         # Reload config from file
-```
-
-### Presets
-- **basic**: Mode: BASIC, Distance: 7, Smoothing: 6, Rounding: DOWN
-- **extended**: Mode: EXTENDED, Distance: 14, Smoothing: 13, Rounding: DOWN
-- **extreme**: Mode: EXTREME, Distance: 21, Smoothing: 20, Rounding: DOWN
-
-## Configuration
-
-Configuration files are automatically created in `config/crlayers/` on first run.
-
-### Generation Modes
-
-- **BASIC**: Linear gradients (7→6→5→4→3→2→1) with standard distance
-- **EXTENDED**: Gradual gradients (7,7→6,6→5,5→...) with 2x distance
-- **EXTREME**: Very gradual gradients (7,7,7→6,6,6→5,5,5→...) with 3x distance
-
-### Configuration Files
-
-**layer_config.json**: Main generation settings
-- `mode`: Generation mode (BASIC, EXTENDED, EXTREME)
-- `max_layer_distance`: Base distance for layer spreading
-- `edge_height_threshold`: Minimum height difference to detect edges
-- `smoothing_cycles`: Number of smoothing passes
-- `smoothing_rounding_mode`: Rounding method (UP, DOWN, NEAREST)
-- `smoothing_priority`: UP (preserve gradients) or DOWN (smooth near edges)
-
-**block_mappings.json**: Vanilla to Conquest Reforged block mappings
-```json
-{
-  "minecraft:grass_block": "conquest:grass_block_layer",
-  "minecraft:dirt": "conquest:loamy_dirt_slab"
-}
-```
-
-**plant_mappings.json**: Vanilla to Conquest Reforged plant mappings
-```json
-{
-  "minecraft:grass": "conquest:grass",
-  "minecraft:tall_grass": "conquest:tall_grass"
-}
-```
-
-## Building from Source
-
-1. Clone this repository
-2. Open a terminal in the project directory
-3. Run `./gradlew build` (Linux/Mac) or `gradlew.bat build` (Windows)
-4. The compiled JAR will be in `build/libs/`
-
-### Testing Without Conquest Reforged
-
-The mod will fall back to placing snow layers if Conquest Reforged blocks are not found. This allows you to test the core generation logic without having CR installed.
+- **Worldgen Integration**: Layers are placed during chunk generation — no commands, no post-processing
+- **ReTerraForged Support**: Uses RTF's height cell data for realistic, gradient-based layer depth distribution
+- **Dual Backend Support**: Works with Conquest Reforged or VanillaLayerPlus for the actual layer blocks
+- **Plant Handling**: Vanilla plants above layers are handled automatically per backend
+  - Conquest Reforged: converts plants to CR equivalents
+  - VanillaLayerPlus: shifts plants one block up (VP handles visual offset)
+- **Underwater Support**: Optional waterlogged layers on ocean and river floors
+- **Structure Awareness**: Optionally skips layer placement inside structure bounding boxes
+- **Configurable**: JSON-based configuration in `config/aronalayersgen/`
 
 ## Requirements
 
 - Minecraft 1.20.1
 - Fabric Loader 0.15.11+
 - Fabric API 0.92.2+
-- Conquest Reforged (for actual layer blocks)
+- One of the following layer mods:
+  - [Conquest Reforged](https://www.curseforge.com/minecraft/mc-mods/conquest-reforged)
+  - VanillaLayerPlus
+- Recommended: [ReTerraForged](https://github.com/TerraForgedMC/TerraForged) for best results
+
+## Installation
+
+1. Install Fabric Loader 0.15.11+ for Minecraft 1.20.1
+2. Install Fabric API 0.92.2+
+3. Install Conquest Reforged or VanillaLayerPlus
+4. Optionally install ReTerraForged
+5. Place this mod's JAR in your mods folder
+6. Launch the game once to generate the config file at `config/aronalayersgen/layer_config.json`
+
+## Configuration
+
+All settings live in `config/aronalayersgen/layer_config.json`.
+
+### Core Settings
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `rtf_layer_injection` | `false` | Enable RTF-based layer generation (requires ReTerraForged) |
+| `layer_injection` | `false` | Enable vanilla heightmap-based layer generation |
+| `injection_mode` | `CARVERS` | When to inject: `CARVERS` (before features) or `POST_FEATURES` (after structures) |
+| `skip_snowy_biomes` | `true` | Skip layer placement in cold/snowy biomes |
+| `improve_snowy_biomes` | `false` | Use vanilla snow layers in snowy biomes instead of skipping |
+| `underwater_layers` | `false` | Place waterlogged layers on underwater surfaces |
+
+### Plant & Decoration Settings
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `plant_injection` | `false` | Handle vanilla plants above layer blocks |
+| `replace_sea_grass` | `false` | Include seagrass/tall seagrass in plant handling |
+| `tree_injection` | `false` | Allow trees to grow through layer blocks |
+| `place_rocks` | `false` | Place CR rock blocks above layers (CR only) |
+| `place_extra_foliage` | `false` | Place CR foliage above layers (CR only) |
+
+### Structure Settings
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `structure_injection` | `false` | Skip layers inside structure bounding boxes |
+| `structure_cleanup` | `false` | Remove layers under opaque structure blocks post-generation |
+| `structure_no_layers` | `false` | Remove layers where structures modified the heightmap |
+| `enclosed_space_check` | `false` | Skip layers in enclosed spaces (caves, buildings) |
+
+### Block Mapping Files
+
+Located in `config/aronalayersgen/` (created on first run) or bundled as defaults:
+
+- **`vp_block_mappings.json`**: Vanilla block → VanillaLayerPlus layer block mappings (VLP only)
+- **`cr_block_mappings.json`**: Vanilla block → Conquest Reforged layer block mappings (CR only)
+- **`cr_plant_mappings.json`**: Vanilla plant → CR plant mappings (CR only)
+- **`cr_rock_mappings.json`**: Surface block → CR rock block mappings (CR only)
+- **`cr_extra_foliage_mappings.json`**: Surface block → CR extra foliage mappings (CR only)
+
+The active block mapping file is chosen automatically based on which layer mod is installed.
+
+## Building from Source
+
+```
+./gradlew build
+```
+
+The compiled JAR will be in `build/libs/`.
 
 ## License
 
-MIT License - Feel free to modify and distribute
+MIT License
 
 ## Author
 
 Arona74
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
-
-## Notes
-
-- Requires OP permission level 2 to use commands
-- Configuration changes via commands automatically save to file
-- Generation happens synchronously, so very large radii may cause temporary lag
-- Make backups before using in important worlds
-- Plant replacement and restoration is handled automatically

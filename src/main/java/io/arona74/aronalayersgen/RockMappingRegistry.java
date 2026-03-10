@@ -22,7 +22,7 @@ public class RockMappingRegistry {
     }
 
     private void registerDefaultMappings() {
-        Map<String, String> configMappings = ConfigLoader.loadMappings("rock_mappings.json");
+        Map<String, String> configMappings = ConfigLoader.loadMappings("cr_rock_mappings.json");
 
         for (Map.Entry<String, String> entry : configMappings.entrySet()) {
             Identifier vanillaId = Identifier.tryParse(entry.getKey());

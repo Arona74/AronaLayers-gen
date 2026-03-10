@@ -626,23 +626,27 @@ public class LayerPlacementHelper {
         boolean underwater = existingState.getBlock() == Blocks.WATER;
 
         Block replacedPlant = null;
+        BlockState replacedPlantState = null;
         if (layerCount > 0) {
             Block layerBlock = useSnowLayers ? Blocks.SNOW : getMappingRegistry().getLayerBlock(surfaceBlock, layerCount);
             if (layerBlock == null) {
                 debugSkipNoLayerBlock++;
             } else {
                 boolean replacedTallPlant = false;
+                BlockState savedTallUpperState = null;
                 if (!existingState.isAir() && !underwater) {
                     boolean isSnowBlockReplacement = useSnowLayers
                         && existingState.getBlock() == Blocks.SNOW_BLOCK;
 
                     boolean isSeagrass = existingState.getBlock() == Blocks.SEAGRASS
                         || existingState.getBlock() == Blocks.TALL_SEAGRASS;
-                    // Plant replacement only supported with Conquest Reforged backend
-                    boolean canReplacePlant = isConquestReforged()
-                        && isPostFeaturesContext
+                    boolean isReplaceablePlant = isPostFeaturesContext
                         && getPlantRegistry().isReplaceablePlant(existingState.getBlock())
                         && (!isSeagrass || LayerConfig.REPLACE_SEA_GRASS);
+                    // CR: converts plant to Conquest equivalent placed above the layer
+                    boolean canReplacePlant = isConquestReforged() && isReplaceablePlant;
+                    // VP: shifts plant one block up so it sits on the layer (visual offset handled by VP)
+                    boolean canShiftPlant = getBackend() == ModBackend.VANILLA_LAYER_PLUS && isReplaceablePlant;
 
                     if (isSnowBlockReplacement) {
                         // Snow_block will be overwritten by the snow layer below
@@ -650,6 +654,21 @@ public class LayerPlacementHelper {
                         replacedPlant = existingState.getBlock();
                         replacedTallPlant = isTallPlant(existingState);
                         if (replacedTallPlant) {
+                            chunk.setBlockState(abovePos.up(), Blocks.AIR.getDefaultState(), false);
+                        }
+                    } else if (canShiftPlant) {
+                        replacedTallPlant = isTallPlant(existingState);
+                        if (isSeagrass) {
+                            // Seagrass needs water above to shift into; bail if at the water surface edge
+                            BlockPos waterCheckPos = replacedTallPlant ? abovePos.up().up() : abovePos.up();
+                            if (chunk.getBlockState(waterCheckPos).getBlock() != Blocks.WATER) {
+                                debugSkipNotAir++;
+                                return false;
+                            }
+                        }
+                        replacedPlantState = existingState;
+                        if (replacedTallPlant) {
+                            savedTallUpperState = chunk.getBlockState(abovePos.up());
                             chunk.setBlockState(abovePos.up(), Blocks.AIR.getDefaultState(), false);
                         }
                     } else {
@@ -660,6 +679,15 @@ public class LayerPlacementHelper {
 
                 BlockState layerState = layerBlock.getDefaultState();
                 layerState = applyLayerCount(layerState, layerBlock, layerCount);
+
+                // VP seagrass shift: water above was verified in detection; waterlog the layer
+                if (replacedPlantState != null) {
+                    Block shiftedBlock = replacedPlantState.getBlock();
+                    if ((shiftedBlock == Blocks.SEAGRASS || shiftedBlock == Blocks.TALL_SEAGRASS)
+                            && layerState.contains(Properties.WATERLOGGED)) {
+                        layerState = layerState.with(Properties.WATERLOGGED, true);
+                    }
+                }
 
                 if (underwater) {
                     if (layerState.contains(Properties.WATERLOGGED)) {
@@ -680,6 +708,21 @@ public class LayerPlacementHelper {
                         if (LayerConfig.DEBUG_LOGGING) {
                             AronaLayersGen.LOGGER.info("[DirtPath] Replaced dirt_path at {} with {}",
                                 surfacePos, net.minecraft.registry.Registries.BLOCK.getId(fullBlock));
+                        }
+                    }
+                }
+
+                // VP: shift plant one block up so it sits on the layer (visual offset handled by VP)
+                if (replacedPlantState != null && LayerConfig.PLANT_INJECTION) {
+                    BlockPos plantPos = abovePos.up();
+                    Block shiftedBlock = replacedPlantState.getBlock();
+                    boolean needsWater = shiftedBlock == Blocks.SEAGRASS || shiftedBlock == Blocks.TALL_SEAGRASS;
+                    // For tall seagrass, plantPos was cleared to AIR; check plantPos.up() for water instead
+                    BlockPos waterCheckPos = (needsWater && replacedTallPlant) ? plantPos.up() : plantPos;
+                    if (!needsWater || chunk.getBlockState(waterCheckPos).getBlock() == Blocks.WATER) {
+                        chunk.setBlockState(plantPos, replacedPlantState, false);
+                        if (replacedTallPlant && savedTallUpperState != null) {
+                            chunk.setBlockState(plantPos.up(), savedTallUpperState, false);
                         }
                     }
                 }
@@ -809,9 +852,18 @@ public class LayerPlacementHelper {
                     }
                 }
 
+                boolean waterAbove = isWaterAt(chunk, layerPos.up());
+                if (waterAbove && !LayerConfig.UNDERWATER_LAYERS) {
+                    // Layer was placed underwater (e.g. during CARVERS before water filled in)
+                    // but underwater layers are disabled; remove it
+                    chunk.setBlockState(layerPos, Blocks.AIR.getDefaultState(), false);
+                    removed++;
+                    continue;
+                }
+
                 boolean shouldBeWaterlogged = false;
                 if (LayerConfig.UNDERWATER_LAYERS) {
-                    if (isWaterAt(chunk, layerPos.up())) {
+                    if (waterAbove) {
                         shouldBeWaterlogged = true;
                     } else {
                         for (BlockPos neighbor : new BlockPos[]{

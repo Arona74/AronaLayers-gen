@@ -18,41 +18,6 @@ public class LayerConfig {
     private static final String CONFIG_FILE = "layer_config.json";
 
     /**
-     * Generation mode
-     * BASIC: Simple linear gradient from edge (7→6→5→4→3→2→1)
-     * EXTENDED: Extended gradients with 2x distance (7,7→6,6→5,5→4,4→3,3→2,2→1,1)
-     * EXTREME: Extreme gradients with 3x distance (7,7,7→6,6,6→5,5,5→...)
-     */
-    public static GenerationMode MODE = GenerationMode.BASIC;
-
-    public static int MAX_LAYER_DISTANCE = 7;
-    public static int EDGE_HEIGHT_THRESHOLD = 1;
-
-    public enum GenerationMode {
-        BASIC,
-        EXTENDED,
-        EXTREME
-    }
-
-    public static int SMOOTHING_CYCLES = 6;
-    public static RoundingMode SMOOTHING_ROUNDING_MODE = RoundingMode.NEAREST;
-
-    public enum RoundingMode {
-        UP,
-        DOWN,
-        NEAREST
-    }
-
-    public static SmoothingPriority SMOOTHING_PRIORITY = SmoothingPriority.DOWN;
-
-    public enum SmoothingPriority {
-        UP,
-        DOWN
-    }
-
-    public static boolean TOP_GENERATION = false;
-
-    /**
      * Enable layer injection during terrain generation (vanilla heightmap-based).
      * When enabled, layers are generated during chunk creation using heightmap analysis.
      * Requires game restart to take effect.
@@ -152,7 +117,7 @@ public class LayerConfig {
 
     /**
      * Place rock blocks above layers on mapped surface blocks.
-     * Requires Conquest Reforged and rock_mappings.json.
+     * Requires Conquest Reforged and cr_rock_mappings.json.
      */
     public static boolean PLACE_ROCKS = false;
     public static float CHANCE_TO_PLACE_ROCKS = 0.1f;
@@ -167,7 +132,7 @@ public class LayerConfig {
 
     /**
      * Place conquest foliage above layers on mapped surface blocks.
-     * Requires Conquest Reforged and extra_foliage_mappings.json.
+     * Requires Conquest Reforged and cr_extra_foliage_mappings.json.
      */
     public static boolean PLACE_EXTRA_FOLIAGE = false;
     public static float CHANCE_TO_PLACE_EXTRA_FOLIAGE = 0.1f;
@@ -216,32 +181,6 @@ public class LayerConfig {
 
     private static void parseConfig(Reader reader) {
         JsonObject config = GSON.fromJson(reader, JsonObject.class);
-
-        if (config.has("mode")) {
-            try {
-                MODE = GenerationMode.valueOf(config.get("mode").getAsString().toUpperCase());
-            } catch (IllegalArgumentException e) {
-                AronaLayersGen.LOGGER.warn("Invalid mode in config, using default");
-            }
-        }
-        if (config.has("max_layer_distance")) MAX_LAYER_DISTANCE = config.get("max_layer_distance").getAsInt();
-        if (config.has("edge_height_threshold")) EDGE_HEIGHT_THRESHOLD = config.get("edge_height_threshold").getAsInt();
-        if (config.has("smoothing_cycles")) SMOOTHING_CYCLES = config.get("smoothing_cycles").getAsInt();
-        if (config.has("smoothing_rounding_mode")) {
-            try {
-                SMOOTHING_ROUNDING_MODE = RoundingMode.valueOf(config.get("smoothing_rounding_mode").getAsString().toUpperCase());
-            } catch (IllegalArgumentException e) {
-                AronaLayersGen.LOGGER.warn("Invalid rounding mode in config, using default");
-            }
-        }
-        if (config.has("smoothing_priority")) {
-            try {
-                SMOOTHING_PRIORITY = SmoothingPriority.valueOf(config.get("smoothing_priority").getAsString().toUpperCase());
-            } catch (IllegalArgumentException e) {
-                AronaLayersGen.LOGGER.warn("Invalid smoothing priority in config, using default");
-            }
-        }
-        if (config.has("top_generation")) TOP_GENERATION = config.get("top_generation").getAsBoolean();
         if (config.has("layer_injection")) LAYER_INJECTION = config.get("layer_injection").getAsBoolean();
         if (config.has("rtf_layer_injection")) RTF_LAYER_INJECTION = config.get("rtf_layer_injection").getAsBoolean();
         if (config.has("injection_mode")) {
@@ -312,13 +251,6 @@ public class LayerConfig {
 
             JsonObject config = new JsonObject();
             config.addProperty("_comment", "Configuration for Arona Layers Generator. Edit this file to customize layer generation.");
-            config.addProperty("mode", MODE.name());
-            config.addProperty("max_layer_distance", MAX_LAYER_DISTANCE);
-            config.addProperty("edge_height_threshold", EDGE_HEIGHT_THRESHOLD);
-            config.addProperty("smoothing_cycles", SMOOTHING_CYCLES);
-            config.addProperty("smoothing_rounding_mode", SMOOTHING_ROUNDING_MODE.name());
-            config.addProperty("smoothing_priority", SMOOTHING_PRIORITY.name());
-            config.addProperty("top_generation", TOP_GENERATION);
             config.addProperty("layer_injection", LAYER_INJECTION);
             config.addProperty("rtf_layer_injection", RTF_LAYER_INJECTION);
             config.addProperty("injection_mode", INJECTION_MODE.name());
