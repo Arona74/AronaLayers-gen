@@ -651,8 +651,16 @@ public class LayerPlacementHelper {
                     if (isSnowBlockReplacement) {
                         // Snow_block will be overwritten by the snow layer below
                     } else if (canReplacePlant) {
-                        replacedPlant = existingState.getBlock();
                         replacedTallPlant = isTallPlant(existingState);
+                        if (isSeagrass) {
+                            // Seagrass needs water above for the CR equivalent; bail if at the water surface edge
+                            BlockPos waterCheckPos = replacedTallPlant ? abovePos.up().up() : abovePos.up();
+                            if (chunk.getBlockState(waterCheckPos).getBlock() != Blocks.WATER) {
+                                debugSkipNotAir++;
+                                return false;
+                            }
+                        }
+                        replacedPlant = existingState.getBlock();
                         if (replacedTallPlant) {
                             chunk.setBlockState(abovePos.up(), Blocks.AIR.getDefaultState(), false);
                         }
@@ -680,13 +688,12 @@ public class LayerPlacementHelper {
                 BlockState layerState = layerBlock.getDefaultState();
                 layerState = applyLayerCount(layerState, layerBlock, layerCount);
 
-                // VP seagrass shift: water above was verified in detection; waterlog the layer
-                if (replacedPlantState != null) {
-                    Block shiftedBlock = replacedPlantState.getBlock();
-                    if ((shiftedBlock == Blocks.SEAGRASS || shiftedBlock == Blocks.TALL_SEAGRASS)
-                            && layerState.contains(Properties.WATERLOGGED)) {
-                        layerState = layerState.with(Properties.WATERLOGGED, true);
-                    }
+                // Seagrass replacement (CR or VP): water above was verified in detection; waterlog the layer
+                Block seagrassCheck = replacedPlantState != null ? replacedPlantState.getBlock() : replacedPlant;
+                if (seagrassCheck != null
+                        && (seagrassCheck == Blocks.SEAGRASS || seagrassCheck == Blocks.TALL_SEAGRASS)
+                        && layerState.contains(Properties.WATERLOGGED)) {
+                    layerState = layerState.with(Properties.WATERLOGGED, true);
                 }
 
                 if (underwater) {
