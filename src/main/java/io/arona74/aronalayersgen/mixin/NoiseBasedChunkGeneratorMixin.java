@@ -2,6 +2,7 @@ package io.arona74.aronalayersgen.mixin;
 
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
+import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
 import io.arona74.aronalayersgen.injection.VanillaLayerInjector;
 import io.arona74.aronalayersgen.injection.PlantConversionHelper;
 import io.arona74.aronalayersgen.injection.PreStructureHeightmapStorage;
@@ -40,6 +41,10 @@ public class NoiseBasedChunkGeneratorMixin {
         try {
             WorldChunk chunk = (WorldChunk)(Object)this;
 
+            if (LayerConfig.STRUCTURE_INJECTION) {
+                LayerPlacementHelper.prepareStructureBounds(chunk, null);
+            }
+
             if (LayerConfig.RTF_LAYER_INJECTION) {
                 boolean rtfAvailable = RTFCompat.isRTFAvailable() && RandomStateHolder.hasRTFRandomState();
                 boolean isPostFeaturesMode = LayerConfig.INJECTION_MODE == LayerConfig.InjectionMode.POST_FEATURES;
@@ -77,6 +82,8 @@ public class NoiseBasedChunkGeneratorMixin {
             }
         } catch (Exception e) {
             AronaLayersGen.LOGGER.error("Failed to process layers for chunk", e);
+        } finally {
+            LayerPlacementHelper.clearStructureBounds();
         }
     }
 }

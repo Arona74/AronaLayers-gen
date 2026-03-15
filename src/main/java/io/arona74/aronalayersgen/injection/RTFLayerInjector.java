@@ -10,6 +10,7 @@ import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.WorldChunk;
 
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Layer injector that uses ReTerraForged terrain data.
@@ -88,12 +89,12 @@ public class RTFLayerInjector {
     public static boolean injectLayerAt(Chunk chunk, int worldX, int worldZ, int worldHeight,
                                       float height, boolean isRiver, boolean isSubmerged) {
         if (isRiver && !LayerConfig.UNDERWATER_LAYERS) {
-            debugSkipRiver++;
+            debugSkipRiver.incrementAndGet();
             return false;
         }
 
         if (isSubmerged && !LayerConfig.UNDERWATER_LAYERS) {
-            debugSkipSubmerged++;
+            debugSkipSubmerged.incrementAndGet();
             return false;
         }
 
@@ -119,8 +120,8 @@ public class RTFLayerInjector {
 
     // ========== RTF-specific: Chunk-level Processing ==========
 
-    private static int debugSkipRiver = 0;
-    private static int debugSkipSubmerged = 0;
+    private static final AtomicInteger debugSkipRiver = new AtomicInteger();
+    private static final AtomicInteger debugSkipSubmerged = new AtomicInteger();
     private static boolean debugLogged = false;
 
     /**
@@ -137,15 +138,15 @@ public class RTFLayerInjector {
         int cellsProcessed = 0;
         int cellsNull = 0;
 
-        debugSkipRiver = 0;
-        debugSkipSubmerged = 0;
-        LayerPlacementHelper.debugSkipSnowy = 0;
-        LayerPlacementHelper.debugSkipNoSurface = 0;
-        LayerPlacementHelper.debugSkipNoMapping = 0;
-        LayerPlacementHelper.debugSkipLayerZero = 0;
-        LayerPlacementHelper.debugSkipNoLayerBlock = 0;
-        LayerPlacementHelper.debugSkipNotAir = 0;
-        LayerPlacementHelper.debugSkipEnclosed = 0;
+        debugSkipRiver.set(0);
+        debugSkipSubmerged.set(0);
+        LayerPlacementHelper.debugSkipSnowy.set(0);
+        LayerPlacementHelper.debugSkipNoSurface.set(0);
+        LayerPlacementHelper.debugSkipNoMapping.set(0);
+        LayerPlacementHelper.debugSkipLayerZero.set(0);
+        LayerPlacementHelper.debugSkipNoLayerBlock.set(0);
+        LayerPlacementHelper.debugSkipNotAir.set(0);
+        LayerPlacementHelper.debugSkipEnclosed.set(0);
 
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
@@ -189,11 +190,11 @@ public class RTFLayerInjector {
         if (LayerConfig.DEBUG_LOGGING) {
             AronaLayersGen.LOGGER.info("[RTF] Chunk {},{}: cells={}, null={}, layers={} | skips: river={}, submerged={}, snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
                 chunk.getPos().x, chunk.getPos().z, cellsProcessed, cellsNull, layersPlaced,
-                debugSkipRiver, debugSkipSubmerged,
-                LayerPlacementHelper.debugSkipSnowy, LayerPlacementHelper.debugSkipNoSurface,
-                LayerPlacementHelper.debugSkipNoMapping, LayerPlacementHelper.debugSkipLayerZero,
-                LayerPlacementHelper.debugSkipNoLayerBlock, LayerPlacementHelper.debugSkipNotAir,
-                LayerPlacementHelper.debugSkipEnclosed);
+                debugSkipRiver.get(), debugSkipSubmerged.get(),
+                LayerPlacementHelper.debugSkipSnowy.get(), LayerPlacementHelper.debugSkipNoSurface.get(),
+                LayerPlacementHelper.debugSkipNoMapping.get(), LayerPlacementHelper.debugSkipLayerZero.get(),
+                LayerPlacementHelper.debugSkipNoLayerBlock.get(), LayerPlacementHelper.debugSkipNotAir.get(),
+                LayerPlacementHelper.debugSkipEnclosed.get());
         }
     }
 

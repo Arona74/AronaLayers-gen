@@ -2,7 +2,9 @@ package io.arona74.aronalayersgen.injection;
 
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
+import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.chunk.Chunk;
@@ -34,13 +36,13 @@ public class VanillaLayerInjector {
         int startZ = chunk.getPos().getStartZ();
         int layersPlaced = 0;
 
-        LayerPlacementHelper.debugSkipSnowy = 0;
-        LayerPlacementHelper.debugSkipNoSurface = 0;
-        LayerPlacementHelper.debugSkipNoMapping = 0;
-        LayerPlacementHelper.debugSkipLayerZero = 0;
-        LayerPlacementHelper.debugSkipNoLayerBlock = 0;
-        LayerPlacementHelper.debugSkipNotAir = 0;
-        LayerPlacementHelper.debugSkipEnclosed = 0;
+        LayerPlacementHelper.debugSkipSnowy.set(0);
+        LayerPlacementHelper.debugSkipNoSurface.set(0);
+        LayerPlacementHelper.debugSkipNoMapping.set(0);
+        LayerPlacementHelper.debugSkipLayerZero.set(0);
+        LayerPlacementHelper.debugSkipNoLayerBlock.set(0);
+        LayerPlacementHelper.debugSkipNotAir.set(0);
+        LayerPlacementHelper.debugSkipEnclosed.set(0);
 
         Heightmap.Type hmType = (chunk instanceof WorldChunk)
             ? Heightmap.Type.OCEAN_FLOOR : Heightmap.Type.OCEAN_FLOOR_WG;
@@ -63,10 +65,10 @@ public class VanillaLayerInjector {
         if (LayerConfig.DEBUG_LOGGING) {
             AronaLayersGen.LOGGER.info("[Vanilla] Chunk {},{}: layers={} | skips: snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
                 chunk.getPos().x, chunk.getPos().z, layersPlaced,
-                LayerPlacementHelper.debugSkipSnowy, LayerPlacementHelper.debugSkipNoSurface,
-                LayerPlacementHelper.debugSkipNoMapping, LayerPlacementHelper.debugSkipLayerZero,
-                LayerPlacementHelper.debugSkipNoLayerBlock, LayerPlacementHelper.debugSkipNotAir,
-                LayerPlacementHelper.debugSkipEnclosed);
+                LayerPlacementHelper.debugSkipSnowy.get(), LayerPlacementHelper.debugSkipNoSurface.get(),
+                LayerPlacementHelper.debugSkipNoMapping.get(), LayerPlacementHelper.debugSkipLayerZero.get(),
+                LayerPlacementHelper.debugSkipNoLayerBlock.get(), LayerPlacementHelper.debugSkipNotAir.get(),
+                LayerPlacementHelper.debugSkipEnclosed.get());
         }
     }
 
@@ -87,6 +89,17 @@ public class VanillaLayerInjector {
 
                 int worldX = startX + localX;
                 int worldZ = startZ + localZ;
+
+                // powder_snow is non-opaque so OCEAN_FLOOR doesn't count it.
+                // Elevate hmY through the full contiguous powder_snow stack so the
+                // ground height points above the topmost powder_snow, not inside the pile.
+                Block blockAtFloor = chunk.getBlockState(new BlockPos(worldX, hmY, worldZ)).getBlock();
+                if (blockAtFloor == Blocks.POWDER_SNOW && LayerPlacementHelper.hasMappingFor(blockAtFloor)) {
+                    hmY++;
+                    while (chunk.getBlockState(new BlockPos(worldX, hmY, worldZ)).getBlock() == Blocks.POWDER_SNOW) {
+                        hmY++;
+                    }
+                }
 
                 BlockPos surfacePos = new BlockPos(worldX, hmY - 1, worldZ);
                 BlockState surfaceState = chunk.getBlockState(surfacePos);

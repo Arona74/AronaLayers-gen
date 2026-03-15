@@ -10,7 +10,8 @@
     "PlantBlockMixin",
     "TreeFeatureMixin",
     "TreeSoilMixin",
-    "SnowBlockMixin"
+    "SnowBlockMixin",
+    "EntityTouchingPowderSnowAccessor"
   ],
   "client": [],
   "injectors": {

@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.structure.StructurePiece;
 import net.minecraft.structure.StructureStart;
@@ -511,13 +512,13 @@ public class LayerPlacementHelper {
 
     // ========== Core Layer Placement ==========
 
-    public static int debugSkipSnowy = 0;
-    public static int debugSkipNoSurface = 0;
-    public static int debugSkipNoMapping = 0;
-    public static int debugSkipLayerZero = 0;
-    public static int debugSkipNoLayerBlock = 0;
-    public static int debugSkipNotAir = 0;
-    public static int debugSkipEnclosed = 0;
+    public static final AtomicInteger debugSkipSnowy = new AtomicInteger();
+    public static final AtomicInteger debugSkipNoSurface = new AtomicInteger();
+    public static final AtomicInteger debugSkipNoMapping = new AtomicInteger();
+    public static final AtomicInteger debugSkipLayerZero = new AtomicInteger();
+    public static final AtomicInteger debugSkipNoLayerBlock = new AtomicInteger();
+    public static final AtomicInteger debugSkipNotAir = new AtomicInteger();
+    public static final AtomicInteger debugSkipEnclosed = new AtomicInteger();
 
     /**
      * Inject a layer at a single position.
@@ -543,7 +544,7 @@ public class LayerPlacementHelper {
             || isWorldChunk;
 
         if (surfaceY <= chunk.getBottomY()) {
-            debugSkipNoSurface++;
+            debugSkipNoSurface.incrementAndGet();
             return false;
         }
 
@@ -554,18 +555,69 @@ public class LayerPlacementHelper {
             isSnowyBiome = biome.value().isCold(biomePos);
         }
 
-        if (LayerConfig.SKIP_SNOWY_BIOMES && isSnowyBiome) {
-            debugSkipSnowy++;
+        // Peek ahead to detect powder_snow before the snowy-biome skip.
+        // OCEAN_FLOOR_WG doesn't count powder_snow as solid, so it may sit at surfaceY
+        // (one above the heightmap surface). Check both surfaceY-1 and surfaceY.
+        // NOTE: do NOT gate on !useSnowLayers — RTF may pass useSnowLayers=true for cold
+        // biomes, but powder_snow surfaces must still use the CR mapping path.
+        boolean surfaceIsPowderSnow = getMappingRegistry().hasMapping(Blocks.POWDER_SNOW)
+                && (chunk.getBlockState(new BlockPos(worldX, surfaceY - 1, worldZ)).getBlock() == Blocks.POWDER_SNOW
+                 || chunk.getBlockState(new BlockPos(worldX, surfaceY,     worldZ)).getBlock() == Blocks.POWDER_SNOW);
+
+        // Ice and water surfaces need the full CR mapping path (waterlogged layers).
+        // Switching to vanilla snow layers (IMPROVE_SNOWY_BIOMES) would fail because
+        // snow layers have no WATERLOGGED property.
+        Block topBlock = chunk.getBlockState(new BlockPos(worldX, surfaceY - 1, worldZ)).getBlock();
+        boolean surfaceIsIceOrWater = topBlock == Blocks.ICE
+                || topBlock == Blocks.FROSTED_ICE
+                || topBlock == Blocks.WATER;
+
+        if (LayerConfig.SKIP_SNOWY_BIOMES && isSnowyBiome && !surfaceIsPowderSnow) {
+            debugSkipSnowy.incrementAndGet();
             return false;
         }
 
-        if (isSnowyBiome && LayerConfig.IMPROVE_SNOWY_BIOMES) {
+        if (isSnowyBiome && LayerConfig.IMPROVE_SNOWY_BIOMES && !surfaceIsPowderSnow && !surfaceIsIceOrWater) {
             useSnowLayers = true;
+        } else if (surfaceIsIceOrWater || surfaceIsPowderSnow) {
+            // Override any caller-supplied useSnowLayers=true: these surfaces need the CR
+            // mapping path. Ice/water columns need waterlogged layers; powder_snow columns
+            // need the powder_snow_layer block placed on top of the powder_snow.
+            useSnowLayers = false;
+        }
+
+        if (LayerConfig.DEBUG_LOGGING && surfaceIsIceOrWater) {
+            AronaLayersGen.LOGGER.info("[IceTrace] ({},{}) surfaceY={} topBlock={} iceOrWater=true useSnowLayers={} layerCount={}",
+                worldX, worldZ, surfaceY,
+                net.minecraft.registry.Registries.BLOCK.getId(topBlock),
+                useSnowLayers, layerCount);
         }
 
         BlockPos surfacePos = new BlockPos(worldX, surfaceY - 1, worldZ);
         BlockState surfaceState = chunk.getBlockState(surfacePos);
         Block surfaceBlock = surfaceState.getBlock();
+
+        // If powder_snow is sitting on top of the detected surface block (because OCEAN_FLOOR_WG
+        // didn't count it as solid), elevate surfacePos to the powder_snow block so the layer
+        // is placed on top of it rather than replacing the underlying block.
+        if (!useSnowLayers && surfaceBlock != Blocks.POWDER_SNOW) {
+            BlockState oneAbove = chunk.getBlockState(surfacePos.up());
+            if (oneAbove.getBlock() == Blocks.POWDER_SNOW && getMappingRegistry().hasMapping(Blocks.POWDER_SNOW)) {
+                surfacePos = surfacePos.up();
+                surfaceState = oneAbove;
+                surfaceBlock = Blocks.POWDER_SNOW;
+            }
+        }
+        // Scan upward through the full powder_snow stack so the layer lands on top,
+        // not inside a multi-block-deep pile.
+        if (surfaceBlock == Blocks.POWDER_SNOW) {
+            while (true) {
+                BlockState nextAbove = chunk.getBlockState(surfacePos.up());
+                if (nextAbove.getBlock() != Blocks.POWDER_SNOW) break;
+                surfacePos = surfacePos.up();
+                surfaceState = nextAbove;
+            }
+        }
 
         if (useSnowLayers && surfaceBlock == Blocks.SNOW_BLOCK) {
             chunk.setBlockState(surfacePos, Blocks.SNOW.getDefaultState().with(Properties.LAYERS, 8), false);
@@ -593,20 +645,29 @@ public class LayerPlacementHelper {
                 }
             }
             if (!found) {
-                debugSkipNoMapping++;
+                if (LayerConfig.DEBUG_LOGGING && surfaceIsIceOrWater) {
+                    AronaLayersGen.LOGGER.info("[IceTrace] ({},{}) fallback scan found nothing -> skip", worldX, worldZ);
+                }
+                debugSkipNoMapping.incrementAndGet();
                 return false;
+            }
+            if (LayerConfig.DEBUG_LOGGING && surfaceIsIceOrWater) {
+                AronaLayersGen.LOGGER.info("[IceTrace] ({},{}) fallback scan found {} at Y={}",
+                    worldX, worldZ,
+                    net.minecraft.registry.Registries.BLOCK.getId(surfaceBlock),
+                    surfacePos.getY());
             }
         }
 
         if (!getMappingRegistry().hasMapping(surfaceBlock)) {
-            debugSkipNoMapping++;
+            debugSkipNoMapping.incrementAndGet();
             return false;
         }
 
         boolean layerPlaced = false;
 
         if (layerCount <= 0) {
-            debugSkipLayerZero++;
+            debugSkipLayerZero.incrementAndGet();
         }
 
         BlockPos abovePos = surfacePos.up();
@@ -617,24 +678,34 @@ public class LayerPlacementHelper {
 
         if (LayerConfig.STRUCTURE_INJECTION && LayerConfig.ENCLOSED_SPACE_CHECK) {
             if (hasEnclosingCeiling(chunk, abovePos, LayerConfig.ENCLOSED_SPACE_HEIGHT)) {
-                debugSkipEnclosed++;
+                debugSkipEnclosed.incrementAndGet();
                 return false;
             }
         }
 
         BlockState existingState = chunk.getBlockState(abovePos);
-        boolean underwater = existingState.getBlock() == Blocks.WATER;
+        // Treat ice as frozen water: allow placement (replacing ice) and waterlog the layer.
+        boolean underwater = existingState.getBlock() == Blocks.WATER
+                || existingState.getBlock() == Blocks.ICE
+                || existingState.getBlock() == Blocks.FROSTED_ICE;
+        boolean isPowderSnow = existingState.getBlock() == Blocks.POWDER_SNOW;
 
         Block replacedPlant = null;
         BlockState replacedPlantState = null;
         if (layerCount > 0) {
             Block layerBlock = useSnowLayers ? Blocks.SNOW : getMappingRegistry().getLayerBlock(surfaceBlock, layerCount);
+            // powder_snow_layer(8) triggers onBlockAdded -> world.setBlockState(NOTIFY_ALL) which
+            // cascades block updates during WorldChunk init and can hang the server tick.
+            // Place the full block (powder_snow) directly instead; it's equivalent to 8 layers.
+            if (layerBlock == AronaLayersGen.POWDER_SNOW_LAYER && layerCount >= 8) {
+                layerBlock = Blocks.POWDER_SNOW;
+            }
             if (layerBlock == null) {
-                debugSkipNoLayerBlock++;
+                debugSkipNoLayerBlock.incrementAndGet();
             } else {
                 boolean replacedTallPlant = false;
                 BlockState savedTallUpperState = null;
-                if (!existingState.isAir() && !underwater) {
+                if (!existingState.isAir() && !underwater && !isPowderSnow) {
                     boolean isSnowBlockReplacement = useSnowLayers
                         && existingState.getBlock() == Blocks.SNOW_BLOCK;
 
@@ -656,7 +727,7 @@ public class LayerPlacementHelper {
                             // Seagrass needs water above for the CR equivalent; bail if at the water surface edge
                             BlockPos waterCheckPos = replacedTallPlant ? abovePos.up().up() : abovePos.up();
                             if (chunk.getBlockState(waterCheckPos).getBlock() != Blocks.WATER) {
-                                debugSkipNotAir++;
+                                debugSkipNotAir.incrementAndGet();
                                 return false;
                             }
                         }
@@ -670,7 +741,7 @@ public class LayerPlacementHelper {
                             // Seagrass needs water above to shift into; bail if at the water surface edge
                             BlockPos waterCheckPos = replacedTallPlant ? abovePos.up().up() : abovePos.up();
                             if (chunk.getBlockState(waterCheckPos).getBlock() != Blocks.WATER) {
-                                debugSkipNotAir++;
+                                debugSkipNotAir.incrementAndGet();
                                 return false;
                             }
                         }
@@ -680,7 +751,7 @@ public class LayerPlacementHelper {
                             chunk.setBlockState(abovePos.up(), Blocks.AIR.getDefaultState(), false);
                         }
                     } else {
-                        debugSkipNotAir++;
+                        debugSkipNotAir.incrementAndGet();
                         return false;
                     }
                 }
@@ -699,9 +770,16 @@ public class LayerPlacementHelper {
                 if (underwater) {
                     if (layerState.contains(Properties.WATERLOGGED)) {
                         layerState = layerState.with(Properties.WATERLOGGED, true);
-                    } else {
-                        debugSkipNotAir++;
-                        return false;
+                    }
+                    // Block doesn't support waterlogging: place it anyway.
+                    // The water/ice at abovePos is displaced, but all water above the layer
+                    // remains, so the layer still appears correctly at the riverbed/lakebed.
+                    if (LayerConfig.DEBUG_LOGGING) {
+                        AronaLayersGen.LOGGER.info("[IceTrace] ({},{}) placing underwater layer {} at Y={} (waterlogged={})",
+                            worldX, worldZ,
+                            net.minecraft.registry.Registries.BLOCK.getId(layerState.getBlock()),
+                            abovePos.getY(),
+                            layerState.contains(Properties.WATERLOGGED) && layerState.get(Properties.WATERLOGGED));
                     }
                 }
 
@@ -764,7 +842,7 @@ public class LayerPlacementHelper {
                 }
             }
         } else {
-            if (!existingState.isAir() && !underwater) {
+            if (!existingState.isAir() && !underwater && !isPowderSnow) {
                 return false;
             }
         }
