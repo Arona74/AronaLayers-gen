@@ -22,7 +22,7 @@ A Fabric mod for Minecraft 1.20.1 that automatically generates terrain layer blo
 - One of the following layer mods:
   - [Conquest Reforged](https://www.curseforge.com/minecraft/mc-mods/conquest-reforged)
   - VanillaLayerPlus
-- Recommended: [ReTerraForged](https://github.com/TerraForgedMC/TerraForged) for best results
+- Strongly recommended: [ReTerraForged](https://github.com/TerraForgedMC/TerraForged) for best results
 
 ## Installation
 
