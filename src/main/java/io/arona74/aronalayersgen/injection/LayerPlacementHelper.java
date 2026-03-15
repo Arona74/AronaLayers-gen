@@ -425,31 +425,55 @@ public class LayerPlacementHelper {
         List<BlockBox> bounds = new ArrayList<>();
 
         try {
+            if (LayerConfig.DEBUG_LOGGING) {
+                AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: getStructureStarts() count={} thread={}",
+                    chunk.getPos().x, chunk.getPos().z,
+                    chunk.getStructureStarts().size(),
+                    Thread.currentThread().getName());
+            }
+
             for (StructureStart start : chunk.getStructureStarts().values()) {
                 if (start == StructureStart.DEFAULT) continue;
+                if (LayerConfig.DEBUG_LOGGING) {
+                    AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: collecting start={} pieces={}",
+                        chunk.getPos().x, chunk.getPos().z,
+                        start.getClass().getSimpleName(),
+                        start.getChildren().size());
+                }
                 for (StructurePiece piece : start.getChildren()) {
                     bounds.add(piece.getBoundingBox());
                 }
             }
 
-            Map<Structure, LongSet> refs = chunk.getStructureReferences();
-            for (Map.Entry<Structure, LongSet> entry : refs.entrySet()) {
-                Structure structure = entry.getKey();
-                for (long packedPos : entry.getValue()) {
-                    int refChunkX = ChunkPos.getPackedX(packedPos);
-                    int refChunkZ = ChunkPos.getPackedZ(packedPos);
-                    try {
-                        Chunk refChunk = region.getChunk(refChunkX, refChunkZ);
-                        if (refChunk != null) {
-                            StructureStart start = refChunk.getStructureStart(structure);
-                            if (start != null && start != StructureStart.DEFAULT) {
-                                for (StructurePiece piece : start.getChildren()) {
-                                    bounds.add(piece.getBoundingBox());
+            if (LayerConfig.DEBUG_LOGGING) {
+                AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: starts done, boxes={}",
+                    chunk.getPos().x, chunk.getPos().z, bounds.size());
+            }
+
+            // Only resolve cross-chunk structure references when a ChunkRegion is available.
+            // Passing null (POST_FEATURES / WorldChunk context) skips this loop entirely —
+            // iterating refs with a null region would throw a NullPointerException for every
+            // reference entry, which is very expensive near large structures.
+            if (region != null) {
+                Map<Structure, LongSet> refs = chunk.getStructureReferences();
+                for (Map.Entry<Structure, LongSet> entry : refs.entrySet()) {
+                    Structure structure = entry.getKey();
+                    for (long packedPos : entry.getValue()) {
+                        int refChunkX = ChunkPos.getPackedX(packedPos);
+                        int refChunkZ = ChunkPos.getPackedZ(packedPos);
+                        try {
+                            Chunk refChunk = region.getChunk(refChunkX, refChunkZ);
+                            if (refChunk != null) {
+                                StructureStart start = refChunk.getStructureStart(structure);
+                                if (start != null && start != StructureStart.DEFAULT) {
+                                    for (StructurePiece piece : start.getChildren()) {
+                                        bounds.add(piece.getBoundingBox());
+                                    }
                                 }
                             }
+                        } catch (Exception e) {
+                            // Neighboring chunk not available, skip
                         }
-                    } catch (Exception e) {
-                        // Neighboring chunk not available, skip
                     }
                 }
             }
@@ -457,12 +481,16 @@ public class LayerPlacementHelper {
             AronaLayersGen.LOGGER.debug("[Structure] Error collecting structure bounds: {}", e.getMessage());
         }
 
-        if (LayerConfig.DEBUG_LOGGING && !bounds.isEmpty()) {
-            AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: found {} structure piece bounds",
+        if (LayerConfig.DEBUG_LOGGING) {
+            AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: prepareStructureBounds complete, total boxes={}",
                 chunk.getPos().x, chunk.getPos().z, bounds.size());
         }
 
-        structureBoundsLocal.set(bounds.isEmpty() ? null : bounds);
+        // Always set the ThreadLocal, even when empty. A null value means
+        // prepareStructureBounds was never called on this thread for this chunk,
+        // which causes isInsideStructure to fall back to a per-call scan.
+        // An empty list means "called and found nothing" — isInsideStructure returns false immediately.
+        structureBoundsLocal.set(bounds);
     }
 
     public static void clearStructureBounds() {

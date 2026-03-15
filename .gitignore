@@ -35,3 +35,5 @@ remappedSrc/
 
 # others
 .claude/
+.claude/settings.local.json
+/.claude

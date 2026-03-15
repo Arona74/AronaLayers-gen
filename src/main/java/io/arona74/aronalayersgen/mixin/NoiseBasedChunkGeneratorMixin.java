@@ -41,8 +41,22 @@ public class NoiseBasedChunkGeneratorMixin {
         try {
             WorldChunk chunk = (WorldChunk)(Object)this;
 
+            long stepStart = 0L;
+            if (LayerConfig.DEBUG_LOGGING) {
+                stepStart = System.nanoTime();
+                AronaLayersGen.LOGGER.info("[ChunkInit] ENTER {},{} thread={}",
+                    chunk.getPos().x, chunk.getPos().z, Thread.currentThread().getName());
+            }
+
             if (LayerConfig.STRUCTURE_INJECTION) {
+                if (LayerConfig.DEBUG_LOGGING)
+                    AronaLayersGen.LOGGER.info("[ChunkInit] prepareStructureBounds START {},{}", chunk.getPos().x, chunk.getPos().z);
                 LayerPlacementHelper.prepareStructureBounds(chunk, null);
+                if (LayerConfig.DEBUG_LOGGING) {
+                    AronaLayersGen.LOGGER.info("[ChunkInit] prepareStructureBounds DONE {},{} ms={}",
+                        chunk.getPos().x, chunk.getPos().z, (System.nanoTime() - stepStart) / 1_000_000L);
+                    stepStart = System.nanoTime();
+                }
             }
 
             if (LayerConfig.RTF_LAYER_INJECTION) {
@@ -51,9 +65,14 @@ public class NoiseBasedChunkGeneratorMixin {
 
                 if (rtfAvailable) {
                     if (isPostFeaturesMode) {
-                        AronaLayersGen.LOGGER.debug("[POST_FEATURES] Injecting layers for chunk {},{}",
-                            chunk.getPos().x, chunk.getPos().z);
+                        if (LayerConfig.DEBUG_LOGGING)
+                            AronaLayersGen.LOGGER.info("[ChunkInit] RTF inject START {},{}", chunk.getPos().x, chunk.getPos().z);
                         RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
+                        if (LayerConfig.DEBUG_LOGGING) {
+                            AronaLayersGen.LOGGER.info("[ChunkInit] RTF inject DONE {},{} ms={}",
+                                chunk.getPos().x, chunk.getPos().z, (System.nanoTime() - stepStart) / 1_000_000L);
+                            stepStart = System.nanoTime();
+                        }
                     } else {
                         // CARVERS mode: layers placed earlier, run correction pass
                         RTFLayerInjector.correctMismatchedLayers(chunk);
@@ -62,24 +81,53 @@ public class NoiseBasedChunkGeneratorMixin {
                     }
                 } else if (LayerConfig.LAYER_INJECTION) {
                     // RTF requested but not available: fall back to vanilla injection
+                    if (LayerConfig.DEBUG_LOGGING)
+                        AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject START {},{}", chunk.getPos().x, chunk.getPos().z);
                     VanillaLayerInjector.injectLayers(chunk, null);
+                    if (LayerConfig.DEBUG_LOGGING) {
+                        AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject DONE {},{} ms={}",
+                            chunk.getPos().x, chunk.getPos().z, (System.nanoTime() - stepStart) / 1_000_000L);
+                        stepStart = System.nanoTime();
+                    }
                 }
             } else {
+                if (LayerConfig.DEBUG_LOGGING)
+                    AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject START {},{}", chunk.getPos().x, chunk.getPos().z);
                 VanillaLayerInjector.injectLayers(chunk, null);
+                if (LayerConfig.DEBUG_LOGGING) {
+                    AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject DONE {},{} ms={}",
+                        chunk.getPos().x, chunk.getPos().z, (System.nanoTime() - stepStart) / 1_000_000L);
+                    stepStart = System.nanoTime();
+                }
             }
 
             // structure_no_layers: remove layers where structures changed the terrain
             if (LayerConfig.RTF_LAYER_INJECTION && LayerConfig.STRUCTURE_NO_LAYERS) {
+                if (LayerConfig.DEBUG_LOGGING)
+                    AronaLayersGen.LOGGER.info("[ChunkInit] structure_no_layers START {},{}", chunk.getPos().x, chunk.getPos().z);
                 Set<Integer> changedColumns = PreStructureHeightmapStorage.getChangedColumns(chunk);
                 if (changedColumns != null && !changedColumns.isEmpty()) {
                     RTFLayerInjector.removeLayersAtColumns(chunk, changedColumns);
+                }
+                if (LayerConfig.DEBUG_LOGGING) {
+                    AronaLayersGen.LOGGER.info("[ChunkInit] structure_no_layers DONE {},{} ms={}",
+                        chunk.getPos().x, chunk.getPos().z, (System.nanoTime() - stepStart) / 1_000_000L);
+                    stepStart = System.nanoTime();
                 }
             }
 
             // Convert vanilla plants above layers to conquest equivalents (CR only)
             if (LayerConfig.PLANT_INJECTION) {
+                if (LayerConfig.DEBUG_LOGGING)
+                    AronaLayersGen.LOGGER.info("[ChunkInit] plant convert START {},{}", chunk.getPos().x, chunk.getPos().z);
                 PlantConversionHelper.convertPlantsAboveLayers(chunk);
+                if (LayerConfig.DEBUG_LOGGING)
+                    AronaLayersGen.LOGGER.info("[ChunkInit] plant convert DONE {},{} ms={}",
+                        chunk.getPos().x, chunk.getPos().z, (System.nanoTime() - stepStart) / 1_000_000L);
             }
+
+            if (LayerConfig.DEBUG_LOGGING)
+                AronaLayersGen.LOGGER.info("[ChunkInit] EXIT {},{}", chunk.getPos().x, chunk.getPos().z);
         } catch (Exception e) {
             AronaLayersGen.LOGGER.error("Failed to process layers for chunk", e);
         } finally {
