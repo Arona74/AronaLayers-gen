@@ -1,5 +1,8 @@
 {
-  "_comment": "Plant mappings between vanilla and Conquest Reforged. Format: 'minecraft:plant_name': 'conquest:plant_name'",
+  "_comment": "Plant mappings used during layer injection. Two backends are supported:",
+  "_comment_conquest": "Conquest Reforged: both key and value are required. Format: 'minecraft:plant': 'conquest:plant'. The vanilla plant is replaced by its Conquest equivalent placed above the layer.",
+  "_comment_vanilla_layer_plus": "Vanilla Layer Plus: only the key is required. Set the value to null to shift any plant (vanilla or modded) up one block onto the layer. No Conquest equivalent is needed.",
+  "_comment_modded": "To support modded plants on either backend, add their block ID as the key. For VP-only support use null as the value. For CR support provide the Conquest equivalent block ID.",
   "mappings": {
     "minecraft:allium": "conquest:allium",
     "minecraft:azure_bluet": "conquest:azure_bluet",
@@ -21,11 +24,11 @@
     "minecraft:red_mushroom": "conquest:red_mushroom",
     "minecraft:red_tulip": "conquest:red_tulip",
     "minecraft:rose_bush": "conquest:rose_bush",
-	  "minecraft:seagrass": "conquest:seagrass",
+    "minecraft:seagrass": "conquest:seagrass",
     "minecraft:sunflower": "conquest:sunflower",
     "minecraft:tall_grass": "conquest:tall_grass",
-	  "minecraft:tall_seagrass": "conquest:tall_seagrass",
+    "minecraft:tall_seagrass": "conquest:tall_seagrass",
     "minecraft:white_tulip": "conquest:white_tulip",
-    "minecraft:pink_petals" : "minecraft:pink_petals"
+    "minecraft:pink_petals": "minecraft:pink_petals"
   }
 }

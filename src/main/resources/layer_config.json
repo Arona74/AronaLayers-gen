@@ -1,5 +1,5 @@
 {
-  "_comment": "Configuration for CR Layers generation behavior. Edit this file to customize layer generation.",
+  "_comment": "Configuration for Arona Layers generation behavior. Edit this file to customize layer generation.",
   "_comment_layer_injection": "Enable automatic layer injection during terrain generation. Uses heightmap analysis for layer distribution. Requires restart to take effect.",
   "layer_injection": true,
   "_comment_rtf_layer_injection": "Enable layer injection using ReTerraForged terrain data. Requires ReTerraForged mod.",

@@ -77,7 +77,8 @@ public class ConfigLoader {
         if (root.has("mappings")) {
             JsonObject mappingsObj = root.getAsJsonObject("mappings");
             for (String key : mappingsObj.keySet()) {
-                mappings.put(key, mappingsObj.get(key).getAsString());
+                var val = mappingsObj.get(key);
+                mappings.put(key, val.isJsonNull() ? null : val.getAsString());
             }
         }
 

@@ -23,7 +23,7 @@ public class PlantMappingRegistry {
     }
 
     private void registerDefaultMappings() {
-        Map<String, String> configMappings = ConfigLoader.loadMappings("cr_plant_mappings.json");
+        Map<String, String> configMappings = ConfigLoader.loadMappings("plant_mappings.json");
 
         for (Map.Entry<String, String> entry : configMappings.entrySet()) {
             Identifier vanillaId = Identifier.tryParse(entry.getKey());
@@ -46,7 +46,9 @@ public class PlantMappingRegistry {
 
     private void registerPlantMapping(Block vanillaPlant, String conquestPlantId) {
         vanillaToConquestPlant.put(vanillaPlant, conquestPlantId);
-        conquestToVanillaPlant.put(conquestPlantId, vanillaPlant);
+        if (conquestPlantId != null) {
+            conquestToVanillaPlant.put(conquestPlantId, vanillaPlant);
+        }
     }
 
     public Block getConquestPlant(Block vanillaPlant) {
