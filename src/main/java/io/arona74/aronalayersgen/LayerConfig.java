@@ -81,6 +81,15 @@ public class LayerConfig {
      */
     public static boolean STRUCTURE_INJECTION = false;
 
+    /**
+     * Enable cross-chunk structure detection.
+     * When enabled, also checks structure references in neighboring chunks to catch
+     * structures that start outside the current chunk but extend into it.
+     * May cause hangs during heavy pre-generation (e.g. Chunky). Disable if you
+     * experience server tick timeouts during worldgen. Requires STRUCTURE_INJECTION.
+     */
+    public static boolean CROSS_CHUNK_STRUCTURE_DETECTION = false;
+
     public static boolean ENCLOSED_SPACE_CHECK = false;
     public static int ENCLOSED_SPACE_HEIGHT = 5;
     public static boolean STRUCTURE_CLEANUP = false;
@@ -196,6 +205,7 @@ public class LayerConfig {
         if (config.has("plant_injection")) PLANT_INJECTION = config.get("plant_injection").getAsBoolean();
         if (config.has("tree_injection")) TREE_INJECTION = config.get("tree_injection").getAsBoolean();
         if (config.has("structure_injection")) STRUCTURE_INJECTION = config.get("structure_injection").getAsBoolean();
+        if (config.has("cross_chunk_structure_detection")) CROSS_CHUNK_STRUCTURE_DETECTION = config.get("cross_chunk_structure_detection").getAsBoolean();
         if (config.has("enclosed_space_check")) ENCLOSED_SPACE_CHECK = config.get("enclosed_space_check").getAsBoolean();
         if (config.has("enclosed_space_height")) ENCLOSED_SPACE_HEIGHT = config.get("enclosed_space_height").getAsInt();
         if (config.has("structure_cleanup")) STRUCTURE_CLEANUP = config.get("structure_cleanup").getAsBoolean();
@@ -260,6 +270,7 @@ public class LayerConfig {
             config.addProperty("plant_injection", PLANT_INJECTION);
             config.addProperty("tree_injection", TREE_INJECTION);
             config.addProperty("structure_injection", STRUCTURE_INJECTION);
+            config.addProperty("cross_chunk_structure_detection", CROSS_CHUNK_STRUCTURE_DETECTION);
             config.addProperty("enclosed_space_check", ENCLOSED_SPACE_CHECK);
             config.addProperty("enclosed_space_height", ENCLOSED_SPACE_HEIGHT);
             config.addProperty("structure_cleanup", STRUCTURE_CLEANUP);

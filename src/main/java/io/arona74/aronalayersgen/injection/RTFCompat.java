@@ -27,6 +27,7 @@ public class RTFCompat {
 
     private static Method generatorContextMethod;
     private static Method cacheProvideMethod;
+    private static Method cachePeekMethod;
     private static Method getChunkReaderMethod;
     private static Method getCellMethod;
     private static Method isSubmergedMethod;
@@ -73,6 +74,12 @@ public class RTFCompat {
             cacheField = generatorContextClass.getField("cache");
 
             cacheProvideMethod = tileCacheClass.getMethod("provideAtChunk", int.class, int.class);
+            try {
+                cachePeekMethod = tileCacheClass.getMethod("peek", int.class, int.class);
+                AronaLayersGen.LOGGER.info("[RTF] Found TileCache.peek() - will use non-blocking tile access");
+            } catch (NoSuchMethodException e) {
+                AronaLayersGen.LOGGER.warn("[RTF] TileCache.peek() not found, falling back to provideAtChunk (may cause deadlocks)");
+            }
             getChunkReaderMethod = tileClass.getMethod("getChunkReader", int.class, int.class);
             getCellMethod = tileChunkClass.getMethod("getCell", int.class, int.class);
 
@@ -176,7 +183,7 @@ public class RTFCompat {
             int chunkX = chunk.getPos().x;
             int chunkZ = chunk.getPos().z;
 
-            Object tile = cacheProvideMethod.invoke(tileCache, chunkX, chunkZ);
+            Object tile = getTileNonBlocking(tileCache, chunkX, chunkZ);
             if (tile == null) return false;
 
             Object tileChunk = getChunkReaderMethod.invoke(tile, chunkX, chunkZ);
@@ -213,5 +220,27 @@ public class RTFCompat {
             AronaLayersGen.LOGGER.debug("RTF layer injection failed: {}", e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Get a Tile from the cache without blocking.
+     *
+     * Uses TileCache.peek() if available — it returns an Optional<Tile> that is
+     * empty when the tile isn't cached yet, rather than blocking the calling thread.
+     * Falls back to provideAtChunk() only when peek() wasn't resolved at init time.
+     *
+     * The blocking provideAtChunk() causes a deadlock when called from within chunk
+     * generation because the server thread ends up waiting on itself via getChunkBlocking.
+     */
+    private static Object getTileNonBlocking(Object tileCache, int chunkX, int chunkZ) throws Exception {
+        if (cachePeekMethod != null) {
+            Object optional = cachePeekMethod.invoke(tileCache, chunkX, chunkZ);
+            if (optional == null) return null;
+            // RTF returns Optional<Tile>; unwrap it
+            java.util.Optional<?> opt = (java.util.Optional<?>) optional;
+            return opt.orElse(null);
+        }
+        // Fallback: provideAtChunk blocks — only reached if peek() wasn't found
+        return cacheProvideMethod.invoke(tileCache, chunkX, chunkZ);
     }
 }

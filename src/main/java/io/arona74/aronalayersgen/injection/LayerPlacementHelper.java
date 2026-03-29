@@ -18,10 +18,10 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.Heightmap;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.structure.StructurePiece;
@@ -134,25 +134,21 @@ public class LayerPlacementHelper {
     // ========== Property Handling ==========
 
     // Cache for CR's custom "layer" property lookup per block (values 1-4)
-    private static final HashMap<Block, IntProperty> crLayerPropertyCache = new HashMap<>();
+    private static final ConcurrentHashMap<Block, IntProperty> crLayerPropertyCache = new ConcurrentHashMap<>();
 
     /**
      * Find CR's custom "layer" IntProperty on a block (values 1-4).
      * Returns null if the block doesn't have it (e.g. VP blocks use vanilla LAYERS).
      */
     public static IntProperty getCRLayerProperty(Block block) {
-        if (crLayerPropertyCache.containsKey(block)) {
-            return crLayerPropertyCache.get(block);
-        }
-        IntProperty result = null;
-        for (Property<?> prop : block.getStateManager().getProperties()) {
-            if (prop.getName().equals("layer") && prop instanceof IntProperty) {
-                result = (IntProperty) prop;
-                break;
+        return crLayerPropertyCache.computeIfAbsent(block, b -> {
+            for (Property<?> prop : b.getStateManager().getProperties()) {
+                if (prop.getName().equals("layer") && prop instanceof IntProperty ip) {
+                    return ip;
+                }
             }
-        }
-        crLayerPropertyCache.put(block, result);
-        return result;
+            return null;
+        });
     }
 
     /**
@@ -224,58 +220,46 @@ public class LayerPlacementHelper {
     }
 
     // Cache for full-block lookups (layer block -> full block equivalent)
-    private static final HashMap<Block, Block> fullBlockCache = new HashMap<>();
+    private static final ConcurrentHashMap<Block, Block> fullBlockCache = new ConcurrentHashMap<>();
 
     /**
      * Derive the full-block equivalent of a layer/slab block by removing
      * common suffixes (_slab, _layer) from the block ID.
      */
     public static Block getFullBlock(Block layerBlock) {
-        if (fullBlockCache.containsKey(layerBlock)) {
-            return fullBlockCache.get(layerBlock);
-        }
-
-        net.minecraft.util.Identifier layerId = net.minecraft.registry.Registries.BLOCK.getId(layerBlock);
-        String path = layerId.getPath();
-        String namespace = layerId.getNamespace();
-
-        String[] suffixes = {"_slab", "_layer"};
-        for (String suffix : suffixes) {
-            if (path.endsWith(suffix)) {
-                String fullPath = path.substring(0, path.length() - suffix.length());
-                net.minecraft.util.Identifier fullId = new net.minecraft.util.Identifier(namespace, fullPath);
-                Block fullBlock = net.minecraft.registry.Registries.BLOCK.get(fullId);
-                if (fullBlock != Blocks.AIR) {
-                    fullBlockCache.put(layerBlock, fullBlock);
-                    return fullBlock;
+        Block result = fullBlockCache.computeIfAbsent(layerBlock, b -> {
+            net.minecraft.util.Identifier layerId = net.minecraft.registry.Registries.BLOCK.getId(b);
+            String path = layerId.getPath();
+            String namespace = layerId.getNamespace();
+            for (String suffix : new String[]{"_slab", "_layer"}) {
+                if (path.endsWith(suffix)) {
+                    String fullPath = path.substring(0, path.length() - suffix.length());
+                    net.minecraft.util.Identifier fullId = new net.minecraft.util.Identifier(namespace, fullPath);
+                    Block fullBlock = net.minecraft.registry.Registries.BLOCK.get(fullId);
+                    if (fullBlock != Blocks.AIR) return fullBlock;
                 }
             }
-        }
-
-        fullBlockCache.put(layerBlock, null);
-        return null;
+            return Blocks.AIR; // sentinel for "not found" since ConcurrentHashMap disallows null values
+        });
+        return result == Blocks.AIR ? null : result;
     }
 
     // Cache for density property lookup per block
-    private static final HashMap<Block, IntProperty> densityPropertyCache = new HashMap<>();
+    private static final ConcurrentHashMap<Block, IntProperty> densityPropertyCache = new ConcurrentHashMap<>();
 
     /**
      * Find the "density" IntProperty on a block (used by CR rock blocks).
      * Returns null if the block doesn't have it.
      */
     public static IntProperty getDensityProperty(Block block) {
-        if (densityPropertyCache.containsKey(block)) {
-            return densityPropertyCache.get(block);
-        }
-        IntProperty result = null;
-        for (Property<?> prop : block.getStateManager().getProperties()) {
-            if (prop.getName().equals("density") && prop instanceof IntProperty) {
-                result = (IntProperty) prop;
-                break;
+        return densityPropertyCache.computeIfAbsent(block, b -> {
+            for (Property<?> prop : b.getStateManager().getProperties()) {
+                if (prop.getName().equals("density") && prop instanceof IntProperty ip) {
+                    return ip;
+                }
             }
-        }
-        densityPropertyCache.put(block, result);
-        return result;
+            return null;
+        });
     }
 
     // ========== Hashing Utilities ==========
@@ -454,7 +438,7 @@ public class LayerPlacementHelper {
             // Passing null (POST_FEATURES / WorldChunk context) skips this loop entirely —
             // iterating refs with a null region would throw a NullPointerException for every
             // reference entry, which is very expensive near large structures.
-            if (region != null) {
+            if (region != null && LayerConfig.CROSS_CHUNK_STRUCTURE_DETECTION) {
                 Map<Structure, LongSet> refs = chunk.getStructureReferences();
                 for (Map.Entry<Structure, LongSet> entry : refs.entrySet()) {
                     Structure structure = entry.getKey();

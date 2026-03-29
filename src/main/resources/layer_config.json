@@ -22,6 +22,8 @@
   "tree_injection": true,
   "_comment_structure_injection": "Enable structure-aware layer injection: layers are not placed inside structure bounds (villages, etc.), preventing elevation issues. Default: false",
   "structure_injection": true,
+  "_comment_cross_chunk_structure_detection": "Also check structure references in neighboring chunks to catch structures that start outside the current chunk. May cause server tick timeouts during heavy pre-generation (e.g. Chunky). Disable when pre-generating. Requires structure_injection. Default: false",
+  "cross_chunk_structure_detection": false,
   "_comment_enclosed_space_check": "Enable enclosed space detection: skip layers if there's a solid block (ceiling) within enclosed_space_height blocks above. Requires structure_injection. Default: false",
   "enclosed_space_check": false,
   "_comment_enclosed_space_height": "Maximum height to check for ceilings above layer positions. Recommended: 4-6 blocks",
