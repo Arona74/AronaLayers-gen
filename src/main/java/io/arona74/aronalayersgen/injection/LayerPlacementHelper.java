@@ -336,7 +336,7 @@ public class LayerPlacementHelper {
             }
         }
 
-        chunk.setBlockState(rockPos, rockState, false);
+        setBlockStateSafe(chunk, rockPos, rockState);
 
         if (LayerConfig.DEBUG_LOGGING) {
             AronaLayersGen.LOGGER.info("[Rock] Placed {} with density {} at {}",
@@ -366,7 +366,7 @@ public class LayerPlacementHelper {
         }
         foliageState = applyLayerCount(foliageState, foliageBlock, layerCount);
 
-        chunk.setBlockState(foliagePos, foliageState, false);
+        setBlockStateSafe(chunk, foliagePos, foliageState);
 
         if (LayerConfig.DEBUG_LOGGING) {
             AronaLayersGen.LOGGER.info("[Foliage] Placed {} at {}",
@@ -632,7 +632,7 @@ public class LayerPlacementHelper {
         }
 
         if (useSnowLayers && surfaceBlock == Blocks.SNOW_BLOCK) {
-            chunk.setBlockState(surfacePos, Blocks.SNOW.getDefaultState().with(Properties.LAYERS, 8), false);
+            setBlockStateSafe(chunk, surfacePos, Blocks.SNOW.getDefaultState().with(Properties.LAYERS, 8));
             if (LayerConfig.DEBUG_LOGGING) {
                 AronaLayersGen.LOGGER.info("[Snow] Converted snow_block to snow_layers(8) at {}", surfacePos);
             }
@@ -745,7 +745,7 @@ public class LayerPlacementHelper {
                         }
                         replacedPlant = existingState.getBlock();
                         if (replacedTallPlant) {
-                            chunk.setBlockState(abovePos.up(), Blocks.AIR.getDefaultState(), false);
+                            setBlockStateSafe(chunk, abovePos.up(), Blocks.AIR.getDefaultState());
                         }
                     } else if (canShiftPlant) {
                         replacedTallPlant = isTallPlant(existingState);
@@ -760,7 +760,7 @@ public class LayerPlacementHelper {
                         replacedPlantState = existingState;
                         if (replacedTallPlant) {
                             savedTallUpperState = chunk.getBlockState(abovePos.up());
-                            chunk.setBlockState(abovePos.up(), Blocks.AIR.getDefaultState(), false);
+                            setBlockStateSafe(chunk, abovePos.up(), Blocks.AIR.getDefaultState());
                         }
                     } else {
                         debugSkipNotAir.incrementAndGet();
@@ -795,13 +795,13 @@ public class LayerPlacementHelper {
                     }
                 }
 
-                chunk.setBlockState(abovePos, layerState, false);
+                setBlockStateSafe(chunk, abovePos, layerState);
                 layerPlaced = true;
 
                 if (LayerConfig.REPLACE_DIRT_PATH && surfaceBlock == Blocks.DIRT_PATH) {
                     Block fullBlock = getFullBlock(layerBlock);
                     if (fullBlock != null) {
-                        chunk.setBlockState(surfacePos, fullBlock.getDefaultState(), false);
+                        setBlockStateSafe(chunk, surfacePos, fullBlock.getDefaultState());
                         if (LayerConfig.DEBUG_LOGGING) {
                             AronaLayersGen.LOGGER.info("[DirtPath] Replaced dirt_path at {} with {}",
                                 surfacePos, net.minecraft.registry.Registries.BLOCK.getId(fullBlock));
@@ -817,9 +817,9 @@ public class LayerPlacementHelper {
                     // For tall seagrass, plantPos was cleared to AIR; check plantPos.up() for water instead
                     BlockPos waterCheckPos = (needsWater && replacedTallPlant) ? plantPos.up() : plantPos;
                     if (!needsWater || chunk.getBlockState(waterCheckPos).getBlock() == Blocks.WATER) {
-                        chunk.setBlockState(plantPos, replacedPlantState, false);
+                        setBlockStateSafe(chunk, plantPos, replacedPlantState);
                         if (replacedTallPlant && savedTallUpperState != null) {
-                            chunk.setBlockState(plantPos.up(), savedTallUpperState, false);
+                            setBlockStateSafe(chunk, plantPos.up(), savedTallUpperState);
                         }
                     }
                 }
@@ -837,7 +837,7 @@ public class LayerPlacementHelper {
                                 conquestState = conquestState.with(Properties.DOUBLE_BLOCK_HALF,
                                     net.minecraft.block.enums.DoubleBlockHalf.LOWER);
                             }
-                            chunk.setBlockState(plantPos, conquestState, false);
+                            setBlockStateSafe(chunk, plantPos, conquestState);
 
                             BlockPos upperPos = plantPos.up();
                             BlockState upperState = conquestPlant.getDefaultState();
@@ -846,9 +846,9 @@ public class LayerPlacementHelper {
                                 upperState = upperState.with(Properties.DOUBLE_BLOCK_HALF,
                                     net.minecraft.block.enums.DoubleBlockHalf.UPPER);
                             }
-                            chunk.setBlockState(upperPos, upperState, false);
+                            setBlockStateSafe(chunk, upperPos, upperState);
                         } else {
-                            chunk.setBlockState(plantPos, conquestState, false);
+                            setBlockStateSafe(chunk, plantPos, conquestState);
                         }
                     }
                 }
@@ -870,6 +870,32 @@ public class LayerPlacementHelper {
         }
 
         return layerPlaced;
+    }
+
+    /**
+     * Sets a block state in the chunk without triggering Block.onBlockAdded notifications.
+     *
+     * When chunk is a WorldChunk, WorldChunk.setBlockState calls Block.onBlockAdded.
+     * Some blocks (e.g. Conquest Reforged plants) call back into world.setBlockState
+     * on neighbor positions inside onBlockAdded, which cascades into getChunkBlocking
+     * and deadlocks the server thread during WorldChunk initialization.
+     *
+     * Writing directly to the chunk section bypasses onBlockAdded entirely.
+     * Heightmaps are updated manually so surface/lighting data stays correct.
+     */
+    private static void setBlockStateSafe(Chunk chunk, BlockPos pos, BlockState state) {
+        if (chunk instanceof WorldChunk) {
+            int y = pos.getY();
+            int sectionIdx = chunk.getSectionIndex(y);
+            if (sectionIdx < 0 || sectionIdx >= chunk.countVerticalSections()) return;
+            int lx = pos.getX() & 15, lz = pos.getZ() & 15;
+            chunk.getSection(sectionIdx).setBlockState(lx, y & 15, lz, state);
+            for (Map.Entry<Heightmap.Type, Heightmap> entry : chunk.getHeightmaps()) {
+                entry.getValue().trackUpdate(lx, y, lz, state);
+            }
+        } else {
+            setBlockStateSafe(chunk, pos, state);
+        }
     }
 
     // ========== Correction Passes ==========
@@ -916,7 +942,7 @@ public class LayerPlacementHelper {
                 if (layerPos == null || surfacePos == null) continue;
 
                 if (LayerConfig.STRUCTURE_INJECTION && isInsideStructure(chunk, layerPos)) {
-                    chunk.setBlockState(layerPos, Blocks.AIR.getDefaultState(), false);
+                    setBlockStateSafe(chunk, layerPos, Blocks.AIR.getDefaultState());
                     removed++;
                     continue;
                 }
@@ -943,7 +969,7 @@ public class LayerPlacementHelper {
                     }
 
                     if (shouldRemove) {
-                        chunk.setBlockState(layerPos, Blocks.AIR.getDefaultState(), false);
+                        setBlockStateSafe(chunk, layerPos, Blocks.AIR.getDefaultState());
                         structureCleanup++;
                         continue;
                     }
@@ -953,7 +979,7 @@ public class LayerPlacementHelper {
                 if (waterAbove && !LayerConfig.UNDERWATER_LAYERS) {
                     // Layer was placed underwater (e.g. during CARVERS before water filled in)
                     // but underwater layers are disabled; remove it
-                    chunk.setBlockState(layerPos, Blocks.AIR.getDefaultState(), false);
+                    setBlockStateSafe(chunk, layerPos, Blocks.AIR.getDefaultState());
                     removed++;
                     continue;
                 }
@@ -988,22 +1014,21 @@ public class LayerPlacementHelper {
                         if (shouldBeWaterlogged && newState.contains(Properties.WATERLOGGED)) {
                             newState = newState.with(Properties.WATERLOGGED, true);
                         }
-                        chunk.setBlockState(layerPos, newState, false);
+                        setBlockStateSafe(chunk, layerPos, newState);
                         corrected++;
                         changed = true;
                     }
                 } else {
-                    chunk.setBlockState(layerPos,
-                        shouldBeWaterlogged ? Blocks.WATER.getDefaultState() : Blocks.AIR.getDefaultState(),
-                        false);
+                    setBlockStateSafe(chunk, layerPos,
+                        shouldBeWaterlogged ? Blocks.WATER.getDefaultState() : Blocks.AIR.getDefaultState());
                     removed++;
                     changed = true;
                 }
 
                 if (!changed && shouldBeWaterlogged && layerState.contains(Properties.WATERLOGGED)
                         && !layerState.get(Properties.WATERLOGGED)) {
-                    chunk.setBlockState(layerPos,
-                        layerState.with(Properties.WATERLOGGED, true), false);
+                    setBlockStateSafe(chunk, layerPos,
+                        layerState.with(Properties.WATERLOGGED, true));
                     waterlogged++;
                 }
             }
@@ -1041,7 +1066,7 @@ public class LayerPlacementHelper {
                         break;
                     }
 
-                    chunk.setBlockState(pos, Blocks.AIR.getDefaultState(), false);
+                    setBlockStateSafe(chunk, pos, Blocks.AIR.getDefaultState());
                     removed++;
                     break;
                 }
