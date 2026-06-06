@@ -28,6 +28,7 @@ import net.minecraft.structure.StructurePiece;
 import net.minecraft.structure.StructureStart;
 import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.ChunkRegion;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.Chunk;
@@ -338,10 +339,78 @@ public class LayerPlacementHelper {
 
         setBlockStateSafe(chunk, rockPos, rockState);
 
-        if (LayerConfig.DEBUG_LOGGING) {
+        if (LayerConfig.logRocks()) {
             AronaLayersGen.LOGGER.info("[Rock] Placed {} with density {} at {}",
                 net.minecraft.registry.Registries.BLOCK.getId(rockBlock), density, rockPos);
         }
+    }
+
+    /**
+     * Try to place a rock using the per-biome enhanced registry.
+     * Returns true if the biome is registered in the enhanced registry (meaning the basic
+     * rock registry should be suppressed for this position regardless of whether a rock was placed).
+     * Returns false if the biome is not in the enhanced registry (caller should fall back to tryPlaceRock).
+     */
+    public static boolean tryPlaceEnhancedRock(Chunk chunk, BlockPos rockPos, Block surfaceBlock, int worldX, int worldZ, BlockPos layerReadPos) {
+        if (!isConquestReforged()) return false;
+
+        net.minecraft.registry.entry.RegistryEntry<net.minecraft.world.biome.Biome> biomeEntry =
+            chunk.getBiomeForNoiseGen(worldX >> 2, rockPos.getY() >> 2, worldZ >> 2);
+        net.minecraft.util.Identifier biomeId = biomeEntry.getKey()
+            .map(k -> k.getValue())
+            .orElse(null);
+        if (biomeId == null) return false;
+
+        io.arona74.aronalayersgen.EnhancedRockRegistry registry =
+            io.arona74.aronalayersgen.EnhancedRockRegistry.getInstance();
+        if (!registry.hasBiome(biomeId)) return false;
+
+        // Biome is in the enhanced registry — take ownership; basic registry will not run.
+        BlockState aboveState = chunk.getBlockState(rockPos);
+        boolean underwaterRock = aboveState.getBlock() == Blocks.WATER;
+        if (!aboveState.isAir() && !underwaterRock) return true;
+
+        long hash = mixHash(worldX, worldZ, 0xB14C3A7F2D85E961L);
+        float roll = ((hash >>> 16) & 0xFFFF) / 65536.0f;
+        float biomeChance = registry.getChance(biomeId);
+        float effectiveChance = biomeChance >= 0f ? biomeChance : LayerConfig.CHANCE_TO_PLACE_ROCKS;
+        if (roll >= effectiveChance) return true;
+
+        Block rockBlock = registry.selectRock(biomeId, surfaceBlock, hash);
+        if (rockBlock == null) return true;
+
+        int density = calculateRockDensity(worldX, worldZ);
+
+        BlockState rockState = rockBlock.getDefaultState();
+
+        int layerCount = 8;
+        if (layerReadPos != null) {
+            layerCount = readLayerCount(chunk.getBlockState(layerReadPos));
+        }
+        rockState = applyLayerCount(rockState, rockBlock, layerCount);
+
+        IntProperty densityProp = getDensityProperty(rockBlock);
+        if (densityProp != null) {
+            density = Math.max(densityProp.getValues().stream().mapToInt(Integer::intValue).min().orElse(1),
+                     Math.min(density, densityProp.getValues().stream().mapToInt(Integer::intValue).max().orElse(4)));
+            rockState = rockState.with(densityProp, density);
+        }
+
+        if (underwaterRock) {
+            if (rockState.contains(Properties.WATERLOGGED)) {
+                rockState = rockState.with(Properties.WATERLOGGED, true);
+            } else {
+                return true;
+            }
+        }
+
+        setBlockStateSafe(chunk, rockPos, rockState);
+
+        if (LayerConfig.logRocks()) {
+            AronaLayersGen.LOGGER.info("[EnhancedRock] Placed {} with density {} at {}",
+                net.minecraft.registry.Registries.BLOCK.getId(rockBlock), density, rockPos);
+        }
+        return true;
     }
 
     public static void tryPlaceExtraFoliage(Chunk chunk, BlockPos foliagePos, Block surfaceBlock, int worldX, int worldZ, BlockPos layerReadPos) {
@@ -368,9 +437,50 @@ public class LayerPlacementHelper {
 
         setBlockStateSafe(chunk, foliagePos, foliageState);
 
-        if (LayerConfig.DEBUG_LOGGING) {
+        if (LayerConfig.logFoliage()) {
             AronaLayersGen.LOGGER.info("[Foliage] Placed {} at {}",
                 net.minecraft.registry.Registries.BLOCK.getId(foliageBlock), foliagePos);
+        }
+    }
+
+    public static void tryPlaceEnhancedFoliage(Chunk chunk, BlockPos foliagePos, Block surfaceBlock, int worldX, int worldZ, BlockPos layerReadPos) {
+        if (!isConquestReforged()) return;
+
+        BlockState aboveState = chunk.getBlockState(foliagePos);
+        if (!aboveState.isAir()) return;
+
+        long hash = mixHash(worldX, worldZ, 0xA3B4C5D6E7F80192L);
+        float roll = ((hash >>> 16) & 0xFFFF) / 65536.0f;
+
+        // Resolve biome at this column
+        net.minecraft.registry.entry.RegistryEntry<net.minecraft.world.biome.Biome> biomeEntry =
+            chunk.getBiomeForNoiseGen(worldX >> 2, foliagePos.getY() >> 2, worldZ >> 2);
+        net.minecraft.util.Identifier biomeId = biomeEntry.getKey()
+            .map(k -> k.getValue())
+            .orElse(null);
+        if (biomeId == null) return;
+
+        io.arona74.aronalayersgen.EnhancedFoliageRegistry registry =
+            io.arona74.aronalayersgen.EnhancedFoliageRegistry.getInstance();
+        float biomeChance = registry.getChance(biomeId);
+        float effectiveChance = biomeChance >= 0f ? biomeChance : LayerConfig.CHANCE_TO_PLACE_EXTRA_FOLIAGE;
+        if (roll >= effectiveChance) return;
+
+        Block grassBlock = registry.selectGrass(biomeId, surfaceBlock, hash);
+        if (grassBlock == null) return;
+
+        BlockState grassState = grassBlock.getDefaultState();
+        int layerCount = 8;
+        if (layerReadPos != null) {
+            layerCount = readLayerCount(chunk.getBlockState(layerReadPos));
+        }
+        grassState = applyLayerCount(grassState, grassBlock, layerCount);
+
+        setBlockStateSafe(chunk, foliagePos, grassState);
+
+        if (LayerConfig.logFoliage()) {
+            AronaLayersGen.LOGGER.info("[EnhancedFoliage] Placed {} at {}",
+                net.minecraft.registry.Registries.BLOCK.getId(grassBlock), foliagePos);
         }
     }
 
@@ -409,7 +519,7 @@ public class LayerPlacementHelper {
         List<BlockBox> bounds = new ArrayList<>();
 
         try {
-            if (LayerConfig.DEBUG_LOGGING) {
+            if (LayerConfig.logStructure()) {
                 AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: getStructureStarts() count={} thread={}",
                     chunk.getPos().x, chunk.getPos().z,
                     chunk.getStructureStarts().size(),
@@ -418,7 +528,7 @@ public class LayerPlacementHelper {
 
             for (StructureStart start : chunk.getStructureStarts().values()) {
                 if (start == StructureStart.DEFAULT) continue;
-                if (LayerConfig.DEBUG_LOGGING) {
+                if (LayerConfig.logStructure()) {
                     AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: collecting start={} pieces={}",
                         chunk.getPos().x, chunk.getPos().z,
                         start.getClass().getSimpleName(),
@@ -429,7 +539,7 @@ public class LayerPlacementHelper {
                 }
             }
 
-            if (LayerConfig.DEBUG_LOGGING) {
+            if (LayerConfig.logStructure()) {
                 AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: starts done, boxes={}",
                     chunk.getPos().x, chunk.getPos().z, bounds.size());
             }
@@ -465,7 +575,7 @@ public class LayerPlacementHelper {
             AronaLayersGen.LOGGER.debug("[Structure] Error collecting structure bounds: {}", e.getMessage());
         }
 
-        if (LayerConfig.DEBUG_LOGGING) {
+        if (LayerConfig.logStructure()) {
             AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: prepareStructureBounds complete, total boxes={}",
                 chunk.getPos().x, chunk.getPos().z, bounds.size());
         }
@@ -477,8 +587,198 @@ public class LayerPlacementHelper {
         structureBoundsLocal.set(bounds);
     }
 
+    /**
+     * Like prepareStructureBounds but for POST_FEATURES mode.
+     * Uses ServerWorld.getChunkManager().getWorldChunk() (non-blocking, returns null if not loaded)
+     * to resolve cross-chunk structure references without deadlock risk.
+     * This catches village bounding boxes that started in a neighboring chunk.
+     */
+    public static void prepareStructureBoundsWithWorld(Chunk chunk, ServerWorld world) {
+        if (!LayerConfig.STRUCTURE_INJECTION) {
+            structureBoundsLocal.remove();
+            return;
+        }
+
+        List<BlockBox> bounds = new ArrayList<>();
+
+        try {
+            if (LayerConfig.logStructure()) {
+                AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: getStructureStarts() count={} thread={}",
+                    chunk.getPos().x, chunk.getPos().z,
+                    chunk.getStructureStarts().size(),
+                    Thread.currentThread().getName());
+            }
+
+            for (StructureStart start : chunk.getStructureStarts().values()) {
+                if (start == StructureStart.DEFAULT) continue;
+                if (LayerConfig.logStructure()) {
+                    AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: collecting start={} pieces={}",
+                        chunk.getPos().x, chunk.getPos().z,
+                        start.getClass().getSimpleName(),
+                        start.getChildren().size());
+                }
+                for (StructurePiece piece : start.getChildren()) {
+                    bounds.add(piece.getBoundingBox());
+                }
+            }
+
+            // Resolve cross-chunk structure references using ServerWorld.
+            // getWorldChunk() is non-blocking (returns null if not loaded), so this is
+            // safe in POST_FEATURES mode and cannot cause deadlocks or tick timeouts.
+            // This catches structures like villages whose start chunk differs from this chunk.
+            if (world != null) {
+                Map<Structure, LongSet> refs = chunk.getStructureReferences();
+                for (Map.Entry<Structure, LongSet> entry : refs.entrySet()) {
+                    Structure structure = entry.getKey();
+                    for (long packedPos : entry.getValue()) {
+                        int refChunkX = ChunkPos.getPackedX(packedPos);
+                        int refChunkZ = ChunkPos.getPackedZ(packedPos);
+                        try {
+                            WorldChunk refChunk = world.getChunkManager().getWorldChunk(refChunkX, refChunkZ);
+                            if (refChunk != null) {
+                                StructureStart refStart = refChunk.getStructureStart(structure);
+                                if (refStart != null && refStart != StructureStart.DEFAULT) {
+                                    if (LayerConfig.logStructure()) {
+                                        AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: cross-chunk ref from {},{} start={} pieces={}",
+                                            chunk.getPos().x, chunk.getPos().z,
+                                            refChunkX, refChunkZ,
+                                            refStart.getClass().getSimpleName(),
+                                            refStart.getChildren().size());
+                                    }
+                                    for (StructurePiece piece : refStart.getChildren()) {
+                                        bounds.add(piece.getBoundingBox());
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            // Neighboring chunk not available, skip
+                        }
+                    }
+                }
+
+            }
+        } catch (Exception e) {
+            AronaLayersGen.LOGGER.debug("[Structure] Error collecting structure bounds: {}", e.getMessage());
+        }
+
+        if (LayerConfig.logStructure()) {
+            AronaLayersGen.LOGGER.info("[Structure] Chunk {},{}: prepareStructureBoundsWithWorld complete, total boxes={}",
+                chunk.getPos().x, chunk.getPos().z, bounds.size());
+        }
+
+        structureBoundsLocal.set(bounds);
+    }
+
     public static void clearStructureBounds() {
         structureBoundsLocal.remove();
+    }
+
+    // ========== Second-Pass Cleanup ==========
+
+    private static Set<Block> secondPassCleanupBlocks = null;
+
+    private static Set<Block> getSecondPassCleanupBlocks() {
+        if (secondPassCleanupBlocks == null) {
+            secondPassCleanupBlocks = new java.util.HashSet<>();
+            for (String id : io.arona74.aronalayersgen.ConfigLoader.loadBlockList("second_pass_cleanup_blocks.json")) {
+                net.minecraft.util.Identifier identifier = net.minecraft.util.Identifier.tryParse(id);
+                if (identifier == null) {
+                    AronaLayersGen.LOGGER.warn("[SecondPass] Invalid block ID: {}", id);
+                    continue;
+                }
+                Block block = net.minecraft.registry.Registries.BLOCK.get(identifier);
+                if (block == Blocks.AIR) {
+                    AronaLayersGen.LOGGER.warn("[SecondPass] Block not found: {}", id);
+                    continue;
+                }
+                secondPassCleanupBlocks.add(block);
+            }
+            AronaLayersGen.LOGGER.info("[SecondPass] Loaded {} trigger block(s)", secondPassCleanupBlocks.size());
+        }
+        return secondPassCleanupBlocks;
+    }
+
+    /** Positions (worldX, worldZ, Y) where a layer was blocked/removed over a trigger surface block. */
+    private static final ThreadLocal<List<int[]>> secondPassTargetsLocal = new ThreadLocal<>();
+
+    /**
+     * Record a gap position for second-pass tapering if the surface block is in the trigger set.
+     * Only acts when SECOND_PASS_CLEANUP is enabled.
+     */
+    public static void addSecondPassTarget(int worldX, int worldZ, int y, Block surfaceBlock) {
+        if (!LayerConfig.SECOND_PASS_CLEANUP) return;
+        if (!getSecondPassCleanupBlocks().contains(surfaceBlock)) return;
+        List<int[]> targets = secondPassTargetsLocal.get();
+        if (targets == null) {
+            targets = new ArrayList<>();
+            secondPassTargetsLocal.set(targets);
+        }
+        targets.add(new int[]{worldX, worldZ, y});
+    }
+
+    /**
+     * Taper layer values in the 8 in-chunk neighbors of every recorded gap position.
+     * - count > 4  → set to 4
+     * - count ≤ 4  → decrement by 1
+     * - count reaches 0 → remove block, move plant above down by 1
+     */
+    public static void runSecondPassCleanup(Chunk chunk) {
+        List<int[]> targets = secondPassTargetsLocal.get();
+        secondPassTargetsLocal.remove();
+        if (targets == null || targets.isEmpty()) return;
+
+        ChunkPos chunkPos = chunk.getPos();
+        int baseX = chunkPos.getStartX();
+        int baseZ = chunkPos.getStartZ();
+        int cleaned = 0;
+
+        for (int[] target : targets) {
+            int targetX = target[0];
+            int targetZ = target[1];
+            int targetY = target[2];
+
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx == 0 && dz == 0) continue;
+
+                    int nx = targetX + dx;
+                    int nz = targetZ + dz;
+                    int nlx = nx - baseX;
+                    int nlz = nz - baseZ;
+                    if (nlx < 0 || nlx >= 16 || nlz < 0 || nlz >= 16) continue;
+
+                    // Scan ±2 Y range around the gap Y for a layer block
+                    for (int dy = -2; dy <= 2; dy++) {
+                        BlockPos layerPos = new BlockPos(nx, targetY + dy, nz);
+                        BlockState state = chunk.getBlockState(layerPos);
+                        if (!hasLayerProperty(state) || state.getBlock() == Blocks.SNOW) continue;
+
+                        int currentCount = readLayerCount(state);
+                        int newCount = currentCount > 4 ? 4 : currentCount - 1;
+
+                        if (newCount <= 0) {
+                            setBlockStateSafe(chunk, layerPos, Blocks.AIR.getDefaultState());
+                            // Move plant above down
+                            BlockPos abovePos = layerPos.up();
+                            BlockState aboveState = chunk.getBlockState(abovePos);
+                            if (!aboveState.isAir() && aboveState.isReplaceable()) {
+                                setBlockStateSafe(chunk, layerPos, aboveState);
+                                setBlockStateSafe(chunk, abovePos, Blocks.AIR.getDefaultState());
+                            }
+                        } else {
+                            setBlockStateSafe(chunk, layerPos, applyLayerCount(state, state.getBlock(), newCount));
+                        }
+                        cleaned++;
+                        break; // one layer block per neighbor column
+                    }
+                }
+            }
+        }
+
+        if (LayerConfig.logSecondPass() && cleaned > 0) {
+            AronaLayersGen.LOGGER.info("[SecondPass] Chunk {},{}: tapered {} neighbor layer(s)",
+                chunkPos.x, chunkPos.z, cleaned);
+        }
     }
 
     public static boolean hasEnclosingCeiling(Chunk chunk, BlockPos pos, int maxHeight) {
@@ -497,17 +797,61 @@ public class LayerPlacementHelper {
     public static boolean isInsideStructure(Chunk chunk, BlockPos pos) {
         List<BlockBox> bounds = structureBoundsLocal.get();
         if (bounds != null) {
+            // Targeted debug: log all boxes that cover this XZ to diagnose missed detections
+            if (pos.getX() == -139 && pos.getZ() == 55) {
+                boolean anyXZ = false;
+                for (BlockBox box : bounds) {
+                    if (box.getMinX() <= -139 && -139 <= box.getMaxX()
+                            && box.getMinZ() <= 55 && 55 <= box.getMaxZ()) {
+                        anyXZ = true;
+                        AronaLayersGen.LOGGER.info("[DebugBB] (-139,{},55) XZ-match: x=[{},{}] y=[{},{}] z=[{},{}]",
+                            pos.getY(), box.getMinX(), box.getMaxX(), box.getMinY(), box.getMaxY(), box.getMinZ(), box.getMaxZ());
+                    }
+                }
+                if (!anyXZ) {
+                    AronaLayersGen.LOGGER.info("[DebugBB] (-139,{},55) NO box covers this XZ. bounds.size={}", pos.getY(), bounds.size());
+                }
+            }
+            int xzExpand = LayerConfig.STRUCTURE_INJECTION_EXTRA_BOUNDS ? LayerConfig.STRUCTURE_INJECTION_EXTRA_BOUNDS_DISTANCE : 0;
             for (BlockBox box : bounds) {
                 if (box.contains(pos)) return true;
+                // Also catch the beard-fill zone: terrain adaptation fills terrain up to
+                // piece.minY - 1, so the layer target (pos) may fall 1-2 blocks below the
+                // piece bottom but still within its XZ footprint.
+                if (box.getMinX() <= pos.getX() && pos.getX() <= box.getMaxX()
+                        && box.getMinZ() <= pos.getZ() && pos.getZ() <= box.getMaxZ()
+                        && pos.getY() >= box.getMinY() - 2 && pos.getY() < box.getMinY()) {
+                    return true;
+                }
+                // XZ buffer zone around the structure (does not change Y range)
+                if (xzExpand > 0
+                        && box.getMinX() - xzExpand <= pos.getX() && pos.getX() <= box.getMaxX() + xzExpand
+                        && box.getMinZ() - xzExpand <= pos.getZ() && pos.getZ() <= box.getMaxZ() + xzExpand
+                        && pos.getY() >= box.getMinY() - 2 && pos.getY() <= box.getMaxY()) {
+                    return true;
+                }
             }
             return false;
         }
 
         try {
+            int xzExpand = LayerConfig.STRUCTURE_INJECTION_EXTRA_BOUNDS ? LayerConfig.STRUCTURE_INJECTION_EXTRA_BOUNDS_DISTANCE : 0;
             for (StructureStart start : chunk.getStructureStarts().values()) {
                 if (start == StructureStart.DEFAULT) continue;
                 for (StructurePiece piece : start.getChildren()) {
-                    if (piece.getBoundingBox().contains(pos)) return true;
+                    BlockBox box = piece.getBoundingBox();
+                    if (box.contains(pos)) return true;
+                    if (box.getMinX() <= pos.getX() && pos.getX() <= box.getMaxX()
+                            && box.getMinZ() <= pos.getZ() && pos.getZ() <= box.getMaxZ()
+                            && pos.getY() >= box.getMinY() - 2 && pos.getY() < box.getMinY()) {
+                        return true;
+                    }
+                    if (xzExpand > 0
+                            && box.getMinX() - xzExpand <= pos.getX() && pos.getX() <= box.getMaxX() + xzExpand
+                            && box.getMinZ() - xzExpand <= pos.getZ() && pos.getZ() <= box.getMaxZ() + xzExpand
+                            && pos.getY() >= box.getMinY() - 2 && pos.getY() <= box.getMaxY()) {
+                        return true;
+                    }
                 }
             }
         } catch (Exception e) {
@@ -531,6 +875,32 @@ public class LayerPlacementHelper {
     public static final AtomicInteger debugSkipNoLayerBlock = new AtomicInteger();
     public static final AtomicInteger debugSkipNotAir = new AtomicInteger();
     public static final AtomicInteger debugSkipEnclosed = new AtomicInteger();
+    public static final AtomicInteger debugSkipStructureElevated = new AtomicInteger();
+
+    // ========== Structure Elevation Block Filter ==========
+
+    private static Set<Block> elevationProcessBlocks = null;
+
+    private static Set<Block> getElevationProcessBlocks() {
+        if (elevationProcessBlocks == null) {
+            elevationProcessBlocks = new java.util.HashSet<>();
+            for (String id : io.arona74.aronalayersgen.ConfigLoader.loadBlockList("structure_elevation_blocks.json")) {
+                net.minecraft.util.Identifier identifier = net.minecraft.util.Identifier.tryParse(id);
+                if (identifier == null) {
+                    AronaLayersGen.LOGGER.warn("[ElevationFilter] Invalid block ID: {}", id);
+                    continue;
+                }
+                Block block = net.minecraft.registry.Registries.BLOCK.get(identifier);
+                if (block == Blocks.AIR) {
+                    AronaLayersGen.LOGGER.warn("[ElevationFilter] Block not found: {}", id);
+                    continue;
+                }
+                elevationProcessBlocks.add(block);
+            }
+            AronaLayersGen.LOGGER.info("[ElevationFilter] Loaded {} blocks for structure elevation processing", elevationProcessBlocks.size());
+        }
+        return elevationProcessBlocks;
+    }
 
     /**
      * Inject a layer at a single position.
@@ -543,7 +913,22 @@ public class LayerPlacementHelper {
      * @param useSnowLayers If true, use vanilla snow layers instead of block mappings
      * @return true if a layer was placed
      */
+    /**
+     * Inject a layer with an RTF-derived natural surface base Y for structure detection.
+     * rtfExpectedBaseY = floor(rtfHeight * worldHeight) — the noise-derived integer Y of
+     * the natural terrain surface. Unaffected by block placement order or C2ME timing.
+     * Use Integer.MIN_VALUE when RTF data is not available (falls back to snapshot).
+     */
+    public static boolean injectLayerAt(Chunk chunk, int worldX, int worldZ, int layerCount, boolean useSnowLayers, int rtfExpectedBaseY) {
+        return injectLayerAtImpl(chunk, worldX, worldZ, layerCount, useSnowLayers, rtfExpectedBaseY);
+    }
+
+    /** Non-RTF callers: no expected base Y available, falls back to snapshot. */
     public static boolean injectLayerAt(Chunk chunk, int worldX, int worldZ, int layerCount, boolean useSnowLayers) {
+        return injectLayerAtImpl(chunk, worldX, worldZ, layerCount, useSnowLayers, Integer.MIN_VALUE);
+    }
+
+    private static boolean injectLayerAtImpl(Chunk chunk, int worldX, int worldZ, int layerCount, boolean useSnowLayers, int rtfExpectedBaseY) {
         int localX = worldX & 15;
         int localZ = worldZ & 15;
 
@@ -598,7 +983,7 @@ public class LayerPlacementHelper {
             useSnowLayers = false;
         }
 
-        if (LayerConfig.DEBUG_LOGGING && surfaceIsIceOrWater) {
+        if (LayerConfig.logSnow() && surfaceIsIceOrWater) {
             AronaLayersGen.LOGGER.info("[IceTrace] ({},{}) surfaceY={} topBlock={} iceOrWater=true useSnowLayers={} layerCount={}",
                 worldX, worldZ, surfaceY,
                 net.minecraft.registry.Registries.BLOCK.getId(topBlock),
@@ -633,7 +1018,7 @@ public class LayerPlacementHelper {
 
         if (useSnowLayers && surfaceBlock == Blocks.SNOW_BLOCK) {
             setBlockStateSafe(chunk, surfacePos, Blocks.SNOW.getDefaultState().with(Properties.LAYERS, 8));
-            if (LayerConfig.DEBUG_LOGGING) {
+            if (LayerConfig.logSnow()) {
                 AronaLayersGen.LOGGER.info("[Snow] Converted snow_block to snow_layers(8) at {}", surfacePos);
             }
             return true;
@@ -657,13 +1042,13 @@ public class LayerPlacementHelper {
                 }
             }
             if (!found) {
-                if (LayerConfig.DEBUG_LOGGING && surfaceIsIceOrWater) {
+                if (LayerConfig.logSnow() && surfaceIsIceOrWater) {
                     AronaLayersGen.LOGGER.info("[IceTrace] ({},{}) fallback scan found nothing -> skip", worldX, worldZ);
                 }
                 debugSkipNoMapping.incrementAndGet();
                 return false;
             }
-            if (LayerConfig.DEBUG_LOGGING && surfaceIsIceOrWater) {
+            if (LayerConfig.logSnow() && surfaceIsIceOrWater) {
                 AronaLayersGen.LOGGER.info("[IceTrace] ({},{}) fallback scan found {} at Y={}",
                     worldX, worldZ,
                     net.minecraft.registry.Registries.BLOCK.getId(surfaceBlock),
@@ -676,6 +1061,163 @@ public class LayerPlacementHelper {
             return false;
         }
 
+        // POST_FEATURES: detect surfaces elevated above original terrain by structures.
+        //
+        // Expected base Y determination (in priority order):
+        // 1. RTF noise-derived base Y (rtfExpectedBaseY = floor(height * worldHeight)).
+        //    Computed directly from RTF's terrain noise, independent of block placement
+        //    order and C2ME parallelism. Always correct when RTF is active.
+        // 2. Surface-phase snapshot (peekSurfaceY). Fallback for non-RTF callers.
+        //    May be contaminated under C2ME if village FEATURES runs concurrently.
+        //
+        // Only skip/replace when terrain was ELEVATED (surfacePos.getY() > expectedBaseY).
+        // Terrain that went DOWN (ravines from carvers, excavated village interiors) is NOT
+        // skipped here — ravines are correct terrain, excavated interiors are caught by the
+        // bounding-box check above.
+        //
+        // Powder snow is excluded: OCEAN_FLOOR_WG does not count it as solid.
+        if (isPostFeaturesContext && LayerConfig.STRUCTURE_SKIP_ELEVATED && !surfaceIsPowderSnow) {
+            // Resolve expectedBaseY: the Y of the top solid block under natural conditions.
+            int expectedBaseY = Integer.MIN_VALUE;
+            if (rtfExpectedBaseY != Integer.MIN_VALUE) {
+                expectedBaseY = rtfExpectedBaseY; // RTF: floor(height * worldHeight)
+            } else {
+                int preY = PreStructureHeightmapStorage.peekSurfaceY(chunk, localX, localZ);
+                if (preY > chunk.getBottomY()) {
+                    expectedBaseY = preY - 1; // snapshot is exclusive; convert to inclusive base Y
+                }
+            }
+            if (worldX == -125 && worldZ == 74) {
+                AronaLayersGen.LOGGER.info("[DebugPos] (-125,74) rtfBase={} expectedBaseY={} surfacePos.Y={} surfaceBlock={} layerCount={} isPostFeaturesCtx={} SKIP_ELEVATED={}",
+                    rtfExpectedBaseY, expectedBaseY, surfacePos.getY(),
+                    net.minecraft.registry.Registries.BLOCK.getId(surfaceBlock),
+                    layerCount, isPostFeaturesContext, LayerConfig.STRUCTURE_SKIP_ELEVATED);
+            }
+            // Surface above expectedBaseY means structure elevated the terrain.
+            if (expectedBaseY != Integer.MIN_VALUE && surfacePos.getY() > expectedBaseY) {
+                // Only process blocks listed in structure_elevation_blocks.json.
+                if (!getElevationProcessBlocks().contains(surfaceBlock)) {
+                    // Block not in filter list — leave it untouched, fall through to normal injection.
+                } else {
+                boolean exactlyOneBlock = surfacePos.getY() == expectedBaseY + 1;
+                // Only act if the space above is clear (no building floor/wall above the surface).
+                // Replaceable blocks (grass, flowers, ferns, etc.) count as clear since they are
+                // vegetation, not structural blocks, and won't float after the elevated block is removed.
+                BlockState spaceAbove = chunk.getBlockState(surfacePos.up());
+                boolean spaceAboveClear = spaceAbove.isAir()
+                        || spaceAbove.getBlock() == Blocks.WATER
+                        || spaceAbove.isReplaceable();
+                if (!spaceAboveClear) {
+                    if (LayerConfig.logSkipElevated()) {
+                        AronaLayersGen.LOGGER.info("[SkipElevated] ({},{}) blocked: non-air above Y={} is {}",
+                            worldX, worldZ, surfacePos.getY() + 1,
+                            net.minecraft.registry.Registries.BLOCK.getId(spaceAbove.getBlock()));
+                    }
+                    debugSkipStructureElevated.incrementAndGet();
+                    return false;
+                }
+                if (LayerConfig.STRUCTURE_REPLACE_ELEVATED && exactlyOneBlock) {
+                    // Exactly 1-block elevation: handle based on RTF layer count.
+                    if (layerCount == 0) {
+                        // RTF terrain is at an integer height (fractional depth ≈ 0).
+                        // No layer belongs here, so remove the village-raised block by
+                        // placing AIR. This exposes the natural surface underneath so
+                        // plants placed afterward land at the correct Y, not one too high.
+                        if (LayerConfig.logSkipElevated()) {
+                            AronaLayersGen.LOGGER.info("[SkipElevated] ({},{}) REMOVE raised block Y={} expectedBase={} block={} (layerCount=0)",
+                                worldX, worldZ, surfacePos.getY(), expectedBaseY,
+                                net.minecraft.registry.Registries.BLOCK.getId(surfaceBlock));
+                        }
+                        setBlockStateSafe(chunk, surfacePos, Blocks.AIR.getDefaultState());
+                        clearVegetationAbove(chunk, worldX, worldZ, surfacePos.getY() + 1);
+                        if (LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP) cleanupNearbyLayers(chunk, worldX, worldZ, surfacePos.getY());
+                        debugSkipStructureElevated.incrementAndGet();
+                        return false;
+                    }
+                    // layerCount > 0: replace the raised surface block with the layer in-place.
+                    Block layerBlock = useSnowLayers ? Blocks.SNOW : getMappingRegistry().getLayerBlock(surfaceBlock, layerCount);
+                    if (layerBlock != null) {
+                        if (layerBlock == AronaLayersGen.POWDER_SNOW_LAYER && layerCount >= 8) {
+                            layerBlock = Blocks.POWDER_SNOW;
+                        }
+                        BlockState layerState = layerBlock.getDefaultState();
+                        layerState = applyLayerCount(layerState, layerBlock, layerCount);
+                        if (LayerConfig.logSkipElevated()) {
+                            AronaLayersGen.LOGGER.info("[SkipElevated] ({},{}) REPLACE surface Y={} expectedBase={} block={} -> {} layers={}",
+                                worldX, worldZ, surfacePos.getY(), expectedBaseY,
+                                net.minecraft.registry.Registries.BLOCK.getId(surfaceBlock),
+                                net.minecraft.registry.Registries.BLOCK.getId(layerBlock), layerCount);
+                        }
+                        setBlockStateSafe(chunk, surfacePos, layerState);
+                        if (LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP) cleanupNearbyLayers(chunk, worldX, worldZ, surfacePos.getY());
+                        return true;
+                    }
+                }
+                // Elevation > 1 block: optionally level the mound if REPLACE_ELEVATED_HIGH is
+                // enabled and the delta is within the configured maximum.
+                //
+                // Algorithm: clear all blocks from surfacePos down to expectedBaseY+2 (the extra
+                // fill above the first elevated position), then at expectedBaseY+1 either place
+                // a layer (layerCount>0) or AIR (layerCount=0). The layer mapping uses the natural
+                // surface block at expectedBaseY rather than the elevated surface block.
+                //
+                // Example delta=2: surfacePos=Y=75, expectedBase=73
+                //   clear Y=75 → AIR
+                //   at Y=74: place layer using block at Y=73
+                //   result: natural at Y=73, layer at Y=74, air at Y=75
+                int delta = surfacePos.getY() - expectedBaseY;
+                if (LayerConfig.STRUCTURE_REPLACE_ELEVATED_HIGH && delta <= LayerConfig.STRUCTURE_REPLACE_ELEVATED_HIGH_MAX) {
+                    // Clear elevated blocks above the first elevated position.
+                    for (int y = surfacePos.getY(); y > expectedBaseY + 1; y--) {
+                        setBlockStateSafe(chunk, new BlockPos(worldX, y, worldZ), Blocks.AIR.getDefaultState());
+                    }
+                    // Clear any vegetation that was sitting on top of the now-removed elevated blocks.
+                    clearVegetationAbove(chunk, worldX, worldZ, surfacePos.getY() + 1);
+                    BlockPos layerTargetPos = new BlockPos(worldX, expectedBaseY + 1, worldZ);
+                    if (layerCount == 0) {
+                        // No layer at natural terrain either — clear the remaining elevated block too.
+                        setBlockStateSafe(chunk, layerTargetPos, Blocks.AIR.getDefaultState());
+                        if (LayerConfig.logSkipElevated()) {
+                            AronaLayersGen.LOGGER.info("[SkipElevated] ({},{}) REMOVE-HIGH Y={}-{} expectedBase={} delta={} (layerCount=0)",
+                                worldX, worldZ, expectedBaseY + 1, surfacePos.getY(), expectedBaseY, delta);
+                        }
+                        if (LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP) cleanupNearbyLayers(chunk, worldX, worldZ, surfacePos.getY());
+                        debugSkipStructureElevated.incrementAndGet();
+                        return false;
+                    }
+                    // Use the natural surface block for the layer mapping.
+                    Block naturalBlock = chunk.getBlockState(new BlockPos(worldX, expectedBaseY, worldZ)).getBlock();
+                    Block layerBlock = useSnowLayers ? Blocks.SNOW : getMappingRegistry().getLayerBlock(naturalBlock, layerCount);
+                    if (layerBlock != null) {
+                        if (layerBlock == AronaLayersGen.POWDER_SNOW_LAYER && layerCount >= 8) {
+                            layerBlock = Blocks.POWDER_SNOW;
+                        }
+                        BlockState layerState = layerBlock.getDefaultState();
+                        layerState = applyLayerCount(layerState, layerBlock, layerCount);
+                        if (LayerConfig.logSkipElevated()) {
+                            AronaLayersGen.LOGGER.info("[SkipElevated] ({},{}) LEVEL-HIGH cleared Y={}-{} layer at Y={} naturalBlock={} -> {} layers={}",
+                                worldX, worldZ, expectedBaseY + 2, surfacePos.getY(),
+                                expectedBaseY + 1,
+                                net.minecraft.registry.Registries.BLOCK.getId(naturalBlock),
+                                net.minecraft.registry.Registries.BLOCK.getId(layerBlock), layerCount);
+                        }
+                        setBlockStateSafe(chunk, layerTargetPos, layerState);
+                        if (LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP) cleanupNearbyLayers(chunk, worldX, worldZ, surfacePos.getY());
+                        return true;
+                    }
+                }
+                if (LayerConfig.logSkipElevated()) {
+                    AronaLayersGen.LOGGER.info("[SkipElevated] ({},{}) SKIP Y={} expectedBase={} delta={} block={}",
+                        worldX, worldZ, surfacePos.getY(), expectedBaseY, delta,
+                        net.minecraft.registry.Registries.BLOCK.getId(surfaceBlock));
+                }
+                if (LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP) cleanupNearbyLayers(chunk, worldX, worldZ, surfacePos.getY());
+                debugSkipStructureElevated.incrementAndGet();
+                return false;
+                } // end elevation filter else
+            }
+        }
+
         boolean layerPlaced = false;
 
         if (layerCount <= 0) {
@@ -685,6 +1227,7 @@ public class LayerPlacementHelper {
         BlockPos abovePos = surfacePos.up();
 
         if (LayerConfig.STRUCTURE_INJECTION && isInsideStructure(chunk, abovePos)) {
+            addSecondPassTarget(abovePos.getX(), abovePos.getZ(), abovePos.getY(), surfaceBlock);
             return false;
         }
 
@@ -716,6 +1259,7 @@ public class LayerPlacementHelper {
                 debugSkipNoLayerBlock.incrementAndGet();
             } else {
                 boolean replacedTallPlant = false;
+                boolean seagrassAtSurface = false;
                 BlockState savedTallUpperState = null;
                 if (!existingState.isAir() && !underwater && !isPowderSnow) {
                     boolean isSnowBlockReplacement = useSnowLayers
@@ -736,31 +1280,53 @@ public class LayerPlacementHelper {
                     } else if (canReplacePlant) {
                         replacedTallPlant = isTallPlant(existingState);
                         if (isSeagrass) {
-                            // Seagrass needs water above for the CR equivalent; bail if at the water surface edge
                             BlockPos waterCheckPos = replacedTallPlant ? abovePos.up().up() : abovePos.up();
-                            if (chunk.getBlockState(waterCheckPos).getBlock() != Blocks.WATER) {
-                                debugSkipNotAir.incrementAndGet();
-                                return false;
+                            if (chunk.getBlockState(waterCheckPos).getBlock() == Blocks.WATER) {
+                                // Fully submerged: convert to CR equivalent above the layer
+                                replacedPlant = existingState.getBlock();
+                            } else {
+                                // Surface seagrass: no room for CR equivalent above.
+                                // Remove the seagrass and place a waterlogged layer in its place.
+                                seagrassAtSurface = true;
                             }
-                        }
-                        replacedPlant = existingState.getBlock();
-                        if (replacedTallPlant) {
-                            setBlockStateSafe(chunk, abovePos.up(), Blocks.AIR.getDefaultState());
+                            if (replacedTallPlant) {
+                                // Upper half was occupying a water column block; restore water there.
+                                BlockState upperFill = seagrassAtSurface
+                                    ? Blocks.WATER.getDefaultState()
+                                    : Blocks.AIR.getDefaultState();
+                                setBlockStateSafe(chunk, abovePos.up(), upperFill);
+                            }
+                        } else {
+                            replacedPlant = existingState.getBlock();
+                            if (replacedTallPlant) {
+                                setBlockStateSafe(chunk, abovePos.up(), Blocks.AIR.getDefaultState());
+                            }
                         }
                     } else if (canShiftPlant) {
                         replacedTallPlant = isTallPlant(existingState);
                         if (isSeagrass) {
-                            // Seagrass needs water above to shift into; bail if at the water surface edge
                             BlockPos waterCheckPos = replacedTallPlant ? abovePos.up().up() : abovePos.up();
-                            if (chunk.getBlockState(waterCheckPos).getBlock() != Blocks.WATER) {
-                                debugSkipNotAir.incrementAndGet();
-                                return false;
+                            if (chunk.getBlockState(waterCheckPos).getBlock() == Blocks.WATER) {
+                                // Fully submerged: shift the seagrass up onto the layer
+                                replacedPlantState = existingState;
+                            } else {
+                                // Surface seagrass: no room to shift into. Place waterlogged layer only.
+                                seagrassAtSurface = true;
                             }
-                        }
-                        replacedPlantState = existingState;
-                        if (replacedTallPlant) {
-                            savedTallUpperState = chunk.getBlockState(abovePos.up());
-                            setBlockStateSafe(chunk, abovePos.up(), Blocks.AIR.getDefaultState());
+                            if (replacedTallPlant) {
+                                savedTallUpperState = chunk.getBlockState(abovePos.up());
+                                // Upper half was occupying a water column block; restore water there.
+                                BlockState upperFill = seagrassAtSurface
+                                    ? Blocks.WATER.getDefaultState()
+                                    : Blocks.AIR.getDefaultState();
+                                setBlockStateSafe(chunk, abovePos.up(), upperFill);
+                            }
+                        } else {
+                            replacedPlantState = existingState;
+                            if (replacedTallPlant) {
+                                savedTallUpperState = chunk.getBlockState(abovePos.up());
+                                setBlockStateSafe(chunk, abovePos.up(), Blocks.AIR.getDefaultState());
+                            }
                         }
                     } else {
                         debugSkipNotAir.incrementAndGet();
@@ -771,10 +1337,10 @@ public class LayerPlacementHelper {
                 BlockState layerState = layerBlock.getDefaultState();
                 layerState = applyLayerCount(layerState, layerBlock, layerCount);
 
-                // Seagrass replacement (CR or VP): water above was verified in detection; waterlog the layer
+                // Seagrass replacement (CR or VP): waterlog the layer whenever seagrass was here
                 Block seagrassCheck = replacedPlantState != null ? replacedPlantState.getBlock() : replacedPlant;
-                if (seagrassCheck != null
-                        && (seagrassCheck == Blocks.SEAGRASS || seagrassCheck == Blocks.TALL_SEAGRASS)
+                if ((seagrassAtSurface
+                        || (seagrassCheck != null && (seagrassCheck == Blocks.SEAGRASS || seagrassCheck == Blocks.TALL_SEAGRASS)))
                         && layerState.contains(Properties.WATERLOGGED)) {
                     layerState = layerState.with(Properties.WATERLOGGED, true);
                 }
@@ -786,7 +1352,7 @@ public class LayerPlacementHelper {
                     // Block doesn't support waterlogging: place it anyway.
                     // The water/ice at abovePos is displaced, but all water above the layer
                     // remains, so the layer still appears correctly at the riverbed/lakebed.
-                    if (LayerConfig.DEBUG_LOGGING) {
+                    if (LayerConfig.logSnow()) {
                         AronaLayersGen.LOGGER.info("[IceTrace] ({},{}) placing underwater layer {} at Y={} (waterlogged={})",
                             worldX, worldZ,
                             net.minecraft.registry.Registries.BLOCK.getId(layerState.getBlock()),
@@ -802,7 +1368,7 @@ public class LayerPlacementHelper {
                     Block fullBlock = getFullBlock(layerBlock);
                     if (fullBlock != null) {
                         setBlockStateSafe(chunk, surfacePos, fullBlock.getDefaultState());
-                        if (LayerConfig.DEBUG_LOGGING) {
+                        if (LayerConfig.logFoliage()) {
                             AronaLayersGen.LOGGER.info("[DirtPath] Replaced dirt_path at {} with {}",
                                 surfacePos, net.minecraft.registry.Registries.BLOCK.getId(fullBlock));
                         }
@@ -861,8 +1427,17 @@ public class LayerPlacementHelper {
 
         BlockPos decorPos = layerPlaced ? abovePos.up() : abovePos;
 
-        if (replacedPlant == null && LayerConfig.PLACE_ROCKS) {
+        boolean enhancedRockHandled = false;
+        if (replacedPlant == null && LayerConfig.CONQUEST_ENHANCED_ROCKS) {
+            enhancedRockHandled = tryPlaceEnhancedRock(chunk, decorPos, surfaceBlock, worldX, worldZ, layerPlaced ? abovePos : null);
+        }
+
+        if (replacedPlant == null && LayerConfig.PLACE_ROCKS && !enhancedRockHandled) {
             tryPlaceRock(chunk, decorPos, surfaceBlock, worldX, worldZ, layerPlaced ? abovePos : null);
+        }
+
+        if (replacedPlant == null && LayerConfig.CONQUEST_ENHANCED_EXTRA_FOLIAGE) {
+            tryPlaceEnhancedFoliage(chunk, decorPos, surfaceBlock, worldX, worldZ, layerPlaced ? abovePos : null);
         }
 
         if (replacedPlant == null && LayerConfig.PLACE_EXTRA_FOLIAGE) {
@@ -883,6 +1458,50 @@ public class LayerPlacementHelper {
      * Writing directly to the chunk section bypasses onBlockAdded entirely.
      * Heightmaps are updated manually so surface/lighting data stays correct.
      */
+    /**
+     * Remove any layer blocks within the configured Chebyshev radius of (worldX, worldZ)
+     * at Y levels near centerY. Only operates within the current chunk.
+     * Called after detecting an elevated position to clean up surrounding layers.
+     */
+    private static void cleanupNearbyLayers(Chunk chunk, int worldX, int worldZ, int centerY) {
+        int radius = LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP_DISTANCE;
+        int chunkMinX = chunk.getPos().getStartX();
+        int chunkMinZ = chunk.getPos().getStartZ();
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                if (dx == 0 && dz == 0) continue;
+                int nx = worldX + dx, nz = worldZ + dz;
+                if (nx < chunkMinX || nx >= chunkMinX + 16
+                        || nz < chunkMinZ || nz >= chunkMinZ + 16) continue;
+                for (int dy = -2; dy <= 2; dy++) {
+                    int ny = centerY + dy;
+                    if (ny < chunk.getBottomY() || ny >= chunk.getTopY()) continue;
+                    BlockPos pos = new BlockPos(nx, ny, nz);
+                    BlockState state = chunk.getBlockState(pos);
+                    boolean isLayer = state.contains(Properties.LAYERS)
+                            || getCRLayerProperty(state.getBlock()) != null;
+                    if (isLayer) {
+                        setBlockStateSafe(chunk, pos, Blocks.AIR.getDefaultState());
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Clear any replaceable vegetation (grass, flowers, ferns, etc.) sitting directly
+     * above the given Y position. Continues upward until air or a non-replaceable block.
+     * Called after removing an elevated block so stranded plants don't float.
+     */
+    private static void clearVegetationAbove(Chunk chunk, int worldX, int worldZ, int aboveY) {
+        for (int y = aboveY; y < chunk.getTopY(); y++) {
+            BlockState state = chunk.getBlockState(new BlockPos(worldX, y, worldZ));
+            if (state.isAir()) break;
+            if (!state.isReplaceable()) break;
+            setBlockStateSafe(chunk, new BlockPos(worldX, y, worldZ), Blocks.AIR.getDefaultState());
+        }
+    }
+
     private static void setBlockStateSafe(Chunk chunk, BlockPos pos, BlockState state) {
         if (chunk instanceof WorldChunk) {
             int y = pos.getY();
@@ -1034,7 +1653,7 @@ public class LayerPlacementHelper {
             }
         }
 
-        if ((corrected > 0 || removed > 0 || waterlogged > 0 || structureCleanup > 0) && LayerConfig.DEBUG_LOGGING) {
+        if ((corrected > 0 || removed > 0 || waterlogged > 0 || structureCleanup > 0) && LayerConfig.logCorrection()) {
             AronaLayersGen.LOGGER.info("[Correction] Chunk {},{}: corrected={}, removed={}, waterlogged={}, structureCleanup={}",
                 chunk.getPos().x, chunk.getPos().z, corrected, removed, waterlogged, structureCleanup);
         }
@@ -1067,13 +1686,14 @@ public class LayerPlacementHelper {
                     }
 
                     setBlockStateSafe(chunk, pos, Blocks.AIR.getDefaultState());
+                    addSecondPassTarget(worldX, worldZ, pos.getY(), chunk.getBlockState(pos.down()).getBlock());
                     removed++;
                     break;
                 }
             }
         }
 
-        if ((removed > 0 || preserved > 0) && LayerConfig.DEBUG_LOGGING) {
+        if ((removed > 0 || preserved > 0) && LayerConfig.logStructureNoLayers()) {
             AronaLayersGen.LOGGER.info("[StructureNoLayers] Chunk {},{}: removed={}, preserved={} (had plants above)",
                 chunk.getPos().x, chunk.getPos().z, removed, preserved);
         }

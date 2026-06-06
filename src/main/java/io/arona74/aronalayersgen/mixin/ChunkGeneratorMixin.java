@@ -21,9 +21,42 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Mixin to inject layer generation after carving but before features.
  * Ensures layers are placed before plants/trees are generated (CARVERS mode).
+ *
+ * Also captures heightmap snapshots used by structure-aware layer placement:
+ *
+ * buildSurface() → surface snapshot (for STRUCTURE_SKIP_ELEVATED)
+ *   Captured BEFORE carvers and before any C2ME-parallel village features can
+ *   run. Minecraft's dependency chain guarantees that no neighboring chunk's
+ *   FEATURES phase can have started when this chunk is still at SURFACE status,
+ *   so this snapshot is always uncontaminated by village beard-fill terrain
+ *   adaptation, even under aggressive parallel worldgen (C2ME).
+ *
+ * carve() → carvers snapshot (for STRUCTURE_NO_LAYERS)
+ *   Captured after caves are carved but before features. May be contaminated
+ *   under C2ME for structures that span chunk boundaries, but still usefully
+ *   detects most structure-placed block patterns (threshold >= 2 blocks).
  */
 @Mixin(NoiseChunkGenerator.class)
 public class ChunkGeneratorMixin {
+
+    /**
+     * Capture the surface-phase snapshot for STRUCTURE_SKIP_ELEVATED.
+     * This runs after buildSurface() — the terrain has surface blocks but no
+     * caves and no structure features. Guaranteed clean under C2ME.
+     */
+    @Inject(
+        method = "buildSurface",
+        at = @At("RETURN")
+    )
+    private void onBuildSurfaceComplete(ChunkRegion chunkRegion,
+                                         StructureAccessor structureAccessor,
+                                         NoiseConfig noiseConfig,
+                                         Chunk chunk,
+                                         CallbackInfo ci) {
+        if (LayerConfig.STRUCTURE_SKIP_ELEVATED) {
+            PreStructureHeightmapStorage.captureSurfaceHeightmap(chunk);
+        }
+    }
 
     @Inject(
         method = "carve",
@@ -41,7 +74,9 @@ public class ChunkGeneratorMixin {
             return;
         }
 
-        // Capture heightmap snapshot before structures (for structure_no_layers)
+        // Capture carvers-phase snapshot for STRUCTURE_NO_LAYERS.
+        // Note: STRUCTURE_SKIP_ELEVATED uses a separate surface-phase snapshot
+        // captured in onBuildSurfaceComplete() above.
         if (LayerConfig.STRUCTURE_NO_LAYERS) {
             PreStructureHeightmapStorage.captureHeightmap(chunk);
         }

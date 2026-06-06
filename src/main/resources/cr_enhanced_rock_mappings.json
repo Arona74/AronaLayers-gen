@@ -1,0 +1,462 @@
+{
+  "_comment": "Per-biome weighted rock placement. Requires conquest_enhanced_rocks=true in layer_config.json.",
+  "_comment_format": "surface_blocks: which blocks below the layer trigger rock placement. rocks: weighted list of possible rock blocks. chance: optional per-biome override for chance_to_place_rocks.",
+  "_comment_fallback": "Biomes not listed here fall back to cr_rock_mappings.json (simple surface->rock mapping).",
+  "biomes": {
+    "minecraft:river": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:sand", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:diorite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 4 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:plains": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:sand", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:diorite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 4 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:sunflower_plains": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:diorite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 4 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:meadow": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:diorite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 3 },
+        { "block": "conquest:andesite_rocks", "weight": 2 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:cherry_grove": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:granite"],
+      "rocks": [
+        { "block": "conquest:pale_limestone_rocks", "weight": 3 },
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:rough_marble_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:forest": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:diorite", "minecraft:granite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 3 },
+        { "block": "conquest:andesite_rocks", "weight": 1 },
+        { "block": "conquest:graywacke_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:flower_forest": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:diorite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 3 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:birch_forest": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:diorite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 3 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 2 }
+      ]
+    },
+    "minecraft:old_growth_birch_forest": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:diorite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 3 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 2 }
+      ]
+    },
+    "minecraft:dark_forest": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:diorite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:dark_limestone_rocks", "weight": 2 },
+        { "block": "conquest:slate_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:windswept_forest": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:granite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:andesite_rocks", "weight": 2 },
+        { "block": "conquest:graywacke_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:taiga": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:diorite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:slate_rocks", "weight": 2 },
+        { "block": "conquest:graywacke_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:old_growth_pine_taiga": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:slate_rocks", "weight": 2 },
+        { "block": "conquest:graywacke_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:old_growth_spruce_taiga": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:slate_rocks", "weight": 3 }
+      ]
+    },
+    "minecraft:snowy_taiga": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:slate_rocks", "weight": 3 }
+      ]
+    },
+    "minecraft:snowy_plains": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 4 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:snowy_beach": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:sand", "minecraft:stone", "minecraft:gravel", "minecraft:sandstone"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 3 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 2 }
+      ]
+    },
+    "minecraft:ice_spikes": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 3 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 2 }
+      ]
+    },
+    "minecraft:grove": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:slate_rocks", "weight": 2 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:snowy_slopes": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:slate_rocks", "weight": 2 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:frozen_peaks": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite"],
+      "rocks": [
+        { "block": "conquest:pale_limestone_rocks", "weight": 2 },
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:slate_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:jagged_peaks": {
+      "chance": 0.10,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:granite", "minecraft:diorite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:andesite_rocks", "weight": 3 },
+        { "block": "conquest:granite_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:stony_peaks": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:granite", "minecraft:diorite"],
+      "rocks": [
+        { "block": "conquest:andesite_rocks", "weight": 3 },
+        { "block": "conquest:granite_rocks", "weight": 2 },
+        { "block": "conquest:limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:windswept_hills": {
+      "chance": 0.10,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:granite", "minecraft:diorite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:andesite_rocks", "weight": 2 },
+        { "block": "conquest:graywacke_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:windswept_gravelly_hills": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:granite"],
+      "rocks": [
+        { "block": "conquest:graywacke_rocks", "weight": 3 },
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:andesite_rocks", "weight": 2 }
+      ]
+    },
+    "minecraft:stony_shore": {
+      "chance": 0.10,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite", "minecraft:granite"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:andesite_rocks", "weight": 2 },
+        { "block": "conquest:graywacke_rocks", "weight": 2 }
+      ]
+    },
+    "minecraft:beach": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:sand", "minecraft:sandstone", "minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:mudstone_rocks", "weight": 10 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 5 },
+        { "block": "conquest:sandstone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:jungle": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:granite", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:granite_rocks", "weight": 3 },
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:rough_marble_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:sparse_jungle": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:granite", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:granite_rocks", "weight": 3 },
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:rough_marble_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:bamboo_jungle": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:granite", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:granite_rocks", "weight": 3 },
+        { "block": "conquest:limestone_rocks", "weight": 1 },
+        { "block": "conquest:rough_marble_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:savanna": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite"],
+      "rocks": [
+        { "block": "conquest:andesite_rocks", "weight": 3 },
+        { "block": "conquest:limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:savanna_plateau": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite"],
+      "rocks": [
+        { "block": "conquest:andesite_rocks", "weight": 3 },
+        { "block": "conquest:sandstone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:windswept_savanna": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:andesite"],
+      "rocks": [
+        { "block": "conquest:andesite_rocks", "weight": 3 },
+        { "block": "conquest:limestone_rocks", "weight": 1 },
+        { "block": "conquest:graywacke_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:desert": {
+      "chance": 0.01,
+      "surface_blocks": ["minecraft:sandstone", "minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:sandstone_rocks", "weight": 4 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:badlands": {
+      "chance": 0.08,
+      "surface_blocks": [
+        "minecraft:red_sandstone", "minecraft:sandstone",
+        "minecraft:red_terracotta", "minecraft:white_terracotta", "minecraft:orange_terracotta",
+        "minecraft:terracotta", "minecraft:pink_terracotta", "minecraft:light_gray_terracotta",
+        "minecraft:cyan_terracotta", "minecraft:purple_terracotta", "minecraft:blue_terracotta",
+        "minecraft:gray_terracotta", "minecraft:black_terracotta"
+      ],
+      "rocks": [
+        { "block": "conquest:red_sandstone_rocks", "weight": 3 },
+        { "block": "conquest:sandstone_rocks", "weight": 2 }
+      ]
+    },
+    "minecraft:eroded_badlands": {
+      "chance": 0.1,
+      "surface_blocks": [
+        "minecraft:red_sandstone", "minecraft:sandstone",
+        "minecraft:red_terracotta", "minecraft:white_terracotta", "minecraft:orange_terracotta",
+        "minecraft:terracotta", "minecraft:pink_terracotta"
+      ],
+      "rocks": [
+        { "block": "conquest:red_sandstone_rocks", "weight": 3 },
+        { "block": "conquest:sandstone_rocks", "weight": 2 }
+      ]
+    },
+    "minecraft:wooded_badlands": {
+      "chance": 0.07,
+      "surface_blocks": [
+        "minecraft:red_sandstone", "minecraft:sandstone",
+        "minecraft:red_terracotta", "minecraft:terracotta", "minecraft:orange_terracotta"
+      ],
+      "rocks": [
+        { "block": "conquest:red_sandstone_rocks", "weight": 3 },
+        { "block": "conquest:sandstone_rocks", "weight": 2 }
+      ]
+    },
+    "minecraft:swamp": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:mudstone_rocks", "weight": 3 },
+        { "block": "conquest:limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:mangrove_swamp": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:mudstone_rocks", "weight": 3 },
+        { "block": "conquest:graywacke_rocks", "weight": 2 }
+      ]
+    },
+    "minecraft:mushroom_fields": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:pale_limestone_rocks", "weight": 2 },
+        { "block": "conquest:limestone_rocks", "weight": 3 }
+      ]
+    },
+    "minecraft:ocean": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel", "minecraft:sandstone"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 3 },
+        { "block": "conquest:graywacke_rocks", "weight": 2 }
+      ]
+    },
+    "minecraft:deep_ocean": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:slate_rocks", "weight": 2 },
+        { "block": "conquest:graywacke_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:cold_ocean": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 3 },
+        { "block": "conquest:slate_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:deep_cold_ocean": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:slate_rocks", "weight": 3 }
+      ]
+    },
+    "minecraft:frozen_ocean": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 3 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 2 }
+      ]
+    },
+    "minecraft:deep_frozen_ocean": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:pale_limestone_rocks", "weight": 2 },
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:slate_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:lukewarm_ocean": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel", "minecraft:sandstone"],
+      "rocks": [
+        { "block": "conquest:sandstone_rocks", "weight": 2 },
+        { "block": "conquest:limestone_rocks", "weight": 3 }
+      ]
+    },
+    "minecraft:deep_lukewarm_ocean": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel", "minecraft:sandstone"],
+      "rocks": [
+        { "block": "conquest:sandstone_rocks", "weight": 2 },
+        { "block": "conquest:limestone_rocks", "weight": 2 },
+        { "block": "conquest:slate_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:warm_ocean": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:sandstone", "minecraft:stone", "minecraft:gravel"],
+      "rocks": [
+        { "block": "conquest:sandstone_rocks", "weight": 4 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:dripstone_caves": {
+      "chance": 0.10,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel", "minecraft:deepslate", "minecraft:tuff"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 3 },
+        { "block": "conquest:dark_limestone_rocks", "weight": 2 },
+        { "block": "conquest:tuff_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:lush_caves": {
+      "chance": 0.07,
+      "surface_blocks": ["minecraft:stone", "minecraft:gravel", "minecraft:deepslate"],
+      "rocks": [
+        { "block": "conquest:limestone_rocks", "weight": 3 },
+        { "block": "conquest:pale_limestone_rocks", "weight": 2 },
+        { "block": "conquest:rough_marble_rocks", "weight": 1 }
+      ]
+    },
+    "minecraft:deep_dark": {
+      "chance": 0.06,
+      "surface_blocks": ["minecraft:deepslate", "minecraft:stone", "minecraft:tuff"],
+      "rocks": [
+        { "block": "conquest:slate_rocks", "weight": 3 },
+        { "block": "conquest:dark_limestone_rocks", "weight": 2 },
+        { "block": "conquest:dark_tuff_rocks", "weight": 1 }
+      ]
+    }
+  }
+}

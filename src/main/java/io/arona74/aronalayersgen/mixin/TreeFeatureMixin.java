@@ -26,9 +26,7 @@ public class TreeFeatureMixin {
     )
     private static void onCanReplace(TestableWorld world, BlockPos pos,
                                       CallbackInfoReturnable<Boolean> cir) {
-        if (!LayerConfig.TREE_INJECTION) {
-            return;
-        }
+        if (!LayerConfig.TREE_INJECTION) return;
 
         final boolean[] isLayerBlock = {false};
         world.testBlockState(pos, state -> {

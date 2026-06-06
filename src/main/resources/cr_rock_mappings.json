@@ -12,6 +12,7 @@
     "conquest:dark_obsidian": "conquest:dark_obsidian_rocks",
     "minecraft:sandstone": "conquest:sandstone_rocks",
     "minecraft:stone": "conquest:limestone_rocks",
+    "minecraft:gravel": "conquest:limestone_rocks",
     "conquest:pale_limestone": "conquest:pale_limestone_rocks",
     "minecraft:diorite": "conquest:light_limestone_rocks",
     "conquest:dark_limestone": "conquest:dark_limestone_rocks",
@@ -31,6 +32,7 @@
     "minecraft:orange_terracotta": "conquest:sandstone_rocks",
     "minecraft:light_gray_terracotta": "conquest:sandstone_rocks",
     "minecraft:black_terracotta": "conquest:sandstone_rocks",
-    "minecraft:terracotta": "conquest:sandstone_rocks"
+    "minecraft:terracotta": "conquest:sandstone_rocks",
+    "minecraft:sand": "conquest:mudstone_rocks"
   }
 }

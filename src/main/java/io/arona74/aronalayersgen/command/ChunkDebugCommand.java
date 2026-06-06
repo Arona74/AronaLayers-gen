@@ -65,12 +65,14 @@ public class ChunkDebugCommand {
         int[][] groundHeights = computeGroundHeights(chunk, startX, startZ, bottomY);
 
         // ---- per-column analysis ----
-        char[][] topGrid    = new char[16][16];
-        char[][] layerGrid  = new char[16][16];
-        int[][]  layerCounts = new int[16][16];
+        char[][] topGrid      = new char[16][16];
+        char[][] layerGrid    = new char[16][16];
+        char[][] presenceGrid = new char[16][16]; // '#'=has layer, 'M'=sim>0 but missing, '.'=sim=0
+        int[][]  layerCounts  = new int[16][16];
         Map<String, Integer> topBlockCounts = new LinkedHashMap<>();
         int wouldPlace = 0;
         int existingLayers = 0;
+        int missingLayers = 0;
 
         for (int lx = 0; lx < 16; lx++) {
             for (int lz = 0; lz < 16; lz++) {
@@ -102,11 +104,24 @@ public class ChunkDebugCommand {
                 layerGrid[lx][lz]   = lc == 0 ? '_' : (char)('0' + Math.min(lc, 9));
                 if (lc > 0) wouldPlace++;
 
-                // count layers already placed at the expected position (groundHeight Y)
+                // check if a layer is actually present at the layer placement position
                 int gh = groundHeights[lx][lz];
+                boolean hasLayer = false;
                 if (gh > bottomY) {
-                    BlockState aboveState = chunk.getBlockState(new BlockPos(wx, gh, wz));
-                    if (hasLayerProperty(aboveState)) existingLayers++;
+                    BlockState atGH = chunk.getBlockState(new BlockPos(wx, gh, wz));
+                    hasLayer = hasLayerProperty(atGH);
+                    if (hasLayer) existingLayers++;
+                }
+
+                if (lc == 0) {
+                    presenceGrid[lx][lz] = '.';
+                } else {
+                    if (hasLayer) {
+                        presenceGrid[lx][lz] = '#';
+                    } else {
+                        presenceGrid[lx][lz] = 'M';
+                        missingLayers++;
+                    }
                 }
             }
         }
@@ -127,11 +142,23 @@ public class ChunkDebugCommand {
                 + " improve_snowy=" + LayerConfig.IMPROVE_SNOWY_BIOMES
                 + " underwater=" + LayerConfig.UNDERWATER_LAYERS
                 + " mode=" + LayerConfig.INJECTION_MODE
-                + " struct_inj=" + LayerConfig.STRUCTURE_INJECTION
                 + " enclosed=" + LayerConfig.ENCLOSED_SPACE_CHECK + "(" + LayerConfig.ENCLOSED_SPACE_HEIGHT + ")"
                 + " debug_log=" + LayerConfig.DEBUG_LOGGING);
+        send(source, "Config: rtf=" + LayerConfig.RTF_LAYER_INJECTION
+                + " struct_inj=" + LayerConfig.STRUCTURE_INJECTION
+                + " extra_bounds=" + LayerConfig.STRUCTURE_INJECTION_EXTRA_BOUNDS
+                + "(" + LayerConfig.STRUCTURE_INJECTION_EXTRA_BOUNDS_DISTANCE + ")"
+                + " skip_elev=" + LayerConfig.STRUCTURE_SKIP_ELEVATED
+                + " replace_elev=" + LayerConfig.STRUCTURE_REPLACE_ELEVATED
+                + " replace_elev_high=" + LayerConfig.STRUCTURE_REPLACE_ELEVATED_HIGH
+                + "(max=" + LayerConfig.STRUCTURE_REPLACE_ELEVATED_HIGH_MAX + ")"
+                + " struct_no_layers=" + LayerConfig.STRUCTURE_NO_LAYERS
+                + " extra_cleanup=" + LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP
+                + "(" + LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP_DISTANCE + ")");
         send(source, "Biome: " + biomeName + " (snowy=" + isSnowyBiome + ")");
-        send(source, "Layers: existing=" + existingLayers + "  would-place=" + wouldPlace + "/256");
+        send(source, "Layers: existing=" + existingLayers + "  would-place(sim)=" + wouldPlace
+                + "/256  missing=" + missingLayers
+                + (LayerConfig.RTF_LAYER_INJECTION ? " (RTF mode: sim!=actual)" : ""));
 
         // top block grid
         send(source, "");
@@ -143,13 +170,24 @@ public class ChunkDebugCommand {
             send(source, row.toString());
         }
 
-        // layer count grid
+        // layer count grid (vanilla sim)
         send(source, "");
-        send(source, "Layer Count per column  (_ = 0)");
+        send(source, "Layer Count (vanilla sim)  (_ = 0)" + (LayerConfig.RTF_LAYER_INJECTION ? " [RTF actual count may differ]" : ""));
         send(source, "  " + colMarker);
         for (int lz = 0; lz < 16; lz++) {
             StringBuilder row = new StringBuilder(lz == plz ? ">>" : "  ");
             for (int lx = 0; lx < 16; lx++) row.append(layerGrid[lx][lz]);
+            send(source, row.toString());
+        }
+
+        // layer presence grid
+        send(source, "");
+        send(source, "Layer Presence  #=present M=missing(sim>0,no layer) .=sim=0"
+                + (LayerConfig.RTF_LAYER_INJECTION ? " [M may mean RTF gave 0]" : ""));
+        send(source, "  " + colMarker);
+        for (int lz = 0; lz < 16; lz++) {
+            StringBuilder row = new StringBuilder(lz == plz ? ">>" : "  ");
+            for (int lx = 0; lx < 16; lx++) row.append(presenceGrid[lx][lz]);
             send(source, row.toString());
         }
 
@@ -181,7 +219,8 @@ public class ChunkDebugCommand {
         send(source, "  topBlock (OCEAN_FLOOR-1): " + Registries.BLOCK.getId(topB) + " @Y=" + (hmY - 1));
         send(source, "  groundBlock (after mapping scan): " + Registries.BLOCK.getId(groundB) + " @Y=" + (gh - 1));
         send(source, "  aboveGround (layer placement pos): " + Registries.BLOCK.getId(aboveB) + " @Y=" + gh);
-        send(source, "  groundHeight=" + gh + "  layerCount=" + lc);
+        send(source, "  groundHeight=" + gh + "  simLayerCount=" + lc
+                + (LayerConfig.RTF_LAYER_INJECTION ? " (RTF actual count may differ)" : ""));
         send(source, "  surfIceOrWater=" + surfIceOrWater + "  surfPowderSnow=" + surfPowderSnow);
         send(source, "  isSnowyBiome=" + isSnowyBiome + "  wouldUseSnowLayers=" + wouldUseSnow);
 
@@ -206,10 +245,91 @@ public class ChunkDebugCommand {
             int wS = plz < 15 ? groundHeights[plx][plz+1] : -1;
             int wW = plx > 0  ? groundHeights[plx-1][plz] : -1;
             int wE = plx < 15 ? groundHeights[plx+1][plz] : -1;
-            send(source, "  -> NO LAYER (no height edge detected)");
+            send(source, "  -> Sim: NO LAYER (no height edge detected)");
             send(source, "     neighbors: N=" + wN + " S=" + wS + " W=" + wW + " E=" + wE + " (center=" + gh + ")");
         } else {
-            send(source, "  -> LAYER would be placed (count=" + lc + ") at Y=" + gh);
+            send(source, "  -> Sim: LAYER would be placed (count=" + lc + ") at Y=" + gh);
+        }
+
+        // ---- structure elevation analysis ----
+        if (LayerConfig.STRUCTURE_SKIP_ELEVATED || LayerConfig.RTF_LAYER_INJECTION) {
+            send(source, "");
+            send(source, "--- Structure Elevation Analysis ---");
+            send(source, "  (Note: uses in-chunk neighbor minimum as proxy for natural surface,");
+            send(source, "   RTF noise data not available post-generation. Heuristic only.)");
+
+            // Compute min neighbor groundHeight from in-chunk neighbors
+            int minNeighborGH = Integer.MAX_VALUE;
+            int neighborCount = 0;
+            for (int[] off : new int[][]{{-1,0},{1,0},{0,-1},{0,1},{-1,-1},{-1,1},{1,-1},{1,1}}) {
+                int nx = plx + off[0], nz = plz + off[1];
+                if (nx >= 0 && nx < 16 && nz >= 0 && nz < 16) {
+                    int ngh = groundHeights[nx][nz];
+                    if (ngh > bottomY) { minNeighborGH = Math.min(minNeighborGH, ngh); neighborCount++; }
+                }
+            }
+
+            if (gh > bottomY && minNeighborGH != Integer.MAX_VALUE) {
+                // elevDelta: how many blocks above the min neighbor this surface sits
+                // gh is exclusive (layer placement Y), so surface block is at gh-1
+                // same for minNeighborGH
+                int elevDelta = gh - minNeighborGH;
+                send(source, "  surfaceY=" + (gh - 1) + "  minNeighborSurfaceY=" + (minNeighborGH - 1)
+                        + "  elevDelta=" + elevDelta + "  (in-chunk neighbors=" + neighborCount + ")");
+
+                if (elevDelta > 0) {
+                    send(source, "  -> Surface appears elevated by " + elevDelta + " block(s) above min neighbor");
+                    boolean spaceAboveIsAir = aboveB == Blocks.AIR;
+                    send(source, "  -> Block at layer pos Y=" + gh + ": " + Registries.BLOCK.getId(aboveB)
+                            + " (isAir=" + spaceAboveIsAir + ")");
+
+                    if (LayerConfig.STRUCTURE_SKIP_ELEVATED) {
+                        if (elevDelta == 1 && LayerConfig.STRUCTURE_REPLACE_ELEVATED && lc > 0 && spaceAboveIsAir) {
+                            send(source, "  -> Sim decision: REPLACE (1-block elev, air above, simLayerCount=" + lc + ")");
+                        } else if (elevDelta == 1 && LayerConfig.STRUCTURE_REPLACE_ELEVATED && lc > 0 && !spaceAboveIsAir) {
+                            send(source, "  -> Sim decision: SKIP (1-block elev, REPLACE blocked: non-air above)");
+                        } else if (elevDelta == 1 && LayerConfig.STRUCTURE_REPLACE_ELEVATED && lc == 0) {
+                            send(source, "  -> Sim decision: SKIP (1-block elev, REPLACE blocked: simLayerCount=0)");
+                            if (LayerConfig.RTF_LAYER_INJECTION) {
+                                send(source, "  !! RTF: if actual layerCount was also 0, REPLACE would also fail in real worldgen");
+                            }
+                        } else {
+                            send(source, "  -> Sim decision: SKIP (elevation=" + elevDelta + ")");
+                        }
+                    } else {
+                        send(source, "  -> skip_elevated=false: no skip/replace applied");
+                    }
+                } else if (elevDelta < 0) {
+                    send(source, "  -> Surface is BELOW min neighbor by " + (-elevDelta) + " block(s) (excavated or terrain dip)");
+                } else {
+                    send(source, "  -> No elevation detected relative to in-chunk neighbors");
+                }
+            } else if (gh <= bottomY) {
+                send(source, "  -> No valid surface at player column");
+            } else {
+                send(source, "  -> No in-chunk neighbors available for comparison (player at chunk edge)");
+            }
+
+            // RTF-specific diagnosis
+            if (LayerConfig.RTF_LAYER_INJECTION) {
+                send(source, "");
+                send(source, "  RTF mode note:");
+                send(source, "  Actual layer count uses RTF terrain noise (floor(height*worldHeight)),");
+                send(source, "  completely independent of block state. The sim above uses vanilla edge");
+                send(source, "  detection which gives different (usually higher) counts.");
+                send(source, "  simLayerCount=" + lc + " -> RTF actual may be 0 at near-integer terrain heights.");
+                send(source, "  If RTF layerCount=0: REPLACE cannot fire (requires layerCount>0).");
+                send(source, "  If RTF layerCount=0 and sim>0: position shows as 'M' in presence grid.");
+
+                // Specific diagnosis for the case where sim says >0 but no layer exists
+                if (lc > 0 && presenceGrid[plx][plz] == 'M') {
+                    send(source, "  !! This column is 'M' (sim>0, no layer found). Likely causes:");
+                    send(source, "     1. RTF actual layerCount=0 (REPLACE condition fails, terrain barely elevated)");
+                    send(source, "     2. structure_skip_elevated triggered (SKIP)");
+                    send(source, "     3. No mapping for surface block");
+                    send(source, "     4. Layer was placed then removed by structure_no_layers");
+                }
+            }
         }
 
         return Command.SINGLE_SUCCESS;

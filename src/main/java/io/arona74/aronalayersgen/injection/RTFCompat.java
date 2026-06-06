@@ -126,7 +126,7 @@ public class RTFCompat {
      */
     public static boolean injectLayersWithRTF(Chunk chunk, Object randomState) {
         if (!isRTFAvailable() || randomState == null) {
-            if (LayerConfig.DEBUG_LOGGING) {
+            if (LayerConfig.logRtf()) {
                 AronaLayersGen.LOGGER.info("[RTF] Injection skipped: available={}, randomState={}", isRTFAvailable(), randomState != null);
             }
             return false;
@@ -134,7 +134,7 @@ public class RTFCompat {
 
         try {
             if (!rtfRandomStateClass.isInstance(randomState)) {
-                if (LayerConfig.DEBUG_LOGGING) {
+                if (LayerConfig.logRtf()) {
                     AronaLayersGen.LOGGER.info("[RTF] RandomState is not RTFRandomState: {}", randomState.getClass().getName());
                 }
                 return false;
@@ -142,7 +142,7 @@ public class RTFCompat {
 
             Object generatorContext = generatorContextMethod.invoke(randomState);
             if (generatorContext == null) {
-                if (LayerConfig.DEBUG_LOGGING) {
+                if (LayerConfig.logRtf()) {
                     AronaLayersGen.LOGGER.info("[RTF] GeneratorContext is null");
                 }
                 return false;
@@ -150,7 +150,7 @@ public class RTFCompat {
 
             Object tileCache = cacheField.get(generatorContext);
             if (tileCache == null) {
-                if (LayerConfig.DEBUG_LOGGING) {
+                if (LayerConfig.logRtf()) {
                     AronaLayersGen.LOGGER.info("[RTF] TileCache is null");
                 }
                 return false;
@@ -189,7 +189,7 @@ public class RTFCompat {
             Object tileChunk = getChunkReaderMethod.invoke(tile, chunkX, chunkZ);
             if (tileChunk == null) return false;
 
-            if (LayerConfig.DEBUG_LOGGING) {
+            if (LayerConfig.logRtf()) {
                 AronaLayersGen.LOGGER.info("[RTF] Processing chunk at {},{} with worldHeight={}", chunkX, chunkZ, finalWorldHeight);
             }
 

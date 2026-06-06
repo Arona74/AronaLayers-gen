@@ -63,7 +63,7 @@ public class PlantConversionHelper {
                 if (!registry.isReplaceablePlant(plantBlock)) continue;
                 if (!LayerConfig.REPLACE_SEA_GRASS && isSeagrass(plantBlock)) continue;
 
-                if (LayerConfig.DEBUG_LOGGING) {
+                if (LayerConfig.logPlants()) {
                     AronaLayersGen.LOGGER.info("[Plant Debug] Found plant {} at {}",
                         net.minecraft.registry.Registries.BLOCK.getId(plantBlock), plantPos);
                 }
@@ -84,14 +84,14 @@ public class PlantConversionHelper {
 
                 Block conquestPlant = registry.getConquestPlant(plantBlock);
                 if (conquestPlant == null) {
-                    if (LayerConfig.DEBUG_LOGGING) {
+                    if (LayerConfig.logPlants()) {
                         AronaLayersGen.LOGGER.warn("[Plant Debug] No conquest mapping found for {}",
                             net.minecraft.registry.Registries.BLOCK.getId(plantBlock));
                     }
                     continue;
                 }
 
-                if (LayerConfig.DEBUG_LOGGING) {
+                if (LayerConfig.logPlants()) {
                     AronaLayersGen.LOGGER.info("[Plant Debug] Converting {} to {}, upperPos={}",
                         net.minecraft.registry.Registries.BLOCK.getId(plantBlock),
                         net.minecraft.registry.Registries.BLOCK.getId(conquestPlant),
@@ -124,7 +124,7 @@ public class PlantConversionHelper {
             }
         }
 
-        if (converted > 0 && LayerConfig.DEBUG_LOGGING) {
+        if (converted > 0 && LayerConfig.logPlants()) {
             AronaLayersGen.LOGGER.info("[Plant Conversion] Chunk {},{}: converted {} plants",
                 chunk.getPos().x, chunk.getPos().z, converted);
         }

@@ -115,7 +115,13 @@ public class RTFLayerInjector {
 
         int layerCount = calculateLayerCount(height, worldHeight, useSnowLayers);
 
-        return LayerPlacementHelper.injectLayerAt(chunk, worldX, worldZ, layerCount, useSnowLayers);
+        // The integer floor of RTF's scaled terrain height is the noise-derived
+        // natural surface base Y — unaffected by block placement or C2ME timing.
+        // Passed to LayerPlacementHelper so STRUCTURE_SKIP_ELEVATED can compare it
+        // against the actual surface Y without relying on a (potentially contaminated) snapshot.
+        int rtfExpectedBaseY = (int)(height * worldHeight);
+
+        return LayerPlacementHelper.injectLayerAt(chunk, worldX, worldZ, layerCount, useSnowLayers, rtfExpectedBaseY);
     }
 
     // ========== RTF-specific: Chunk-level Processing ==========
@@ -158,7 +164,7 @@ public class RTFLayerInjector {
                     if (cell != null) {
                         cellsProcessed++;
 
-                        if (LayerConfig.DEBUG_LOGGING) {
+                        if (LayerConfig.logRtf()) {
                             if (!debugLogged) {
                                 debugLogged = true;
                                 AronaLayersGen.LOGGER.info("[RTF DEBUG] Snow-layer mode, worldHeight={}", worldHeight);
@@ -187,7 +193,7 @@ public class RTFLayerInjector {
             }
         }
 
-        if (LayerConfig.DEBUG_LOGGING) {
+        if (LayerConfig.logRtf()) {
             AronaLayersGen.LOGGER.info("[RTF] Chunk {},{}: cells={}, null={}, layers={} | skips: river={}, submerged={}, snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
                 chunk.getPos().x, chunk.getPos().z, cellsProcessed, cellsNull, layersPlaced,
                 debugSkipRiver.get(), debugSkipSubmerged.get(),

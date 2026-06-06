@@ -62,7 +62,7 @@ public class VanillaLayerInjector {
             }
         }
 
-        if (LayerConfig.DEBUG_LOGGING) {
+        if (LayerConfig.logVanilla()) {
             AronaLayersGen.LOGGER.info("[Vanilla] Chunk {},{}: layers={} | skips: snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
                 chunk.getPos().x, chunk.getPos().z, layersPlaced,
                 LayerPlacementHelper.debugSkipSnowy.get(), LayerPlacementHelper.debugSkipNoSurface.get(),

@@ -71,7 +71,7 @@ public class SnowBlockMixin {
 
         world.setBlockState(pos, layerState, Block.NOTIFY_ALL);
 
-        if (LayerConfig.DEBUG_LOGGING) {
+        if (LayerConfig.logSnow()) {
             AronaLayersGen.LOGGER.info("[SnowBreak] Replaced snow (layers={}) with {} (layers={}) at {}",
                 snowLayers,
                 net.minecraft.registry.Registries.BLOCK.getId(layerBlock),

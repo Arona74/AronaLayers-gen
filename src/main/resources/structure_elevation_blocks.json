@@ -1,0 +1,8 @@
+{
+  "_comment": "Blocks that the structure elevation logic (skip_elevated/replace_elevated) will process. Only surface blocks in this list will be subject to skip, replace, or removal when a structure raised the terrain. Add or remove entries to control which blocks are affected. Changes take effect on next startup.",
+  "blocks": [
+    "minecraft:grass_block",
+    "minecraft:dirt",
+    "minecraft:dirt_path"
+  ]
+}

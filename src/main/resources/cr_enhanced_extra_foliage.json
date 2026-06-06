@@ -1,0 +1,578 @@
+{
+  "_comment": "Per-biome enhanced foliage placement. Requires conquest_enhanced_extra_foliage=true and Conquest Reforged. For each biome, list the surface blocks that allow placement and the weighted grass options. Higher weight = higher chance. Optional 'chance' overrides the global chance_to_place_extra_foliage for that biome; omit to use the global value.",
+  "biomes": {
+
+    "minecraft:plains": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:lush_grass",           "weight": 4 },
+        { "block": "conquest:common_meadow_grass",  "weight": 3 },
+        { "block": "conquest:timothy_grass",        "weight": 3 },
+        { "block": "conquest:kentucky_bluegrass",   "weight": 2 },
+        { "block": "conquest:buttercups",           "weight": 2 },
+        { "block": "conquest:red_clover_flowers",   "weight": 2 },
+        { "block": "conquest:wild_daisy",           "weight": 2 },
+        { "block": "conquest:goldenrod",            "weight": 1 },
+        { "block": "conquest:birdsfoot_trefoil",    "weight": 1 },
+        { "block": "conquest:simbelmyne",           "weight": 1 }
+      ]
+    },
+
+    "minecraft:sunflower_plains": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:lush_grass",           "weight": 3 },
+        { "block": "conquest:common_meadow_grass",  "weight": 2 },
+        { "block": "conquest:buttercups",           "weight": 3 },
+        { "block": "conquest:red_clover_flowers",   "weight": 3 },
+        { "block": "conquest:wild_daisy",           "weight": 3 },
+        { "block": "conquest:goldenrod",            "weight": 2 },
+        { "block": "conquest:black_knapweed",       "weight": 2 },
+        { "block": "conquest:small_scabious",       "weight": 1 },
+        { "block": "conquest:harebell",             "weight": 1 },
+        { "block": "conquest:birdsfoot_trefoil",    "weight": 1 }
+      ]
+    },
+
+    "minecraft:meadow": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:lush_grass",           "weight": 4 },
+        { "block": "conquest:meadow_fescue",        "weight": 3 },
+        { "block": "conquest:buttercups",           "weight": 3 },
+        { "block": "conquest:red_clover_flowers",   "weight": 3 },
+        { "block": "conquest:harebell",             "weight": 3 },
+        { "block": "conquest:small_scabious",       "weight": 2 },
+        { "block": "conquest:melancholy_thistle",   "weight": 2 },
+        { "block": "conquest:meadow_saffron",       "weight": 2 },
+        { "block": "conquest:yellow_wolfs_bane",    "weight": 1 },
+        { "block": "conquest:alpine_sow_thistle",   "weight": 1 }
+      ]
+    },
+
+    "minecraft:forest": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:bracken",              "weight": 4 },
+        { "block": "conquest:lush_grass",           "weight": 3 },
+        { "block": "conquest:common_meadow_grass",  "weight": 2 },
+        { "block": "conquest:sweet_woodruff",       "weight": 2 },
+        { "block": "conquest:raspberry_bush",       "weight": 2 },
+        { "block": "conquest:blackberry_bush",      "weight": 2 },
+        { "block": "conquest:hawthorn_bush",        "weight": 1 },
+        { "block": "conquest:dogs_mercury",         "weight": 1 },
+        { "block": "conquest:wood_horsetail",       "weight": 1 },
+        { "block": "conquest:morel_mushrooms",      "weight": 1 }
+      ]
+    },
+
+    "minecraft:flower_forest": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:lush_grass",           "weight": 3 },
+        { "block": "conquest:wild_daisy",           "weight": 3 },
+        { "block": "conquest:buttercups",           "weight": 3 },
+        { "block": "conquest:red_clover_flowers",   "weight": 2 },
+        { "block": "conquest:goldenrod",            "weight": 2 },
+        { "block": "conquest:harebell",             "weight": 2 },
+        { "block": "conquest:niphredil",            "weight": 1 },
+        { "block": "conquest:elanor",               "weight": 1 },
+        { "block": "conquest:athelas",              "weight": 1 },
+        { "block": "conquest:bracken",              "weight": 1 }
+      ]
+    },
+
+    "minecraft:birch_forest": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:lush_grass",           "weight": 3 },
+        { "block": "conquest:bracken",              "weight": 3 },
+        { "block": "conquest:common_meadow_grass",  "weight": 2 },
+        { "block": "conquest:goldenrod",            "weight": 2 },
+        { "block": "conquest:raspberry_bush",       "weight": 2 },
+        { "block": "conquest:sweet_woodruff",       "weight": 2 },
+        { "block": "conquest:hawthorn_bush",        "weight": 1 },
+        { "block": "conquest:dogs_mercury",         "weight": 1 },
+        { "block": "conquest:harebell",             "weight": 1 },
+        { "block": "conquest:wild_daisy",           "weight": 1 }
+      ]
+    },
+
+    "minecraft:old_growth_birch_forest": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:bracken",              "weight": 4 },
+        { "block": "conquest:autumnal_bracken",     "weight": 3 },
+        { "block": "conquest:dead_deciduous_branches", "weight": 2 },
+        { "block": "conquest:dogs_mercury",         "weight": 2 },
+        { "block": "conquest:lush_grass",           "weight": 2 },
+        { "block": "conquest:sweet_woodruff",       "weight": 2 },
+        { "block": "conquest:greater_wood_rush",    "weight": 1 },
+        { "block": "conquest:morel_mushrooms",      "weight": 1 },
+        { "block": "conquest:raspberry_bush",       "weight": 1 },
+        { "block": "conquest:mistletoe_garland",    "weight": 1 }
+      ]
+    },
+
+    "minecraft:dark_forest": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:thick_fern",           "weight": 4 },
+        { "block": "conquest:fern",                 "weight": 3 },
+        { "block": "conquest:dogs_mercury",         "weight": 3 },
+        { "block": "conquest:harts_tongue_fern",    "weight": 2 },
+        { "block": "conquest:common_cow_wheat",     "weight": 2 },
+        { "block": "conquest:woodland_sedge",       "weight": 2 },
+        { "block": "conquest:sweet_woodruff",       "weight": 1 },
+        { "block": "conquest:greater_wood_rush",    "weight": 1 },
+        { "block": "conquest:morel_mushrooms",      "weight": 1 },
+        { "block": "conquest:nightshade",           "weight": 1 }
+      ]
+    },
+
+    "minecraft:taiga": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:podzol" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:fern",                 "weight": 4 },
+        { "block": "conquest:bracken",              "weight": 3 },
+        { "block": "conquest:lingonberry_bush",     "weight": 2 },
+        { "block": "conquest:bilberry_bush",        "weight": 2 },
+        { "block": "conquest:wood_horsetail",       "weight": 2 },
+        { "block": "conquest:sweet_woodruff",       "weight": 1 },
+        { "block": "conquest:morel_mushrooms",      "weight": 1 }
+      ]
+    },
+
+    "minecraft:old_growth_pine_taiga": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:podzol", "minecraft:coarse_dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:fern",                 "weight": 3 },
+        { "block": "conquest:lingonberry_bush",     "weight": 2 },
+        { "block": "conquest:bracken",              "weight": 2 },
+        { "block": "conquest:bilberry_bush",        "weight": 1 },
+        { "block": "conquest:thick_fern",           "weight": 1 },
+        { "block": "conquest:morel_mushrooms",      "weight": 1 }
+      ]
+    },
+
+    "minecraft:old_growth_spruce_taiga": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:podzol", "minecraft:coarse_dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                     "weight": 10 },
+        { "block": "conquest:fern",                      "weight": 3 },
+        { "block": "conquest:lingonberry_bush",          "weight": 2 },
+        { "block": "conquest:bog_blueberry_bush",        "weight": 1 },
+        { "block": "conquest:bracken",                   "weight": 1 },
+        { "block": "conquest:thick_fern",                "weight": 1 }
+      ]
+    },
+
+    "minecraft:snowy_taiga": {
+      "chance": 0.01,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:podzol", "minecraft:snow_block" ],
+      "grasses": [
+        { "block": "conquest:grass",                     "weight": 10 },
+        { "block": "conquest:lingonberry_bush",          "weight": 3 },
+        { "block": "conquest:fern",                      "weight": 2 },
+        { "block": "conquest:bilberry_bush",             "weight": 2 },
+        { "block": "conquest:cotton_grass",              "weight": 2 },
+        { "block": "conquest:bog_blueberry_bush",        "weight": 1 },
+        { "block": "conquest:dead_bracken",              "weight": 1 }
+      ]
+    },
+
+    "minecraft:snowy_plains": {
+      "chance": 0.10,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:snow_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:cotton_grass",         "weight": 4 },
+        { "block": "conquest:dead_grass",           "weight": 3 },
+        { "block": "conquest:simbelmyne",           "weight": 2 },
+        { "block": "conquest:lingonberry_bush",     "weight": 2 },
+        { "block": "conquest:bog_blueberry_bush",   "weight": 1 }
+      ]
+    },
+
+    "minecraft:ice_spikes": {
+      "chance": 0.07,
+      "surface_blocks": [ "minecraft:snow_block", "minecraft:grass_block" ],
+      "grasses": [
+        { "block": "conquest:cotton_grass",         "weight": 4 },
+        { "block": "conquest:dead_grass",           "weight": 3 },
+        { "block": "conquest:simbelmyne",           "weight": 2 },
+        { "block": "conquest:dead_bracken",         "weight": 1 }
+      ]
+    },
+
+    "minecraft:snowy_slopes": {
+      "chance": 0.10,
+      "surface_blocks": [ "minecraft:snow_block", "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:cotton_grass",         "weight": 4 },
+        { "block": "conquest:lingonberry_bush",     "weight": 2 },
+        { "block": "conquest:bog_blueberry_bush",   "weight": 2 },
+        { "block": "conquest:dead_grass",           "weight": 2 },
+        { "block": "conquest:heather",              "weight": 1 },
+        { "block": "conquest:simbelmyne",           "weight": 1 }
+      ]
+    },
+
+    "minecraft:frozen_peaks": {
+      "chance": 0.06,
+      "surface_blocks": [ "minecraft:snow_block", "minecraft:stone" ],
+      "grasses": [
+        { "block": "conquest:cotton_grass",         "weight": 4 },
+        { "block": "conquest:dead_grass",           "weight": 3 },
+        { "block": "conquest:simbelmyne",           "weight": 1 },
+        { "block": "conquest:dead_bracken",         "weight": 1 }
+      ]
+    },
+
+    "minecraft:jagged_peaks": {
+      "chance": 0.06,
+      "surface_blocks": [ "minecraft:snow_block", "minecraft:stone" ],
+      "grasses": [
+        { "block": "conquest:cotton_grass",         "weight": 3 },
+        { "block": "conquest:dead_grass",           "weight": 3 },
+        { "block": "conquest:alpine_sow_thistle",   "weight": 2 },
+        { "block": "conquest:simbelmyne",           "weight": 1 }
+      ]
+    },
+
+    "minecraft:grove": {
+      "chance": 0.10,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:snow_block" ],
+      "grasses": [
+        { "block": "conquest:lingonberry_bush",     "weight": 2 },
+        { "block": "conquest:bilberry_bush",        "weight": 2 },
+        { "block": "conquest:fern",                 "weight": 2 },
+        { "block": "conquest:bracken",              "weight": 1 }
+      ]
+    },
+
+    "minecraft:stony_peaks": {
+      "chance": 0.07,
+      "surface_blocks": [ "minecraft:stone", "minecraft:grass_block", "minecraft:gravel" ],
+      "grasses": [
+        { "block": "conquest:alpine_sow_thistle",   "weight": 3 },
+        { "block": "conquest:thyme",                "weight": 3 },
+        { "block": "conquest:orpine",               "weight": 2 },
+        { "block": "conquest:wavy_hair_grass",      "weight": 2 },
+        { "block": "conquest:small_fescue",         "weight": 2 },
+        { "block": "conquest:rock_rose",            "weight": 1 },
+        { "block": "conquest:heather",              "weight": 1 },
+        { "block": "conquest:harebell",             "weight": 1 }
+      ]
+    },
+
+    "minecraft:windswept_hills": {
+      "chance": 0.25,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:stone", "minecraft:gravel", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:wavy_hair_grass",      "weight": 3 },
+        { "block": "conquest:small_fescue",         "weight": 3 },
+        { "block": "conquest:heather",              "weight": 2 },
+        { "block": "conquest:harebell",             "weight": 2 },
+        { "block": "conquest:thyme",                "weight": 2 },
+        { "block": "conquest:sheeps_fescue",        "weight": 1 },
+        { "block": "conquest:deergrass",            "weight": 1 },
+        { "block": "conquest:orpine",               "weight": 1 }
+      ]
+    },
+
+    "minecraft:windswept_gravelly_hills": {
+      "chance": 0.10,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:gravel", "minecraft:stone", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:wavy_hair_grass",      "weight": 3 },
+        { "block": "conquest:small_fescue",         "weight": 3 },
+        { "block": "conquest:heather",              "weight": 2 },
+        { "block": "conquest:harebell",             "weight": 2 },
+        { "block": "conquest:thyme",                "weight": 1 },
+        { "block": "conquest:orpine",               "weight": 1 },
+        { "block": "conquest:dead_grass",           "weight": 1 }
+      ]
+    },
+
+    "minecraft:windswept_forest": {
+      "chance": 0.25,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:stone" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:bracken",              "weight": 3 },
+        { "block": "conquest:heather",              "weight": 2 },
+        { "block": "conquest:wavy_hair_grass",      "weight": 2 },
+        { "block": "conquest:bilberry_bush",        "weight": 2 },
+        { "block": "conquest:harebell",             "weight": 2 },
+        { "block": "conquest:sweet_woodruff",       "weight": 1 },
+        { "block": "conquest:lingonberry_bush",     "weight": 1 },
+        { "block": "conquest:thyme",                "weight": 1 }
+      ]
+    },
+
+    "minecraft:cherry_grove": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                  "weight": 10 },
+        { "block": "conquest:lush_grass",             "weight": 2 },
+        { "block": "conquest:wild_daisy",             "weight": 2 },
+        { "block": "conquest:elanor",                 "weight": 1 },
+        { "block": "conquest:meadow_saffron",         "weight": 1 }
+      ]
+    },
+
+    "minecraft:savanna": {
+      "chance": 0.25,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                      "weight": 10 },
+        { "block": "conquest:dense_headed_feathergrass",  "weight": 4 },
+        { "block": "conquest:sparse_headed_feathergrass", "weight": 3 },
+        { "block": "conquest:wild_dagga",                 "weight": 2 },
+        { "block": "conquest:common_meadow_grass",        "weight": 2 },
+        { "block": "conquest:dead_grass",                 "weight": 2 },
+        { "block": "conquest:wild_shrub",                 "weight": 2 },
+        { "block": "conquest:dark_wild_shrub",            "weight": 1 }
+      ]
+    },
+
+    "minecraft:savanna_plateau": {
+      "chance": 0.25,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                      "weight": 10 },
+        { "block": "conquest:dense_headed_feathergrass",  "weight": 4 },
+        { "block": "conquest:sparse_headed_feathergrass", "weight": 3 },
+        { "block": "conquest:wild_dagga",                 "weight": 2 },
+        { "block": "conquest:dead_grass",                 "weight": 2 },
+        { "block": "conquest:wild_shrub",                 "weight": 2 },
+        { "block": "conquest:dead_shrubs",                "weight": 1 }
+      ]
+    },
+
+    "minecraft:windswept_savanna": {
+      "chance": 0.07,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:stone" ],
+      "grasses": [
+        { "block": "conquest:grass",                      "weight": 10 },
+        { "block": "conquest:dense_headed_feathergrass",  "weight": 3 },
+        { "block": "conquest:dead_grass",                 "weight": 3 },
+        { "block": "conquest:wild_shrub",                 "weight": 2 },
+        { "block": "conquest:desert_shrub",               "weight": 1 },
+        { "block": "conquest:dead_shrubs",                "weight": 1 }
+      ]
+    },
+
+    "minecraft:desert": {
+      "chance": 0.001,
+      "surface_blocks": [ "minecraft:sand" ],
+      "grasses": [
+        { "block": "conquest:dead_bush",            "weight": 4 },
+        { "block": "conquest:desert_shrub",         "weight": 3 },
+        { "block": "conquest:dead_grass",           "weight": 3 },
+        { "block": "conquest:prickly_pear_cacti",   "weight": 1 },
+        { "block": "conquest:wormwood",             "weight": 1 }
+      ]
+    },
+
+    "minecraft:badlands": {
+      "chance": 0.10,
+      "surface_blocks": [ "minecraft:red_sand", "minecraft:sand" ],
+      "grasses": [
+        { "block": "conquest:dead_bush",            "weight": 4 },
+        { "block": "conquest:dead_grass",           "weight": 3 },
+        { "block": "conquest:desert_shrub",         "weight": 3 },
+        { "block": "conquest:wormwood",             "weight": 1 }
+      ]
+    },
+
+    "minecraft:eroded_badlands": {
+      "chance": 0.01,
+      "surface_blocks": [ "minecraft:red_sand", "minecraft:sand" ],
+      "grasses": [
+        { "block": "conquest:dead_bush",            "weight": 4 },
+        { "block": "conquest:dead_grass",           "weight": 3 },
+        { "block": "conquest:desert_shrub",         "weight": 2 },
+        { "block": "conquest:wormwood",             "weight": 1 }
+      ]
+    },
+
+    "minecraft:wooded_badlands": {
+      "chance": 0.07,
+      "surface_blocks": [ "minecraft:coarse_dirt", "minecraft:dirt", "minecraft:grass_block", "minecraft:red_sand" ],
+      "grasses": [
+        { "block": "conquest:dead_bush",            "weight": 3 },
+        { "block": "conquest:dead_grass",           "weight": 3 },
+        { "block": "conquest:desert_shrub",         "weight": 2 },
+        { "block": "conquest:common_meadow_grass",  "weight": 1 },
+        { "block": "conquest:wild_shrub",           "weight": 1 }
+      ]
+    },
+
+    "minecraft:jungle": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:jungle_ground_cover",  "weight": 4 },
+        { "block": "conquest:thick_fern",           "weight": 3 },
+        { "block": "conquest:large_fern",           "weight": 3 },
+        { "block": "conquest:lush_grass",           "weight": 2 },
+        { "block": "conquest:fern",                 "weight": 2 },
+        { "block": "conquest:nettles",              "weight": 1 },
+        { "block": "conquest:wild_overgrown_nettles","weight": 1 }
+      ]
+    },
+
+    "minecraft:sparse_jungle": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:jungle_ground_cover",  "weight": 3 },
+        { "block": "conquest:thick_fern",           "weight": 2 },
+        { "block": "conquest:large_fern",           "weight": 2 },
+        { "block": "conquest:lush_grass",           "weight": 2 },
+        { "block": "conquest:fern",                 "weight": 2 },
+        { "block": "conquest:bracken",              "weight": 1 }
+      ]
+    },
+
+    "minecraft:bamboo_jungle": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:podzol" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:jungle_ground_cover",  "weight": 4 },
+        { "block": "conquest:thick_fern",           "weight": 3 },
+        { "block": "conquest:fern",                 "weight": 2 },
+        { "block": "conquest:large_fern",           "weight": 2 },
+        { "block": "conquest:lush_grass",           "weight": 2 },
+        { "block": "conquest:nettles",              "weight": 1 }
+      ]
+    },
+
+    "minecraft:swamp": {
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:cattails",             "weight": 3 },
+        { "block": "conquest:rushes",               "weight": 3 },
+        { "block": "conquest:thick_rushes",         "weight": 2 },
+        { "block": "conquest:greater_fen_sedges",   "weight": 2 },
+        { "block": "conquest:bottle_sedge",         "weight": 2 },
+        { "block": "conquest:water_mint",           "weight": 2 },
+        { "block": "conquest:marsh_ragwort",        "weight": 2 },
+        { "block": "conquest:wood_horsetail",       "weight": 1 },
+        { "block": "conquest:angelica",             "weight": 1 },
+        { "block": "conquest:sedge",                "weight": 1 }
+      ]
+    },
+
+    "minecraft:mangrove_swamp": {
+      "surface_blocks": [ "minecraft:mud", "minecraft:dirt", "minecraft:grass_block" ],
+      "grasses": [
+        { "block": "conquest:giant_wild_reeds",     "weight": 3 },
+        { "block": "conquest:cattails",             "weight": 3 },
+        { "block": "conquest:papyrus",              "weight": 2 },
+        { "block": "conquest:rushes",               "weight": 2 },
+        { "block": "conquest:thick_rushes",         "weight": 2 },
+        { "block": "conquest:water_mint",           "weight": 2 },
+        { "block": "conquest:cattail_reeds",        "weight": 1 },
+        { "block": "conquest:greater_fen_sedges",   "weight": 1 },
+        { "block": "conquest:jungle_ground_cover",  "weight": 1 }
+      ]
+    },
+
+    "minecraft:river": {
+      "chance": 0.35,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:sand", "minecraft:gravel" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:rushes",               "weight": 3 },
+        { "block": "conquest:cattails",             "weight": 3 },
+        { "block": "conquest:thick_rushes",         "weight": 2 },
+        { "block": "conquest:water_mint",           "weight": 2 },
+        { "block": "conquest:angelica",             "weight": 2 },
+        { "block": "conquest:cow_parsley",          "weight": 2 },
+        { "block": "conquest:sweet_grass",          "weight": 2 },
+        { "block": "conquest:greater_fen_sedges",   "weight": 1 },
+        { "block": "conquest:giant_wild_reeds",     "weight": 1 }
+      ]
+    },
+
+    "minecraft:frozen_river": {
+      "chance": 0.10,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:sand" ],
+      "grasses": [
+        { "block": "conquest:cotton_grass",         "weight": 3 },
+        { "block": "conquest:dead_grass",           "weight": 3 },
+        { "block": "conquest:dead_reeds",           "weight": 2 },
+        { "block": "conquest:dry_reeds",            "weight": 2 },
+        { "block": "conquest:dead_bracken",         "weight": 1 }
+      ]
+    },
+
+    "minecraft:beach": {
+      "chance": 0.06,
+      "surface_blocks": [ "minecraft:sand" ],
+      "grasses": [
+        { "block": "conquest:grass",                "weight": 10 },
+        { "block": "conquest:sea_lavender",         "weight": 3 },
+        { "block": "conquest:sea_arrowgrass",       "weight": 3 },
+        { "block": "conquest:dry_reeds",            "weight": 2 },
+        { "block": "conquest:dead_grass",           "weight": 2 },
+        { "block": "conquest:wormwood",             "weight": 1 },
+        { "block": "conquest:dead_reeds",           "weight": 1 }
+      ]
+    },
+
+    "minecraft:snowy_beach": {
+      "chance": 0.06,
+      "surface_blocks": [ "minecraft:sand", "minecraft:snow_block" ],
+      "grasses": [
+        { "block": "conquest:dead_grass",           "weight": 3 },
+        { "block": "conquest:cotton_grass",         "weight": 3 },
+        { "block": "conquest:sea_arrowgrass",       "weight": 2 },
+        { "block": "conquest:dry_reeds",            "weight": 2 },
+        { "block": "conquest:dead_reeds",           "weight": 1 },
+        { "block": "conquest:simbelmyne",           "weight": 1 }
+      ]
+    },
+
+    "minecraft:stony_shore": {
+      "chance": 0.06,
+      "surface_blocks": [ "minecraft:stone", "minecraft:gravel" ],
+      "grasses": [
+        { "block": "conquest:sea_lavender",         "weight": 3 },
+        { "block": "conquest:sea_arrowgrass",       "weight": 3 },
+        { "block": "conquest:wormwood",             "weight": 2 },
+        { "block": "conquest:thyme",                "weight": 2 },
+        { "block": "conquest:rock_rose",            "weight": 2 },
+        { "block": "conquest:orpine",               "weight": 1 },
+        { "block": "conquest:small_scabious",       "weight": 1 }
+      ]
+    },
+
+    "minecraft:mushroom_fields": {
+      "chance": 0.30,
+      "surface_blocks": [ "minecraft:mycelium", "minecraft:dirt" ],
+      "grasses": [
+        { "block": "conquest:morel_mushrooms",      "weight": 4 },
+        { "block": "conquest:brittlegill_mushrooms","weight": 4 },
+        { "block": "conquest:lush_grass",           "weight": 2 },
+        { "block": "conquest:bracken",              "weight": 1 },
+        { "block": "conquest:fern",                 "weight": 1 }
+      ]
+    }
+
+  }
+}

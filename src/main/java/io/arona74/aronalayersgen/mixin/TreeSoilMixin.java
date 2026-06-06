@@ -39,7 +39,7 @@ public class TreeSoilMixin {
         StructureWorldAccess world = context.getWorld();
         BlockPos origin = context.getOrigin();
 
-        if (LayerConfig.DEBUG_LOGGING) {
+        if (LayerConfig.logTreeSoil()) {
             BlockState atOrigin = world.getBlockState(origin);
             BlockState below = world.getBlockState(origin.down());
             BlockState below2 = world.getBlockState(origin.down().down());
@@ -76,7 +76,7 @@ public class TreeSoilMixin {
             }
         }
 
-        if (layersCleared > 0 && LayerConfig.DEBUG_LOGGING) {
+        if (layersCleared > 0 && LayerConfig.logTreeSoil()) {
             AronaLayersGen.LOGGER.info("[TreeSoil] Cleared {} layers at origin {}", layersCleared, origin);
         }
     }

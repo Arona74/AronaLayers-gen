@@ -1,0 +1,121 @@
+{
+  "_comment": "CR NBT tree placement config. Requires cr_nbt_trees=true and Conquest Reforged. NBT files live in nbt_trees/<species>/.",
+
+  "saplings": {
+    "_comment": "Sapling-to-species mapping. When a sapling grows (player-placed), the listed species is used instead of biome-based selection. Omit a sapling type to keep biome-based selection for it.",
+    "minecraft:oak_sapling":      "oak",
+    "minecraft:birch_sapling":    "aspen",
+    "minecraft:spruce_sapling":   "norway_spruce"
+  },
+
+  "biomes": {
+
+    "minecraft:birch_forest": {
+      "chance": 1.00,
+      "attempts_per_chunk": 3,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "trees": [
+        { "species": "aspen", "weight": 1 }
+      ]
+    },
+
+    "minecraft:old_growth_birch_forest": {
+      "chance": 1.00,
+      "attempts_per_chunk": 3,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "trees": [
+        { "species": "aspen", "weight": 1 }
+      ]
+    },
+
+    "minecraft:forest": {
+      "chance": 1.00,
+      "attempts_per_chunk": 3,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "trees": [
+        { "species": "oak",      "weight": 3 },
+        { "species": "hawthorn", "weight": 1 },
+        { "species": "holly",    "weight": 1 }
+      ]
+    },
+
+    "minecraft:flower_forest": {
+      "chance": 1.00,
+      "attempts_per_chunk": 3,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "trees": [
+        { "species": "oak",      "weight": 3 },
+        { "species": "hawthorn", "weight": 2 },
+        { "species": "holly",    "weight": 1 }
+      ]
+    },
+
+    "minecraft:taiga": {
+      "chance": 1.00,
+      "attempts_per_chunk": 3,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:podzol" ],
+      "trees": [
+        { "species": "norway_spruce", "weight": 3 },
+        { "species": "larch",         "weight": 1 }
+      ]
+    },
+
+    "minecraft:old_growth_pine_taiga": {
+      "chance": 1.00,
+      "attempts_per_chunk": 4,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:podzol", "minecraft:coarse_dirt" ],
+      "trees": [
+        { "species": "norway_spruce", "weight": 2 },
+        { "species": "larch",         "weight": 2 }
+      ]
+    },
+
+    "minecraft:old_growth_spruce_taiga": {
+      "chance": 1.00,
+      "attempts_per_chunk": 4,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:podzol", "minecraft:coarse_dirt" ],
+      "trees": [
+        { "species": "norway_spruce", "weight": 1 }
+      ]
+    },
+
+    "minecraft:snowy_taiga": {
+      "chance": 1.00,
+      "attempts_per_chunk": 3,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:podzol", "minecraft:snow_block" ],
+      "trees": [
+        { "species": "norway_spruce", "weight": 1 }
+      ]
+    },
+
+    "minecraft:beach": {
+      "chance": 1.00,
+      "attempts_per_chunk": 2,
+      "surface_blocks": [ "minecraft:sand", "minecraft:grass_block" ],
+      "trees": [
+        { "species": "beach", "weight": 1 },
+        { "species": "beech", "weight": 1 }
+      ]
+    },
+
+    "minecraft:windswept_forest": {
+      "chance": 1.00,
+      "attempts_per_chunk": 2,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:stone" ],
+      "trees": [
+        { "species": "oak",  "weight": 2 },
+        { "species": "holly", "weight": 1 }
+      ]
+    },
+
+    "minecraft:plains": {
+      "chance": 1.00,
+      "attempts_per_chunk": 3,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "trees": [
+        { "species": "oak", "weight": 1 }
+      ]
+    }
+
+  }
+}

@@ -5,10 +5,13 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import net.fabricmc.loader.api.FabricLoader;
 
+import com.google.gson.JsonArray;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -114,6 +117,109 @@ public class ConfigLoader {
         } catch (IOException e) {
             AronaLayersGen.LOGGER.error("Failed to create external config file", e);
         }
+    }
+
+    /**
+     * Load a list of block IDs from a JSON file with a top-level "blocks" array.
+     * First tries the external config directory, then falls back to resources.
+     * @param configFileName The name of the config file (e.g., "structure_elevation_blocks.json")
+     * @return List of block ID strings (e.g., "minecraft:grass_block")
+     */
+    public static List<String> loadBlockList(String configFileName) {
+        // Try external config directory first
+        Path externalConfigPath = CONFIG_DIR.resolve(configFileName);
+        if (Files.exists(externalConfigPath)) {
+            try (Reader reader = Files.newBufferedReader(externalConfigPath)) {
+                List<String> result = parseBlockListJson(reader);
+                AronaLayersGen.LOGGER.info("Loaded block list from external config: {}", externalConfigPath);
+                return result;
+            } catch (IOException e) {
+                AronaLayersGen.LOGGER.error("Failed to load external config file: {}", externalConfigPath, e);
+            }
+        }
+
+        // Fall back to resource
+        try {
+            InputStream inputStream = ConfigLoader.class.getClassLoader().getResourceAsStream(configFileName);
+            if (inputStream == null) {
+                AronaLayersGen.LOGGER.warn("Block list resource not found: {}", configFileName);
+                return new ArrayList<>();
+            }
+            try (Reader reader = new InputStreamReader(inputStream)) {
+                List<String> result = parseBlockListJson(reader);
+                AronaLayersGen.LOGGER.info("Loaded block list from resource: {}", configFileName);
+                // Copy to external config for user customization
+                copyResourceToExternalConfig(configFileName);
+                return result;
+            }
+        } catch (IOException e) {
+            AronaLayersGen.LOGGER.error("Failed to load block list resource: {}", configFileName, e);
+        }
+        return new ArrayList<>();
+    }
+
+    private static List<String> parseBlockListJson(Reader reader) {
+        List<String> list = new ArrayList<>();
+        JsonObject root = GSON.fromJson(reader, JsonObject.class);
+        if (root != null && root.has("blocks")) {
+            JsonArray arr = root.getAsJsonArray("blocks");
+            for (var elem : arr) {
+                if (!elem.isJsonNull()) {
+                    list.add(elem.getAsString());
+                }
+            }
+        }
+        return list;
+    }
+
+    private static void copyResourceToExternalConfig(String configFileName) {
+        try {
+            if (!Files.exists(CONFIG_DIR)) {
+                Files.createDirectories(CONFIG_DIR);
+            }
+            Path configPath = CONFIG_DIR.resolve(configFileName);
+            if (!Files.exists(configPath)) {
+                InputStream inputStream = ConfigLoader.class.getClassLoader().getResourceAsStream(configFileName);
+                if (inputStream != null) {
+                    Files.copy(inputStream, configPath);
+                    AronaLayersGen.LOGGER.info("Created default config file: {}", configPath);
+                }
+            }
+        } catch (IOException e) {
+            AronaLayersGen.LOGGER.error("Failed to copy resource config to external: {}", configFileName, e);
+        }
+    }
+
+    /**
+     * Load a raw JsonObject from a config file.
+     * First tries the external config directory, then falls back to resources.
+     */
+    public static JsonObject loadJsonObject(String configFileName) {
+        Path externalConfigPath = CONFIG_DIR.resolve(configFileName);
+        if (Files.exists(externalConfigPath)) {
+            try (Reader reader = Files.newBufferedReader(externalConfigPath)) {
+                AronaLayersGen.LOGGER.info("Loaded JSON from external config: {}", externalConfigPath);
+                return GSON.fromJson(reader, JsonObject.class);
+            } catch (IOException e) {
+                AronaLayersGen.LOGGER.error("Failed to load external config file: {}", externalConfigPath, e);
+            }
+        }
+
+        try {
+            InputStream inputStream = ConfigLoader.class.getClassLoader().getResourceAsStream(configFileName);
+            if (inputStream == null) {
+                AronaLayersGen.LOGGER.warn("JSON resource not found: {}", configFileName);
+                return new JsonObject();
+            }
+            try (Reader reader = new InputStreamReader(inputStream)) {
+                AronaLayersGen.LOGGER.info("Loaded JSON from resource: {}", configFileName);
+                copyResourceToExternalConfig(configFileName);
+                return GSON.fromJson(reader, JsonObject.class);
+            }
+        } catch (IOException e) {
+            AronaLayersGen.LOGGER.error("Failed to load JSON resource: {}", configFileName, e);
+        }
+        return new JsonObject();
     }
 
     public static void saveMappings(String configFileName, Map<String, String> mappings) throws IOException {

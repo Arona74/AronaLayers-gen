@@ -1,0 +1,7 @@
+{
+  "_comment": "Blocks that trigger second_pass_cleanup tapering. When a layer is blocked or removed by structure_injection or structure_no_layers at a position whose surface block is in this list, the 8 in-chunk neighbors of that position will have their layer values tapered. Add block IDs here to expand the trigger set.",
+  "blocks": [
+    "minecraft:dirt_path",
+    "conquest:sandy_soil"
+  ]
+}

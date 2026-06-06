@@ -37,3 +37,6 @@ remappedSrc/
 .claude/
 .claude/settings.local.json
 /.claude
+/nbt_trees/
+/schematic_trees
+convert_schematics.py
