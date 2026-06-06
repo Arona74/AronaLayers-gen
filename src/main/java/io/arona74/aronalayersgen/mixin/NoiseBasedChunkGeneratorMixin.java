@@ -67,17 +67,27 @@ public class NoiseBasedChunkGeneratorMixin {
                     if (isPostFeaturesMode) {
                         if (LayerConfig.logChunkInit())
                             AronaLayersGen.LOGGER.info("[ChunkInit] RTF inject START {},{}", chunk.getPos().x, chunk.getPos().z);
-                        RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
+                        boolean rtfSuccess = RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
                         if (LayerConfig.logChunkInit()) {
-                            AronaLayersGen.LOGGER.info("[ChunkInit] RTF inject DONE {},{} ms={}",
-                                chunk.getPos().x, chunk.getPos().z, (System.nanoTime() - stepStart) / 1_000_000L);
+                            AronaLayersGen.LOGGER.info("[ChunkInit] RTF inject DONE {},{} ms={} success={}",
+                                chunk.getPos().x, chunk.getPos().z, (System.nanoTime() - stepStart) / 1_000_000L, rtfSuccess);
                             stepStart = System.nanoTime();
+                        }
+                        if (!rtfSuccess && LayerConfig.LAYER_INJECTION) {
+                            AronaLayersGen.LOGGER.warn("[ChunkInit] RTF tile miss at {},{} — falling back to vanilla injection (chunk was likely reset)",
+                                chunk.getPos().x, chunk.getPos().z);
+                            VanillaLayerInjector.injectLayers(chunk, null);
                         }
                     } else {
                         // CARVERS mode: layers placed earlier, run correction pass
                         RTFLayerInjector.correctMismatchedLayers(chunk);
                         // Fallback injection for chunks that missed the carvers phase
-                        RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
+                        boolean rtfSuccess = RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
+                        if (!rtfSuccess && LayerConfig.LAYER_INJECTION) {
+                            AronaLayersGen.LOGGER.warn("[ChunkInit] RTF tile miss at {},{} (CARVERS mode) — falling back to vanilla injection",
+                                chunk.getPos().x, chunk.getPos().z);
+                            VanillaLayerInjector.injectLayers(chunk, null);
+                        }
                     }
                 } else if (LayerConfig.LAYER_INJECTION) {
                     // RTF requested but not available: fall back to vanilla injection

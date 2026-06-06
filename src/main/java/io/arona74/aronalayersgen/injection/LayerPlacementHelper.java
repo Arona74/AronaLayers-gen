@@ -1513,7 +1513,7 @@ public class LayerPlacementHelper {
                 entry.getValue().trackUpdate(lx, y, lz, state);
             }
         } else {
-            setBlockStateSafe(chunk, pos, state);
+            chunk.setBlockState(pos, state, false);
         }
     }
 
