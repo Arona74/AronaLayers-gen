@@ -194,6 +194,12 @@ public class LayerConfig {
     public static boolean REPLACE_DIRT_PATH = false;
 
     /**
+     * When placing a sand layer (conquest:sand_layer), substitute conquest:wet_sand_layer
+     * if the layer will be waterlogged or is positioned below Y=63 (sea level).
+     */
+    public static boolean PLACE_WET_SAND = false;
+
+    /**
      * Convert vanilla seagrass/tall_seagrass to Conquest equivalents.
      * Requires PLANT_INJECTION and Conquest Reforged.
      */
@@ -356,6 +362,7 @@ public class LayerConfig {
         if (config.has("structure_replace_elevated_high")) STRUCTURE_REPLACE_ELEVATED_HIGH = config.get("structure_replace_elevated_high").getAsBoolean();
         if (config.has("structure_replace_elevated_high_max")) STRUCTURE_REPLACE_ELEVATED_HIGH_MAX = config.get("structure_replace_elevated_high_max").getAsInt();
         if (config.has("replace_dirt_path")) REPLACE_DIRT_PATH = config.get("replace_dirt_path").getAsBoolean();
+        if (config.has("place_wet_sand")) PLACE_WET_SAND = config.get("place_wet_sand").getAsBoolean();
         if (config.has("replace_sea_grass")) REPLACE_SEA_GRASS = config.get("replace_sea_grass").getAsBoolean();
         if (config.has("improve_snowy_biomes")) IMPROVE_SNOWY_BIOMES = config.get("improve_snowy_biomes").getAsBoolean();
         if (config.has("break_snow_layers_to_mapped_layers")) BREAK_SNOW_LAYERS_TO_MAPPED_LAYERS = config.get("break_snow_layers_to_mapped_layers").getAsBoolean();
@@ -447,6 +454,7 @@ public class LayerConfig {
             config.addProperty("structure_replace_elevated_high", STRUCTURE_REPLACE_ELEVATED_HIGH);
             config.addProperty("structure_replace_elevated_high_max", STRUCTURE_REPLACE_ELEVATED_HIGH_MAX);
             config.addProperty("replace_dirt_path", REPLACE_DIRT_PATH);
+            config.addProperty("place_wet_sand", PLACE_WET_SAND);
             config.addProperty("replace_sea_grass", REPLACE_SEA_GRASS);
             config.addProperty("improve_snowy_biomes", IMPROVE_SNOWY_BIOMES);
             config.addProperty("break_snow_layers_to_mapped_layers", BREAK_SNOW_LAYERS_TO_MAPPED_LAYERS);

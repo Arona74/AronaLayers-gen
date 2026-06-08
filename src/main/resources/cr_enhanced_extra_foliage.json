@@ -63,7 +63,6 @@
         { "block": "conquest:sweet_woodruff",       "weight": 2 },
         { "block": "conquest:raspberry_bush",       "weight": 2 },
         { "block": "conquest:blackberry_bush",      "weight": 2 },
-        { "block": "conquest:hawthorn_bush",        "weight": 1 },
         { "block": "conquest:dogs_mercury",         "weight": 1 },
         { "block": "conquest:wood_horsetail",       "weight": 1 },
         { "block": "conquest:morel_mushrooms",      "weight": 1 }
@@ -97,7 +96,6 @@
         { "block": "conquest:goldenrod",            "weight": 2 },
         { "block": "conquest:raspberry_bush",       "weight": 2 },
         { "block": "conquest:sweet_woodruff",       "weight": 2 },
-        { "block": "conquest:hawthorn_bush",        "weight": 1 },
         { "block": "conquest:dogs_mercury",         "weight": 1 },
         { "block": "conquest:harebell",             "weight": 1 },
         { "block": "conquest:wild_daisy",           "weight": 1 }
@@ -110,14 +108,12 @@
         { "block": "conquest:grass",                "weight": 10 },
         { "block": "conquest:bracken",              "weight": 4 },
         { "block": "conquest:autumnal_bracken",     "weight": 3 },
-        { "block": "conquest:dead_deciduous_branches", "weight": 2 },
         { "block": "conquest:dogs_mercury",         "weight": 2 },
         { "block": "conquest:lush_grass",           "weight": 2 },
         { "block": "conquest:sweet_woodruff",       "weight": 2 },
         { "block": "conquest:greater_wood_rush",    "weight": 1 },
         { "block": "conquest:morel_mushrooms",      "weight": 1 },
-        { "block": "conquest:raspberry_bush",       "weight": 1 },
-        { "block": "conquest:mistletoe_garland",    "weight": 1 }
+        { "block": "conquest:raspberry_bush",       "weight": 1 }
       ]
     },
 

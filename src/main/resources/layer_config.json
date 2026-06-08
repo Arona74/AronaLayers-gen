@@ -65,6 +65,8 @@
   "structure_replace_elevated_high_max": 3,
   "_comment_replace_dirt_path": "When placing layers on dirt_path, also replace the dirt_path block with the full-block equivalent of the layer (e.g. conquest:sandy_soil). Default: false",
   "replace_dirt_path": true,
+  "_comment_place_wet_sand": "When placing a sand layer (conquest:sand_layer), use conquest:wet_sand_layer instead if the layer will be waterlogged or is below Y=63 (sea level). Default: false",
+  "place_wet_sand": true,
   "_comment_replace_sea_grass": "Convert vanilla seagrass/tall_seagrass to Conquest equivalents. Conquest seagrass lacks the layer property, so they are placed without a layer value. Requires plant_injection. Default: false",
   "replace_sea_grass": true,
   "_comment_place_rocks": "Place rock blocks above layers on mapped surface blocks. Uses cr_rock_mappings.json for surface-to-rock mapping. Default: false",

@@ -245,6 +245,32 @@ public class LayerPlacementHelper {
         return result == Blocks.AIR ? null : result;
     }
 
+    // Cached block references for wet-sand substitution (Blocks.AIR = not found)
+    private static volatile Block cachedSandLayerBlock = null;
+    private static volatile Block cachedWetSandLayerBlock = null;
+
+    /**
+     * If layerBlock is conquest:sand_layer and conquest:wet_sand_layer exists, returns the wet variant.
+     * Returns null otherwise (no substitution needed).
+     */
+    private static Block getWetSandSubstitute(Block layerBlock) {
+        Block sand = cachedSandLayerBlock;
+        if (sand == null) {
+            net.minecraft.util.Identifier id = net.minecraft.util.Identifier.tryParse("conquest:sand_layer");
+            sand = (id != null) ? net.minecraft.registry.Registries.BLOCK.get(id) : Blocks.AIR;
+            cachedSandLayerBlock = sand;
+        }
+        if (sand == Blocks.AIR || layerBlock != sand) return null;
+
+        Block wet = cachedWetSandLayerBlock;
+        if (wet == null) {
+            net.minecraft.util.Identifier id = net.minecraft.util.Identifier.tryParse("conquest:wet_sand_layer");
+            wet = (id != null) ? net.minecraft.registry.Registries.BLOCK.get(id) : Blocks.AIR;
+            cachedWetSandLayerBlock = wet;
+        }
+        return (wet != Blocks.AIR) ? wet : null;
+    }
+
     // Cache for density property lookup per block
     private static final ConcurrentHashMap<Block, IntProperty> densityPropertyCache = new ConcurrentHashMap<>();
 
@@ -436,6 +462,7 @@ public class LayerPlacementHelper {
         foliageState = applyLayerCount(foliageState, foliageBlock, layerCount);
 
         setBlockStateSafe(chunk, foliagePos, foliageState);
+        clearOrphanedPlantAbove(chunk, foliagePos);
 
         if (LayerConfig.logFoliage()) {
             AronaLayersGen.LOGGER.info("[Foliage] Placed {} at {}",
@@ -477,10 +504,27 @@ public class LayerPlacementHelper {
         grassState = applyLayerCount(grassState, grassBlock, layerCount);
 
         setBlockStateSafe(chunk, foliagePos, grassState);
+        clearOrphanedPlantAbove(chunk, foliagePos);
 
         if (LayerConfig.logFoliage()) {
             AronaLayersGen.LOGGER.info("[EnhancedFoliage] Placed {} at {}",
                 net.minecraft.registry.Registries.BLOCK.getId(grassBlock), foliagePos);
+        }
+    }
+
+    /**
+     * Clears a vanilla replaceable plant immediately above {@code pos} if present.
+     * After placing a CR foliage block at {@code pos}, any vanilla plant one block
+     * above is an orphan — its original support block was replaced by terrain
+     * processing before our injection ran.
+     */
+    private static void clearOrphanedPlantAbove(Chunk chunk, BlockPos pos) {
+        BlockPos above = pos.up();
+        BlockState aboveState = chunk.getBlockState(above);
+        if (!getPlantRegistry().isReplaceablePlant(aboveState.getBlock())) return;
+        setBlockStateSafe(chunk, above, Blocks.AIR.getDefaultState());
+        if (aboveState.contains(net.minecraft.state.property.Properties.DOUBLE_BLOCK_HALF)) {
+            setBlockStateSafe(chunk, above.up(), Blocks.AIR.getDefaultState());
         }
     }
 
@@ -1361,6 +1405,22 @@ public class LayerPlacementHelper {
                     }
                 }
 
+                if (LayerConfig.PLACE_WET_SAND) {
+                    Block wetSub = getWetSandSubstitute(layerState.getBlock());
+                    if (wetSub != null) {
+                        boolean isWet = abovePos.getY() < 63
+                            || (layerState.contains(Properties.WATERLOGGED) && layerState.get(Properties.WATERLOGGED));
+                        if (isWet) {
+                            BlockState wetState = applyLayerCount(wetSub.getDefaultState(), wetSub, layerCount);
+                            if (layerState.contains(Properties.WATERLOGGED) && layerState.get(Properties.WATERLOGGED)
+                                    && wetState.contains(Properties.WATERLOGGED)) {
+                                wetState = wetState.with(Properties.WATERLOGGED, true);
+                            }
+                            layerState = wetState;
+                        }
+                    }
+                }
+
                 setBlockStateSafe(chunk, abovePos, layerState);
                 layerPlaced = true;
 
@@ -1400,19 +1460,21 @@ public class LayerPlacementHelper {
 
                         if (replacedTallPlant) {
                             if (conquestState.contains(Properties.DOUBLE_BLOCK_HALF)) {
+                                // CR equivalent is also a tall plant — place lower + upper halves
                                 conquestState = conquestState.with(Properties.DOUBLE_BLOCK_HALF,
                                     net.minecraft.block.enums.DoubleBlockHalf.LOWER);
-                            }
-                            setBlockStateSafe(chunk, plantPos, conquestState);
+                                setBlockStateSafe(chunk, plantPos, conquestState);
 
-                            BlockPos upperPos = plantPos.up();
-                            BlockState upperState = conquestPlant.getDefaultState();
-                            upperState = applyLayerCount(upperState, conquestPlant, layerCount);
-                            if (upperState.contains(Properties.DOUBLE_BLOCK_HALF)) {
+                                BlockPos upperPos = plantPos.up();
+                                BlockState upperState = conquestPlant.getDefaultState();
+                                upperState = applyLayerCount(upperState, conquestPlant, layerCount);
                                 upperState = upperState.with(Properties.DOUBLE_BLOCK_HALF,
                                     net.minecraft.block.enums.DoubleBlockHalf.UPPER);
+                                setBlockStateSafe(chunk, upperPos, upperState);
+                            } else {
+                                // CR equivalent is a single-block plant — only place at lower position
+                                setBlockStateSafe(chunk, plantPos, conquestState);
                             }
-                            setBlockStateSafe(chunk, upperPos, upperState);
                         } else {
                             setBlockStateSafe(chunk, plantPos, conquestState);
                         }

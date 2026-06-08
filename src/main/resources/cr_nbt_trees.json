@@ -33,9 +33,7 @@
       "attempts_per_chunk": 3,
       "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
       "trees": [
-        { "species": "oak",      "weight": 3 },
-        { "species": "hawthorn", "weight": 1 },
-        { "species": "holly",    "weight": 1 }
+        { "species": "oak",      "weight": 3 }
       ]
     },
 
@@ -44,9 +42,7 @@
       "attempts_per_chunk": 3,
       "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
       "trees": [
-        { "species": "oak",      "weight": 3 },
-        { "species": "hawthorn", "weight": 2 },
-        { "species": "holly",    "weight": 1 }
+        { "species": "oak",      "weight": 3 }
       ]
     },
 
@@ -103,8 +99,7 @@
       "attempts_per_chunk": 2,
       "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt", "minecraft:stone" ],
       "trees": [
-        { "species": "oak",  "weight": 2 },
-        { "species": "holly", "weight": 1 }
+        { "species": "oak",  "weight": 2 }
       ]
     },
 

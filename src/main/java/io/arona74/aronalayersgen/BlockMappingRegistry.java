@@ -15,11 +15,13 @@ import java.util.Map;
  */
 public class BlockMappingRegistry {
     private final Map<Block, String> blockToLayerMapping;
+    private final java.util.Set<Block> knownLayerBlocks;
     private final String configFileName;
 
     public BlockMappingRegistry(String configFileName) {
         this.configFileName = configFileName;
         this.blockToLayerMapping = new HashMap<>();
+        this.knownLayerBlocks = new java.util.HashSet<>();
         registerDefaultMappings();
     }
 
@@ -40,6 +42,16 @@ public class BlockMappingRegistry {
             }
 
             blockToLayerMapping.put(vanillaBlock, entry.getValue());
+
+            // Track the resolved layer block so we can distinguish actual layer blocks
+            // from foliage/rock blocks that also happen to have a "layer" property.
+            Identifier layerId = Identifier.tryParse(entry.getValue());
+            if (layerId != null) {
+                Block layerBlock = Registries.BLOCK.get(layerId);
+                if (layerBlock != Blocks.AIR) {
+                    knownLayerBlocks.add(layerBlock);
+                }
+            }
         }
 
         AronaLayersGen.LOGGER.info("Registered {} block-to-layer mappings from {}", blockToLayerMapping.size(), configFileName);
@@ -76,5 +88,14 @@ public class BlockMappingRegistry {
 
     public boolean hasMapping(Block block) {
         return blockToLayerMapping.containsKey(block);
+    }
+
+    /**
+     * Returns true if the given block is a known layer block (i.e. appears as a value
+     * in the surface→layer mapping). Used to distinguish layer blocks from other blocks
+     * (e.g. CR foliage) that also happen to carry a "layer" integer property.
+     */
+    public boolean isLayerBlock(Block block) {
+        return knownLayerBlocks.contains(block);
     }
 }

@@ -81,6 +81,19 @@ public class PlantConversionHelper {
                 BlockState belowState = chunk.getBlockState(belowPlant);
 
                 if (!RTFLayerInjector.hasLayerProperty(belowState)) continue;
+                // CR foliage/rock blocks also carry the "layer" property — verify the block
+                // is actually a registered layer block, not a decorator placed on top of the layer.
+                if (!LayerPlacementHelper.getMappingRegistry().isLayerBlock(belowState.getBlock())) {
+                    // Orphaned vanilla plant above a CR foliage/decorator — clear it.
+                    // This happens when carvers or RTF terrain adjustments removed the solid block
+                    // that originally supported the vanilla feature-placed plant.
+                    chunk.setBlockState(plantPos, Blocks.AIR.getDefaultState(), false);
+                    if (upperPos != null) {
+                        chunk.setBlockState(upperPos, Blocks.AIR.getDefaultState(), false);
+                    }
+                    converted++;
+                    continue;
+                }
 
                 Block conquestPlant = registry.getConquestPlant(plantBlock);
                 if (conquestPlant == null) {
@@ -108,12 +121,16 @@ public class PlantConversionHelper {
                     }
                     chunk.setBlockState(plantPos, conquestLower, false);
 
-                    BlockState conquestUpper = conquestPlant.getDefaultState();
-                    conquestUpper = RTFLayerInjector.applyLayerCount(conquestUpper, conquestPlant, layerCount);
-                    if (conquestUpper.contains(Properties.DOUBLE_BLOCK_HALF)) {
+                    if (conquestPlant.getDefaultState().contains(Properties.DOUBLE_BLOCK_HALF)) {
+                        // CR equivalent is also tall — place upper half
+                        BlockState conquestUpper = conquestPlant.getDefaultState();
+                        conquestUpper = RTFLayerInjector.applyLayerCount(conquestUpper, conquestPlant, layerCount);
                         conquestUpper = conquestUpper.with(Properties.DOUBLE_BLOCK_HALF, DoubleBlockHalf.UPPER);
+                        chunk.setBlockState(upperPos, conquestUpper, false);
+                    } else {
+                        // CR equivalent is a single-block plant — clear the orphaned vanilla upper half
+                        chunk.setBlockState(upperPos, Blocks.AIR.getDefaultState(), false);
                     }
-                    chunk.setBlockState(upperPos, conquestUpper, false);
                 } else {
                     BlockState conquestState = conquestPlant.getDefaultState();
                     conquestState = RTFLayerInjector.applyLayerCount(conquestState, conquestPlant, layerCount);
