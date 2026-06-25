@@ -182,7 +182,7 @@ public class NbtTreeRegistry {
                 speciesFiles.put(species, files);
                 AronaLayersGen.LOGGER.info("[NbtTrees] Species '{}': {} variant(s)", species, files.size());
             } else {
-                AronaLayersGen.LOGGER.warn("[NbtTrees] Species '{}': no .nbt files found under nbt_trees/{}/", species, species);
+                AronaLayersGen.LOGGER.warn("[NbtTrees] Species '{}': no .nbt files found under config/aronalayersgen/nbt_trees/{}/", species, species);
             }
         }
 
@@ -191,22 +191,17 @@ public class NbtTreeRegistry {
         return new NbtTreeRegistry(entries, speciesFiles, saplingSpecies);
     }
 
+    private static final Path NBT_TREES_DIR = FabricLoader.getInstance().getConfigDir()
+        .resolve("aronalayersgen").resolve("nbt_trees");
+
     private static List<Path> scanSpeciesFiles(String species) {
         List<Path> result = new ArrayList<>();
-        try {
-            Optional<Path> dirOpt = FabricLoader.getInstance()
-                .getModContainer(AronaLayersGen.MOD_ID)
-                .flatMap(c -> c.findPath("nbt_trees/" + species));
-
-            if (dirOpt.isEmpty()) return result;
-            Path dir = dirOpt.get();
-            if (!Files.isDirectory(dir)) return result;
-
-            try (Stream<Path> stream = Files.list(dir)) {
-                stream.filter(p -> p.getFileName().toString().endsWith(".nbt"))
-                      .sorted(Comparator.comparing(p -> p.getFileName().toString()))
-                      .forEach(result::add);
-            }
+        Path dir = NBT_TREES_DIR.resolve(species);
+        if (!Files.isDirectory(dir)) return result;
+        try (Stream<Path> stream = Files.list(dir)) {
+            stream.filter(p -> p.getFileName().toString().endsWith(".nbt"))
+                  .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                  .forEach(result::add);
         } catch (IOException e) {
             AronaLayersGen.LOGGER.warn("[NbtTrees] Failed to scan species '{}': {}", species, e.getMessage());
         }

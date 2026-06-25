@@ -3,9 +3,9 @@
 
   "saplings": {
     "_comment": "Sapling-to-species mapping. When a sapling grows (player-placed), the listed species is used instead of biome-based selection. Omit a sapling type to keep biome-based selection for it.",
-    "minecraft:oak_sapling":      "oak",
-    "minecraft:birch_sapling":    "aspen",
-    "minecraft:spruce_sapling":   "norway_spruce"
+    "conquest:oak_sapling":      "oak",
+    "conquest:birch_sapling":    "aspen",
+    "conquest:spruce_sapling":   "norway_spruce"
   },
 
   "biomes": {

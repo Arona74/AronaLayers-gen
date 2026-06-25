@@ -39,11 +39,6 @@ dependencies {
 processResources {
     inputs.property "version", project.version
 
-    // Bundle the nbt_trees directory from the project root into the jar resources
-    from('nbt_trees') {
-        into 'nbt_trees'
-    }
-
     filesMatching("fabric.mod.json") {
         expand "version": project.version
     }
