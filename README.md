@@ -28,7 +28,7 @@ Vanilla terrain generation is also supported (`layer_injection`) but disabled by
 - One of:
   - [Conquest Reforged](https://www.curseforge.com/minecraft/mc-mods/conquest-reforged) *(recommended)*
   - VanillaLayerPlus
-- Strongly recommended: [ReTerraForged](https://github.com/TerraForgedMC/TerraForged)
+- Strongly recommended: [ReTerraForged](https://github.com/racoonman2/ReTerraForged) You can use this [working fork](https://github.com/UF4OVER/ReTerraForged/releases/tag/0.0.6-fix2)
 
 ## Installation
 
