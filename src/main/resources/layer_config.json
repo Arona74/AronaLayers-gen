@@ -4,6 +4,8 @@
   "layer_injection": true,
   "_comment_rtf_layer_injection": "Enable layer injection using ReTerraForged terrain data. Requires ReTerraForged mod.",
   "rtf_layer_injection": true,
+  "_comment_vanilla_noise_router_layer_injection": "Use vanilla's NoiseRouter density functions (continents, erosion, ridges) to derive a smooth synthetic cell height for layer placement. Replaces the slope-based heuristic with the same fractional formula used by RTF injection. Has no effect when RTF is active. Requires layer_injection=true. Default: false",
+  "vanilla_noise_router_layer_injection": false,
   "_comment_injection_mode": "When to inject layers: CARVERS (before structures, may need cleanup) or POST_FEATURES (after structures, cleaner result). Requires restart.",
   "injection_mode": "POST_FEATURES",
   "_comment_skip_snowy_biomes": "Skip layer generation in snowy/cold biomes to avoid interfering with natural snow. Default: true",

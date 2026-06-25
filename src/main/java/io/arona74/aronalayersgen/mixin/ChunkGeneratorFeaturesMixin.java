@@ -60,6 +60,10 @@ public class ChunkGeneratorFeaturesMixin {
                 serverWorld = sw;
             }
 
+            if (serverWorld != null && RandomStateHolder.getWorldSeed() == Long.MIN_VALUE) {
+                RandomStateHolder.setWorldSeed(serverWorld.getSeed());
+            }
+
             if (LayerConfig.STRUCTURE_INJECTION) {
                 LayerPlacementHelper.prepareStructureBoundsWithWorld(chunk, serverWorld);
             }

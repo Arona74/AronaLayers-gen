@@ -40,6 +40,15 @@ public class LayerConfig {
     public static boolean RTF_LAYER_INJECTION = false;
 
     /**
+     * Use vanilla's NoiseRouter density functions (continents, erosion, ridges) to
+     * compute a synthetic cell height for layer placement, replacing the slope-based
+     * heuristic. Applies the same fractional formula as RTF layer injection for smooth,
+     * terrain-correlated layer count variation. Requires layer_injection=true.
+     * Has no effect when RTF is active. Requires game restart.
+     */
+    public static boolean VANILLA_NOISE_ROUTER_LAYER_INJECTION = false;
+
+    /**
      * When to inject layers during world generation.
      * CARVERS: Inject after carvers but before features/structures.
      * POST_FEATURES: Inject after all features including structures.
@@ -321,6 +330,7 @@ public class LayerConfig {
         JsonObject config = GSON.fromJson(reader, JsonObject.class);
         if (config.has("layer_injection")) LAYER_INJECTION = config.get("layer_injection").getAsBoolean();
         if (config.has("rtf_layer_injection")) RTF_LAYER_INJECTION = config.get("rtf_layer_injection").getAsBoolean();
+        if (config.has("vanilla_noise_router_layer_injection")) VANILLA_NOISE_ROUTER_LAYER_INJECTION = config.get("vanilla_noise_router_layer_injection").getAsBoolean();
         if (config.has("injection_mode")) {
             try {
                 INJECTION_MODE = InjectionMode.valueOf(config.get("injection_mode").getAsString().toUpperCase());
@@ -420,6 +430,7 @@ public class LayerConfig {
             config.addProperty("_comment", "Configuration for Arona Layers Generator. Edit this file to customize layer generation.");
             config.addProperty("layer_injection", LAYER_INJECTION);
             config.addProperty("rtf_layer_injection", RTF_LAYER_INJECTION);
+            config.addProperty("vanilla_noise_router_layer_injection", VANILLA_NOISE_ROUTER_LAYER_INJECTION);
             config.addProperty("injection_mode", INJECTION_MODE.name());
             config.addProperty("skip_snowy_biomes", SKIP_SNOWY_BIOMES);
             config.addProperty("debug_logging", DEBUG_LOGGING);

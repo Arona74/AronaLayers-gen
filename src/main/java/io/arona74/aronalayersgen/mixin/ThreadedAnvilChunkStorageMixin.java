@@ -26,6 +26,7 @@ public class ThreadedAnvilChunkStorageMixin {
     private void onInit(CallbackInfo ci) {
         if (noiseConfig != null) {
             AronaLayersGen.LOGGER.info("[TACS Mixin] Capturing NoiseConfig/RandomState: {}", noiseConfig.getClass().getName());
+            RandomStateHolder.setNoiseConfig(noiseConfig);
             RandomStateHolder.setRandomState(noiseConfig);
         }
     }

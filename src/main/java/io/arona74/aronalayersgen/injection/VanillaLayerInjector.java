@@ -28,21 +28,141 @@ public class VanillaLayerInjector {
     /**
      * Inject layers into a chunk during terrain generation.
      *
+     * When vanilla_noise_router_layer_injection is enabled and a NoiseConfig is
+     * available, uses the same fractional height formula as RTFLayerInjector but
+     * with a synthetic cell height derived from vanilla's continents, erosion, and
+     * ridges density functions. Falls back to the slope-based heuristic otherwise.
+     *
      * @param chunk The chunk being generated
-     * @param noiseConfig The noise configuration (may be null in POST_FEATURES context)
+     * @param noiseConfig The noise configuration (may be null; resolved from RandomStateHolder if needed)
      */
     public static void injectLayers(Chunk chunk, NoiseConfig noiseConfig) {
+        // Only use the noise router when RTF is not the active worldgen.
+        // RTF replaces vanilla's density functions with its own pipeline,
+        // so its continents/erosion/ridges return near-constant values that
+        // map to 0 layers through our formula.
+        if (LayerConfig.VANILLA_NOISE_ROUTER_LAYER_INJECTION && !RandomStateHolder.hasRTFRandomState()) {
+            NoiseConfig resolved = (noiseConfig != null) ? noiseConfig : RandomStateHolder.getNoiseConfig();
+            if (resolved != null) {
+                injectLayersNoiseRouter(chunk, resolved);
+                return;
+            }
+            AronaLayersGen.LOGGER.warn("[VanillaNoiseRouter] NoiseConfig unavailable for chunk {},{} — falling back to slope injection",
+                chunk.getPos().x, chunk.getPos().z);
+        }
+        injectLayersSlope(chunk);
+    }
+
+    // ========== Noise Router path (vanilla_noise_router_layer_injection=true) ==========
+
+    /**
+     * Inject layers using vanilla's NoiseRouter density functions as a cell-height proxy.
+     *
+     * Applies the same fractional formula as RTFLayerInjector:
+     *   scaled  = cellHeight * GRADIENT_SCALE
+     *   depth   = frac(scaled)              — [0..1)
+     *   layers  = round(depth * 8) − 1      — typically 0–7, clamped to 0–8
+     *
+     * GRADIENT_SCALE (8.0) controls how many layer-count cycles span the full [0..1]
+     * synthetic height range. With vanilla density functions changing ~0.001–0.005
+     * per block, this creates smooth transitions every ~15–50 blocks.
+     */
+    private static void injectLayersNoiseRouter(Chunk chunk, NoiseConfig noiseConfig) {
         int startX = chunk.getPos().getStartX();
         int startZ = chunk.getPos().getStartZ();
         int layersPlaced = 0;
 
-        LayerPlacementHelper.debugSkipSnowy.set(0);
-        LayerPlacementHelper.debugSkipNoSurface.set(0);
-        LayerPlacementHelper.debugSkipNoMapping.set(0);
-        LayerPlacementHelper.debugSkipLayerZero.set(0);
-        LayerPlacementHelper.debugSkipNoLayerBlock.set(0);
-        LayerPlacementHelper.debugSkipNotAir.set(0);
-        LayerPlacementHelper.debugSkipEnclosed.set(0);
+        resetDebugCounters();
+
+        VanillaCellHeightSampler sampler = new VanillaCellHeightSampler(noiseConfig, RandomStateHolder.getWorldSeed());
+
+        Heightmap.Type hmType        = (chunk instanceof WorldChunk) ? Heightmap.Type.OCEAN_FLOOR    : Heightmap.Type.OCEAN_FLOOR_WG;
+        Heightmap.Type surfaceHmType = (chunk instanceof WorldChunk) ? Heightmap.Type.WORLD_SURFACE  : Heightmap.Type.WORLD_SURFACE_WG;
+
+        int worldBottom  = chunk.getBottomY();
+        int worldHeight  = chunk.getTopY() - worldBottom;
+
+        for (int localX = 0; localX < 16; localX++) {
+            for (int localZ = 0; localZ < 16; localZ++) {
+                int worldX = startX + localX;
+                int worldZ = startZ + localZ;
+
+                int floorY   = chunk.getHeightmap(hmType).get(localX, localZ);
+                int surfaceY = chunk.getHeightmap(surfaceHmType).get(localX, localZ);
+                boolean isSubmerged = surfaceY > floorY + 1;
+                if (isSubmerged && !LayerConfig.UNDERWATER_LAYERS) continue;
+
+                float cellHeight = sampler.getCellHeight(worldX, worldZ, floorY, worldBottom, worldHeight);
+                boolean isSnowyBiome = false;
+                if (floorY > worldBottom) {
+                    var biome = chunk.getBiomeForNoiseGen(localX >> 2, floorY >> 2, localZ >> 2);
+                    isSnowyBiome = biome.value().isCold(new BlockPos(worldX, floorY, worldZ));
+                }
+                boolean useSnowLayers = isSnowyBiome && LayerConfig.IMPROVE_SNOWY_BIOMES;
+
+                int layerCount = calculateNoiseLayerCount(cellHeight, useSnowLayers);
+
+                if (LayerConfig.logVanilla() && localX == 8 && localZ == 8) {
+                    float surfNorm = (float)(floorY - worldBottom) / worldHeight;
+                    float noise    = sampler.getPositionNoise(worldX, worldZ);
+                    float scaled   = cellHeight * GRADIENT_SCALE;
+                    AronaLayersGen.LOGGER.info("[VanillaNoiseRouter DBG] center ({},{}) floorY={} surfNorm={} noise={} cellHeight={} depth={} layers={}",
+                        worldX, worldZ, floorY,
+                        String.format("%.3f", surfNorm),
+                        String.format("%.3f", noise),
+                        String.format("%.3f", cellHeight),
+                        String.format("%.3f", scaled - (int) scaled),
+                        layerCount);
+                }
+
+                if (LayerPlacementHelper.injectLayerAt(chunk, worldX, worldZ, layerCount, useSnowLayers)) {
+                    layersPlaced++;
+                }
+            }
+        }
+
+        if (LayerConfig.logVanilla()) {
+            AronaLayersGen.LOGGER.info("[VanillaNoiseRouter] Chunk {},{}: layers={} | skips: snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
+                chunk.getPos().x, chunk.getPos().z, layersPlaced,
+                LayerPlacementHelper.debugSkipSnowy.get(), LayerPlacementHelper.debugSkipNoSurface.get(),
+                LayerPlacementHelper.debugSkipNoMapping.get(), LayerPlacementHelper.debugSkipLayerZero.get(),
+                LayerPlacementHelper.debugSkipNoLayerBlock.get(), LayerPlacementHelper.debugSkipNotAir.get(),
+                LayerPlacementHelper.debugSkipEnclosed.get());
+        }
+    }
+
+    /**
+     * Maps a synthetic cell height [0..1] to a layer count using the same fractional
+     * formula as RTFLayerInjector, with GRADIENT_SCALE tuned for vanilla density functions.
+     *
+     * GRADIENT_SCALE=8 → 8 complete layer-count cycles across the [0..1] height range.
+     * skipReduction=true keeps the unreduced value (used for snowy biomes like RTF does).
+     */
+    private static final float GRADIENT_SCALE = 8.0f;
+
+    private static int calculateNoiseLayerCount(float cellHeight, boolean skipReduction) {
+        float scaled = cellHeight * GRADIENT_SCALE;
+        float depth  = scaled - (int) scaled;
+        int layers   = Math.round(depth * 8);
+        if (!skipReduction) {
+            layers = layers - 1;
+        }
+        if (layers < 1) return 0;
+        return Math.min(8, layers);
+    }
+
+    // ========== Slope path (vanilla_noise_router_layer_injection=false) ==========
+
+    /**
+     * Legacy slope-based injection. Places layers near terrain height transitions:
+     * bottom of slopes get thick layers, tops get thin, flat terrain gets none.
+     */
+    private static void injectLayersSlope(Chunk chunk) {
+        int startX = chunk.getPos().getStartX();
+        int startZ = chunk.getPos().getStartZ();
+        int layersPlaced = 0;
+
+        resetDebugCounters();
 
         Heightmap.Type hmType = (chunk instanceof WorldChunk)
             ? Heightmap.Type.OCEAN_FLOOR : Heightmap.Type.OCEAN_FLOOR_WG;
@@ -70,6 +190,16 @@ public class VanillaLayerInjector {
                 LayerPlacementHelper.debugSkipNoLayerBlock.get(), LayerPlacementHelper.debugSkipNotAir.get(),
                 LayerPlacementHelper.debugSkipEnclosed.get());
         }
+    }
+
+    private static void resetDebugCounters() {
+        LayerPlacementHelper.debugSkipSnowy.set(0);
+        LayerPlacementHelper.debugSkipNoSurface.set(0);
+        LayerPlacementHelper.debugSkipNoMapping.set(0);
+        LayerPlacementHelper.debugSkipLayerZero.set(0);
+        LayerPlacementHelper.debugSkipNoLayerBlock.set(0);
+        LayerPlacementHelper.debugSkipNotAir.set(0);
+        LayerPlacementHelper.debugSkipEnclosed.set(0);
     }
 
     private static int[][] computeGroundHeights(Chunk chunk, Heightmap.Type hmType) {
