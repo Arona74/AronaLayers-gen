@@ -42,7 +42,7 @@ Vanilla terrain generation is also supported (`layer_injection`) but disabled by
 
 The NBT tree feature (`cr_nbt_trees`) requires hand-crafted tree structures in `.nbt` format that are not bundled with the mod.
 
-See **[nbt_trees_guide.md](nbt_trees_guide.md)** for step-by-step instructions on generating this folder from an existing schematic pack by quitefrank_ly.
+See **[nbt_trees_guide.md](scripts/nbt_trees_guide.md)** for step-by-step instructions on generating this folder from an existing schematic pack by quitefrank_ly.
 
 Once generated, place the `nbt_trees/` folder at:
 ```
