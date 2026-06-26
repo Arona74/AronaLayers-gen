@@ -1,6 +1,7 @@
 package io.arona74.aronalayersgen.injection;
 
 import io.arona74.aronalayersgen.AronaLayersGen;
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.BlockMappingRegistry;
 import io.arona74.aronalayersgen.FoliageMappingRegistry;
 import io.arona74.aronalayersgen.LayerConfig;
@@ -235,7 +236,7 @@ public class LayerPlacementHelper {
             for (String suffix : new String[]{"_slab", "_layer"}) {
                 if (path.endsWith(suffix)) {
                     String fullPath = path.substring(0, path.length() - suffix.length());
-                    net.minecraft.util.Identifier fullId = new net.minecraft.util.Identifier(namespace, fullPath);
+                    net.minecraft.util.Identifier fullId = Compat.id(namespace, fullPath);
                     Block fullBlock = net.minecraft.registry.Registries.BLOCK.get(fullId);
                     if (fullBlock != Blocks.AIR) return fullBlock;
                 }

@@ -1,6 +1,7 @@
 package io.arona74.aronalayersgen.injection;
 
 import io.arona74.aronalayersgen.AronaLayersGen;
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.NbtTreeRegistry;
 import net.minecraft.block.Block;
@@ -378,7 +379,7 @@ public class NbtTreeInjector {
 
     private static StructureTemplate loadTemplate(Path path, StructureWorldAccess world) {
         try (InputStream is = Files.newInputStream(path)) {
-            NbtCompound nbt = NbtIo.readCompressed(is);
+            NbtCompound nbt = Compat.readCompressedNbt(is);
             ANCHOR_CACHE.put(path, computeAnchor(nbt));
             StructureTemplate template = new StructureTemplate();
             template.readNbt(world.getRegistryManager().getWrapperOrThrow(RegistryKeys.BLOCK), nbt);

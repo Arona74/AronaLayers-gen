@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "aronalayersgen",
+  "version": "${version}",
+  "name": "Arona Layers Generator",
+  "description": "Generate terrain layer blocks automatically during worldgen using ReTerraForged or vanilla worldgen",
+  "authors": [
+    "arona74"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/aronalayersgen/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "io.arona74.aronalayersgen.AronaLayersGen"
+    ]
+  },
+  "mixins": [
+    "aronalayersgen.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}

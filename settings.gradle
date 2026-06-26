@@ -7,3 +7,8 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
+
+rootProject.name = 'arona-layers-gen'
+
+include ':v1_20_1'
+include ':v1_21_1'
