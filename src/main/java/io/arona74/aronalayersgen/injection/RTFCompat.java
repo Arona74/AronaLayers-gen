@@ -28,6 +28,7 @@ public class RTFCompat {
     private static Method generatorContextMethod;
     private static Method cacheProvideMethod;
     private static Method cachePeekMethod;
+    private static boolean cachePeekReturnsOptional = false;
     private static Method getChunkReaderMethod;
     private static Method getCellMethod;
     private static Method isSubmergedMethod;
@@ -39,10 +40,19 @@ public class RTFCompat {
 
     private static Field generatorField;
     private static Field heightmapFieldOnGenerator;
+    private static Method getHeightmapMethodOnGenerator;
     private static Method getHeightmapMethod;
     private static Field worldHeightField;
 
     private static int cachedWorldHeight = -1;
+    private static boolean nullContextWarned = false;
+    private static boolean nullCacheWarned = false;
+
+    public static void resetWorldState() {
+        cachedWorldHeight = -1;
+        nullContextWarned = false;
+        nullCacheWarned = false;
+    }
 
     public static boolean isRTFAvailable() {
         if (!rtfChecked) {
@@ -74,11 +84,20 @@ public class RTFCompat {
             cacheField = generatorContextClass.getField("cache");
 
             cacheProvideMethod = tileCacheClass.getMethod("provideAtChunk", int.class, int.class);
+            // Prefer a non-blocking "if present" accessor to avoid deadlocks during chunk gen.
+            // Try provideAtChunkIfPresent (returns Tile directly), then peek (returns Optional<Tile>).
             try {
-                cachePeekMethod = tileCacheClass.getMethod("peek", int.class, int.class);
-                AronaLayersGen.LOGGER.info("[RTF] Found TileCache.peek() - will use non-blocking tile access");
-            } catch (NoSuchMethodException e) {
-                AronaLayersGen.LOGGER.warn("[RTF] TileCache.peek() not found, falling back to provideAtChunk (may cause deadlocks)");
+                cachePeekMethod = tileCacheClass.getMethod("provideAtChunkIfPresent", int.class, int.class);
+                cachePeekReturnsOptional = false;
+                AronaLayersGen.LOGGER.info("[RTF] Found TileCache.provideAtChunkIfPresent() - will use non-blocking tile access");
+            } catch (NoSuchMethodException e1) {
+                try {
+                    cachePeekMethod = tileCacheClass.getMethod("peek", int.class, int.class);
+                    cachePeekReturnsOptional = true;
+                    AronaLayersGen.LOGGER.info("[RTF] Found TileCache.peek() - will use non-blocking tile access");
+                } catch (NoSuchMethodException e2) {
+                    AronaLayersGen.LOGGER.warn("[RTF] No non-blocking tile accessor found, falling back to provideAtChunk (may cause deadlocks)");
+                }
             }
             getChunkReaderMethod = tileClass.getMethod("getChunkReader", int.class, int.class);
             getCellMethod = tileChunkClass.getMethod("getCell", int.class, int.class);
@@ -105,7 +124,17 @@ public class RTFCompat {
                     }
                 }
                 if (heightmapFieldOnGenerator == null) {
-                    AronaLayersGen.LOGGER.warn("Could not find Heightmap field on {}. worldHeight will use fallback.", generatorType.getName());
+                    // No public Heightmap field — try getHeightmap() method (used in some RTF versions)
+                    try {
+                        Method m = generatorType.getMethod("getHeightmap");
+                        if (heightmapClass.isAssignableFrom(m.getReturnType())) {
+                            getHeightmapMethodOnGenerator = m;
+                            AronaLayersGen.LOGGER.info("Found Heightmap via {}.getHeightmap()", generatorType.getSimpleName());
+                        }
+                    } catch (NoSuchMethodException ignored) {}
+                }
+                if (heightmapFieldOnGenerator == null && getHeightmapMethodOnGenerator == null) {
+                    AronaLayersGen.LOGGER.warn("Could not find Heightmap on {}. worldHeight will use fallback 256.", generatorType.getName());
                 }
             }
 
@@ -142,16 +171,20 @@ public class RTFCompat {
 
             Object generatorContext = generatorContextMethod.invoke(randomState);
             if (generatorContext == null) {
-                if (LayerConfig.logRtf()) {
-                    AronaLayersGen.LOGGER.info("[RTF] GeneratorContext is null");
+                if (!nullContextWarned) {
+                    nullContextWarned = true;
+                    AronaLayersGen.LOGGER.warn("[RTF] GeneratorContext is null — RTF tile injection disabled. " +
+                        "This is likely a bug in the RTF version you are using (preset lookup may have failed during world init).");
                 }
                 return false;
             }
 
             Object tileCache = cacheField.get(generatorContext);
             if (tileCache == null) {
-                if (LayerConfig.logRtf()) {
-                    AronaLayersGen.LOGGER.info("[RTF] TileCache is null");
+                if (!nullCacheWarned) {
+                    nullCacheWarned = true;
+                    AronaLayersGen.LOGGER.warn("[RTF] TileCache is null — RTF tile injection disabled. " +
+                        "GeneratorContext was created but its cache was not initialized (possible RTF version bug).");
                 }
                 return false;
             }
@@ -162,7 +195,9 @@ public class RTFCompat {
                     Object generator = generatorField.get(generatorContext);
                     if (generator != null) {
                         Object heightmap = generator;
-                        if (heightmapFieldOnGenerator != null) {
+                        if (getHeightmapMethodOnGenerator != null) {
+                            heightmap = getHeightmapMethodOnGenerator.invoke(generator);
+                        } else if (heightmapFieldOnGenerator != null) {
                             heightmap = heightmapFieldOnGenerator.get(generator);
                         }
                         if (heightmap != null) {
@@ -217,7 +252,9 @@ public class RTFCompat {
 
             return true;
         } catch (Exception e) {
-            AronaLayersGen.LOGGER.debug("RTF layer injection failed: {}", e.getMessage());
+            AronaLayersGen.LOGGER.warn("[RTF] Layer injection failed at {},{}: {}: {}",
+                chunk.getPos().x, chunk.getPos().z,
+                e.getClass().getSimpleName(), e.getCause() != null ? e.getCause().toString() : e.getMessage());
             return false;
         }
     }
@@ -234,13 +271,16 @@ public class RTFCompat {
      */
     private static Object getTileNonBlocking(Object tileCache, int chunkX, int chunkZ) throws Exception {
         if (cachePeekMethod != null) {
-            Object optional = cachePeekMethod.invoke(tileCache, chunkX, chunkZ);
-            if (optional == null) return null;
-            // RTF returns Optional<Tile>; unwrap it
-            java.util.Optional<?> opt = (java.util.Optional<?>) optional;
-            return opt.orElse(null);
+            Object result = cachePeekMethod.invoke(tileCache, chunkX, chunkZ);
+            if (cachePeekReturnsOptional) {
+                // peek() returns Optional<Tile>; unwrap it
+                if (result == null) return null;
+                return ((java.util.Optional<?>) result).orElse(null);
+            }
+            // provideAtChunkIfPresent returns Tile directly (null if not cached)
+            return result;
         }
-        // Fallback: provideAtChunk blocks — only reached if peek() wasn't found
+        // Fallback: provideAtChunk blocks — only reached if no non-blocking accessor was found
         return cacheProvideMethod.invoke(tileCache, chunkX, chunkZ);
     }
 }

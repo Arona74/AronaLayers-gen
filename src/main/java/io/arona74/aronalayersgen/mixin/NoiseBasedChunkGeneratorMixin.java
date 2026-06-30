@@ -65,19 +65,13 @@ public class NoiseBasedChunkGeneratorMixin {
 
                 if (rtfAvailable) {
                     if (isPostFeaturesMode) {
-                        if (LayerConfig.logChunkInit())
-                            AronaLayersGen.LOGGER.info("[ChunkInit] RTF inject START {},{}", chunk.getPos().x, chunk.getPos().z);
-                        boolean rtfSuccess = RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
-                        if (LayerConfig.logChunkInit()) {
-                            AronaLayersGen.LOGGER.info("[ChunkInit] RTF inject DONE {},{} ms={} success={}",
-                                chunk.getPos().x, chunk.getPos().z, (System.nanoTime() - stepStart) / 1_000_000L, rtfSuccess);
-                            stepStart = System.nanoTime();
-                        }
-                        if (!rtfSuccess && LayerConfig.LAYER_INJECTION) {
-                            AronaLayersGen.LOGGER.warn("[ChunkInit] RTF tile miss at {},{} — falling back to vanilla injection (chunk was likely reset)",
-                                chunk.getPos().x, chunk.getPos().z);
-                            VanillaLayerInjector.injectLayers(chunk, null);
-                        }
+                        // In POST_FEATURES mode, ChunkGeneratorFeaturesMixin is the primary injector
+                        // (fires at generateFeatures() RETURN, while the tile is still in cache).
+                        // On NeoForge+ETcomehome the tile is dropped before WorldChunk.<init> fires,
+                        // so the RTF attempt here will always miss. Do not run the vanilla fallback:
+                        // ChunkGeneratorFeaturesMixin already placed RTF layers (or its own vanilla
+                        // fallback). Calling vanilla here would overwrite correct RTF layers.
+                        RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
                     } else {
                         // CARVERS mode: layers placed earlier, run correction pass
                         RTFLayerInjector.correctMismatchedLayers(chunk);

@@ -31,6 +31,14 @@ public class RandomStateHolder {
     }
 
     public static void setRandomState(Object randomState) {
+        if (rtfRandomState != null) {
+            // Only keep the first RTFRandomState captured. On NeoForge, ChunkMap is constructed
+            // for every dimension (Overworld first, then Nether, End). ETcomehome only creates
+            // generatorContext for the Overworld (reterraforged$isRTFDimension = true), so later
+            // dimensions would overwrite the Overworld's state with a null-generatorContext one.
+            AronaLayersGen.LOGGER.debug("[RandomStateHolder] Ignoring additional RTFRandomState (keeping Overworld's): {}", randomState.getClass().getName());
+            return;
+        }
         if (randomState != null && isRTFRandomState(randomState)) {
             rtfRandomState = randomState;
             AronaLayersGen.LOGGER.info("[RandomStateHolder] Captured RTFRandomState: {}", randomState.getClass().getName());

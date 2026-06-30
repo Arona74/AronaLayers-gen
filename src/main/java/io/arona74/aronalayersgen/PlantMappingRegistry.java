@@ -41,6 +41,21 @@ public class PlantMappingRegistry {
             registerPlantMapping(vanillaBlock, entry.getValue());
         }
 
+        // 1.21.1 compat: "minecraft:grass" was renamed to "minecraft:short_grass".
+        // If the config used the old name (block not found above) but short_grass exists,
+        // auto-alias it to the same conquest mapping. No-op on 1.20.1 where short_grass is AIR.
+        String grassMapping = configMappings.get("minecraft:grass");
+        if (grassMapping != null) {
+            Identifier shortGrassId = Identifier.tryParse("minecraft:short_grass");
+            if (shortGrassId != null) {
+                Block shortGrass = Registries.BLOCK.get(shortGrassId);
+                if (shortGrass != Blocks.AIR && !vanillaToConquestPlant.containsKey(shortGrass)) {
+                    registerPlantMapping(shortGrass, grassMapping);
+                    AronaLayersGen.LOGGER.info("Auto-aliased minecraft:short_grass -> {} (renamed from minecraft:grass in 1.21.1)", grassMapping);
+                }
+            }
+        }
+
         AronaLayersGen.LOGGER.info("Registered {} plant mappings from config", vanillaToConquestPlant.size());
     }
 
