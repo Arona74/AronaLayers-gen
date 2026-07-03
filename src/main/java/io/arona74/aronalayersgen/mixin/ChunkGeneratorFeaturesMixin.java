@@ -51,8 +51,10 @@ public class ChunkGeneratorFeaturesMixin {
         }
 
         try {
+            ChunkRegion chunkRegion = null;
             ServerWorld serverWorld = null;
             if (world instanceof ChunkRegion region) {
+                chunkRegion = region;
                 @SuppressWarnings("deprecation")
                 ServerWorld regionWorld = region.toServerWorld();
                 serverWorld = regionWorld;
@@ -65,7 +67,16 @@ public class ChunkGeneratorFeaturesMixin {
             }
 
             if (LayerConfig.STRUCTURE_INJECTION) {
-                LayerPlacementHelper.prepareStructureBoundsWithWorld(chunk, serverWorld);
+                // During normal generation world is a ChunkRegion.
+                // region.getChunk() works for ProtoChunks (neighbouring chunks are not yet
+                // WorldChunks at FEATURES time), so cross-chunk structure starts and footprints
+                // are resolved correctly. Fall back to the ServerWorld path only for reset
+                // chunks where world arrives as a plain ServerWorld.
+                if (chunkRegion != null) {
+                    LayerPlacementHelper.prepareStructureBounds(chunk, chunkRegion);
+                } else {
+                    LayerPlacementHelper.prepareStructureBoundsWithWorld(chunk, serverWorld);
+                }
             }
 
             if (LayerConfig.RTF_LAYER_INJECTION) {

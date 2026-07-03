@@ -148,6 +148,7 @@ public class RTFLayerInjector {
         debugSkipSubmerged.set(0);
         LayerPlacementHelper.debugSkipSnowy.set(0);
         LayerPlacementHelper.debugSkipNoSurface.set(0);
+        LayerPlacementHelper.debugSkipConservativeSurface.set(0);
         LayerPlacementHelper.debugSkipNoMapping.set(0);
         LayerPlacementHelper.debugSkipLayerZero.set(0);
         LayerPlacementHelper.debugSkipNoLayerBlock.set(0);
@@ -194,10 +195,11 @@ public class RTFLayerInjector {
         }
 
         if (LayerConfig.logRtf()) {
-            AronaLayersGen.LOGGER.info("[RTF] Chunk {},{}: cells={}, null={}, layers={} | skips: river={}, submerged={}, snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
+            AronaLayersGen.LOGGER.info("[RTF] Chunk {},{}: cells={}, null={}, layers={} | skips: river={}, submerged={}, snowy={}, noSurf={}, conserv={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
                 chunk.getPos().x, chunk.getPos().z, cellsProcessed, cellsNull, layersPlaced,
                 debugSkipRiver.get(), debugSkipSubmerged.get(),
                 LayerPlacementHelper.debugSkipSnowy.get(), LayerPlacementHelper.debugSkipNoSurface.get(),
+                LayerPlacementHelper.debugSkipConservativeSurface.get(),
                 LayerPlacementHelper.debugSkipNoMapping.get(), LayerPlacementHelper.debugSkipLayerZero.get(),
                 LayerPlacementHelper.debugSkipNoLayerBlock.get(), LayerPlacementHelper.debugSkipNotAir.get(),
                 LayerPlacementHelper.debugSkipEnclosed.get());

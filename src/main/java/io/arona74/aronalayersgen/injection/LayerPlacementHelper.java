@@ -554,10 +554,12 @@ public class LayerPlacementHelper {
     }
 
     private static final ThreadLocal<List<BlockBox>> structureBoundsLocal = new ThreadLocal<>();
+    private static final ThreadLocal<List<BlockBox>> structureFootprintLocal = new ThreadLocal<>();
 
     public static void prepareStructureBounds(Chunk chunk, ChunkRegion region) {
         if (!LayerConfig.STRUCTURE_INJECTION) {
             structureBoundsLocal.remove();
+            structureFootprintLocal.remove();
             return;
         }
 
@@ -630,6 +632,41 @@ public class LayerPlacementHelper {
         // which causes isInsideStructure to fall back to a per-call scan.
         // An empty list means "called and found nothing" — isInsideStructure returns false immediately.
         structureBoundsLocal.set(bounds);
+
+        // Footprint: hull of each StructureStart's pieces.
+        List<BlockBox> footprints = new ArrayList<>();
+        if (LayerConfig.STRUCTURE_FOOTPRINT_CHECK) {
+            try {
+                for (StructureStart start : chunk.getStructureStarts().values()) {
+                    if (start == StructureStart.DEFAULT || start.getChildren().isEmpty()) continue;
+                    footprints.add(start.getBoundingBox());
+                }
+                if (region != null && LayerConfig.CROSS_CHUNK_STRUCTURE_DETECTION) {
+                    Map<Structure, LongSet> refs = chunk.getStructureReferences();
+                    for (Map.Entry<Structure, LongSet> entry : refs.entrySet()) {
+                        Structure structure = entry.getKey();
+                        for (long packedPos : entry.getValue()) {
+                            int refChunkX = ChunkPos.getPackedX(packedPos);
+                            int refChunkZ = ChunkPos.getPackedZ(packedPos);
+                            try {
+                                Chunk refChunk = region.getChunk(refChunkX, refChunkZ);
+                                if (refChunk != null) {
+                                    StructureStart refStart = refChunk.getStructureStart(structure);
+                                    if (refStart != null && refStart != StructureStart.DEFAULT && !refStart.getChildren().isEmpty()) {
+                                        footprints.add(refStart.getBoundingBox());
+                                    }
+                                }
+                            } catch (Exception e) {
+                                // Neighboring chunk not available, skip
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                AronaLayersGen.LOGGER.debug("[Structure] Error collecting footprint bounds: {}", e.getMessage());
+            }
+        }
+        structureFootprintLocal.set(footprints);
     }
 
     /**
@@ -641,6 +678,7 @@ public class LayerPlacementHelper {
     public static void prepareStructureBoundsWithWorld(Chunk chunk, ServerWorld world) {
         if (!LayerConfig.STRUCTURE_INJECTION) {
             structureBoundsLocal.remove();
+            structureFootprintLocal.remove();
             return;
         }
 
@@ -712,10 +750,46 @@ public class LayerPlacementHelper {
         }
 
         structureBoundsLocal.set(bounds);
+
+        // Footprint: hull of each StructureStart's pieces.
+        List<BlockBox> footprints = new ArrayList<>();
+        if (LayerConfig.STRUCTURE_FOOTPRINT_CHECK) {
+            try {
+                for (StructureStart start : chunk.getStructureStarts().values()) {
+                    if (start == StructureStart.DEFAULT || start.getChildren().isEmpty()) continue;
+                    footprints.add(start.getBoundingBox());
+                }
+                if (world != null) {
+                    Map<Structure, LongSet> refs = chunk.getStructureReferences();
+                    for (Map.Entry<Structure, LongSet> entry : refs.entrySet()) {
+                        Structure structure = entry.getKey();
+                        for (long packedPos : entry.getValue()) {
+                            int refChunkX = ChunkPos.getPackedX(packedPos);
+                            int refChunkZ = ChunkPos.getPackedZ(packedPos);
+                            try {
+                                WorldChunk refChunk = world.getChunkManager().getWorldChunk(refChunkX, refChunkZ);
+                                if (refChunk != null) {
+                                    StructureStart refStart = refChunk.getStructureStart(structure);
+                                    if (refStart != null && refStart != StructureStart.DEFAULT && !refStart.getChildren().isEmpty()) {
+                                        footprints.add(refStart.getBoundingBox());
+                                    }
+                                }
+                            } catch (Exception e) {
+                                // Neighboring chunk not available, skip
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                AronaLayersGen.LOGGER.debug("[Structure] Error collecting footprint bounds: {}", e.getMessage());
+            }
+        }
+        structureFootprintLocal.set(footprints);
     }
 
     public static void clearStructureBounds() {
         structureBoundsLocal.remove();
+        structureFootprintLocal.remove();
     }
 
     // ========== Second-Pass Cleanup ==========
@@ -831,8 +905,10 @@ public class LayerPlacementHelper {
             BlockPos checkPos = pos.up(dy);
             BlockState state = chunk.getBlockState(checkPos);
 
-            if (state.isAir() || state.getBlock() == Blocks.WATER) continue;
-            if (!state.isOpaque()) continue;
+            if (state.isAir()) continue;
+            // Replaceable blocks (tall grass, flowers, snow layers, water) are not ceilings.
+            // Non-replaceable non-air blocks (stairs, slabs, glass, stone, fences, etc.) are.
+            if (state.isReplaceable()) continue;
 
             return true;
         }
@@ -876,6 +952,21 @@ public class LayerPlacementHelper {
                     return true;
                 }
             }
+            // Footprint check: XZ hull of each StructureStart, with Y range constraint.
+            // Catches cleared ground, plazas and paths between piece boxes.
+            if (LayerConfig.STRUCTURE_FOOTPRINT_CHECK) {
+                List<BlockBox> footprints = structureFootprintLocal.get();
+                if (footprints != null) {
+                    for (BlockBox box : footprints) {
+                        if (box.getMinX() <= pos.getX() && pos.getX() <= box.getMaxX()
+                                && box.getMinZ() <= pos.getZ() && pos.getZ() <= box.getMaxZ()
+                                && pos.getY() <= box.getMaxY() + LayerConfig.STRUCTURE_FOOTPRINT_ABOVE_MARGIN
+                                && pos.getY() >= box.getMinY() - LayerConfig.STRUCTURE_FOOTPRINT_BELOW_MARGIN) {
+                            return true;
+                        }
+                    }
+                }
+            }
             return false;
         }
 
@@ -895,6 +986,16 @@ public class LayerPlacementHelper {
                             && box.getMinX() - xzExpand <= pos.getX() && pos.getX() <= box.getMaxX() + xzExpand
                             && box.getMinZ() - xzExpand <= pos.getZ() && pos.getZ() <= box.getMaxZ() + xzExpand
                             && pos.getY() >= box.getMinY() - 2 && pos.getY() <= box.getMaxY()) {
+                        return true;
+                    }
+                }
+                // Footprint check in the fallback (no ThreadLocal) path
+                if (LayerConfig.STRUCTURE_FOOTPRINT_CHECK && !start.getChildren().isEmpty()) {
+                    BlockBox box = start.getBoundingBox();
+                    if (box.getMinX() <= pos.getX() && pos.getX() <= box.getMaxX()
+                            && box.getMinZ() <= pos.getZ() && pos.getZ() <= box.getMaxZ()
+                            && pos.getY() <= box.getMaxY() + LayerConfig.STRUCTURE_FOOTPRINT_ABOVE_MARGIN
+                            && pos.getY() >= box.getMinY() - LayerConfig.STRUCTURE_FOOTPRINT_BELOW_MARGIN) {
                         return true;
                     }
                 }
@@ -921,6 +1022,7 @@ public class LayerPlacementHelper {
     public static final AtomicInteger debugSkipNotAir = new AtomicInteger();
     public static final AtomicInteger debugSkipEnclosed = new AtomicInteger();
     public static final AtomicInteger debugSkipStructureElevated = new AtomicInteger();
+    public static final AtomicInteger debugSkipConservativeSurface = new AtomicInteger();
 
     // ========== Structure Elevation Block Filter ==========
 
@@ -988,6 +1090,31 @@ public class LayerPlacementHelper {
         if (surfaceY <= chunk.getBottomY()) {
             debugSkipNoSurface.incrementAndGet();
             return false;
+        }
+
+        // Conservative surface heightmap: skip if the actual surface Y deviates from RTF's
+        // noise-derived base Y by more than the configured tolerance. A deviation means a
+        // structure (or other feature) has raised or lowered the terrain at this column.
+        // Uses the raw heightmap value (surfaceY - 1) before any scan-down adjustments so
+        // it reflects what is actually sitting at the top of the terrain right now.
+        if (LayerConfig.CONSERVATIVE_SURFACE_HEIGHTMAP && rtfExpectedBaseY != Integer.MIN_VALUE) {
+            int delta = (surfaceY - 1) - rtfExpectedBaseY;
+            if (delta > LayerConfig.CONSERVATIVE_SURFACE_TOLERANCE_UP
+                    || delta < -LayerConfig.CONSERVATIVE_SURFACE_TOLERANCE_DOWN) {
+                if (LayerConfig.CONSERVATIVE_SURFACE_FALLBACK) {
+                    int fallback = delta > 0
+                        ? LayerConfig.CONSERVATIVE_SURFACE_FALLBACK_VALUE_UP
+                        : LayerConfig.CONSERVATIVE_SURFACE_FALLBACK_VALUE_DOWN;
+                    if (fallback <= 0) {
+                        debugSkipConservativeSurface.incrementAndGet();
+                        return false;
+                    }
+                    layerCount = fallback;
+                } else {
+                    debugSkipConservativeSurface.incrementAndGet();
+                    return false;
+                }
+            }
         }
 
         boolean isSnowyBiome = false;
@@ -1633,7 +1760,7 @@ public class LayerPlacementHelper {
                     boolean shouldRemove = false;
 
                     BlockState aboveState = chunk.getBlockState(layerPos.up());
-                    if (!aboveState.isAir() && aboveState.isOpaque()) {
+                    if (!aboveState.isReplaceable()) {
                         shouldRemove = true;
                     }
 

@@ -149,6 +149,71 @@ public class LayerConfig {
     public static boolean STRUCTURE_CLEANUP = false;
 
     /**
+     * Enable structure footprint detection.
+     * In addition to piece-level bounding boxes (STRUCTURE_INJECTION), also suppresses layers
+     * within the overall XZ footprint of each StructureStart (the hull of all its pieces).
+     * This catches the cleared ground, plazas, and paths between buildings that fall between
+     * individual piece boxes. Trees are not affected (they have no StructureStart).
+     * Requires STRUCTURE_INJECTION.
+     */
+    public static boolean STRUCTURE_FOOTPRINT_CHECK = false;
+
+    /**
+     * How many blocks below the structure start's minimum Y to still suppress layers.
+     * Handles terrain that was carved into (paths dug into a hillside, excavated basements).
+     * Default 8. Requires STRUCTURE_FOOTPRINT_CHECK.
+     */
+    public static int STRUCTURE_FOOTPRINT_BELOW_MARGIN = 8;
+
+    /**
+     * How many blocks above the structure start's maximum Y to still suppress layers.
+     * RTF terrain within a structure footprint can sit a few blocks above the highest
+     * roof piece; without this margin those columns escape detection. Keep small to
+     * avoid suppressing surface layers that are legitimately above an underground
+     * structure (e.g. a mineshaft at Y=50 vs. surface at Y=65).
+     * Default 4. Requires STRUCTURE_FOOTPRINT_CHECK.
+     */
+    public static int STRUCTURE_FOOTPRINT_ABOVE_MARGIN = 4;
+
+    /**
+     * At injection time, compare the current surface Y against RTF's noise-derived base Y.
+     * If they differ by more than CONSERVATIVE_SURFACE_TOLERANCE blocks, skip the layer.
+     * Detects structure modification (terrain raised or lowered) per column without relying
+     * on bounding boxes. RTF-only (requires rtfExpectedBaseY). Default false.
+     */
+    public static boolean CONSERVATIVE_SURFACE_HEIGHTMAP = false;
+
+    /**
+     * Maximum upward deviation (in blocks) allowed between the actual surface Y and RTF's
+     * expected base Y. 1 tolerates natural snow (+1 block) while still catching structures
+     * that raised the terrain by 2+. Default 1.
+     */
+    public static int CONSERVATIVE_SURFACE_TOLERANCE_UP = 1;
+
+    /**
+     * Maximum downward deviation (in blocks) allowed between the actual surface Y and RTF's
+     * expected base Y. 0 is strict (natural terrain sits exactly at RTF's base Y); increase
+     * if natural terrain variation causes false positives on downward slopes. Default 0.
+     */
+    public static int CONSERVATIVE_SURFACE_TOLERANCE_DOWN = 0;
+
+    /**
+     * When conservative_surface_heightmap detects a modified column (deviation beyond tolerance),
+     * place a layer with a fixed value instead of skipping entirely. Default false.
+     */
+    public static boolean CONSERVATIVE_SURFACE_FALLBACK = false;
+
+    /**
+     * Layer value (1-8) to use when the surface is above RTF's expected base (terrain raised by structure). Default 1.
+     */
+    public static int CONSERVATIVE_SURFACE_FALLBACK_VALUE_UP = 1;
+
+    /**
+     * Layer value (1-8) to use when the surface is below RTF's expected base (terrain lowered by structure). Default 1.
+     */
+    public static int CONSERVATIVE_SURFACE_FALLBACK_VALUE_DOWN = 1;
+
+    /**
      * Enable heightmap-based structure detection.
      * Removes layers where structures changed the heightmap.
      */
@@ -364,6 +429,15 @@ public class LayerConfig {
         if (config.has("enclosed_space_check")) ENCLOSED_SPACE_CHECK = config.get("enclosed_space_check").getAsBoolean();
         if (config.has("enclosed_space_height")) ENCLOSED_SPACE_HEIGHT = config.get("enclosed_space_height").getAsInt();
         if (config.has("structure_cleanup")) STRUCTURE_CLEANUP = config.get("structure_cleanup").getAsBoolean();
+        if (config.has("structure_footprint_check")) STRUCTURE_FOOTPRINT_CHECK = config.get("structure_footprint_check").getAsBoolean();
+        if (config.has("structure_footprint_below_margin")) STRUCTURE_FOOTPRINT_BELOW_MARGIN = config.get("structure_footprint_below_margin").getAsInt();
+        if (config.has("structure_footprint_above_margin")) STRUCTURE_FOOTPRINT_ABOVE_MARGIN = config.get("structure_footprint_above_margin").getAsInt();
+        if (config.has("conservative_surface_heightmap")) CONSERVATIVE_SURFACE_HEIGHTMAP = config.get("conservative_surface_heightmap").getAsBoolean();
+        if (config.has("conservative_surface_tolerance_up")) CONSERVATIVE_SURFACE_TOLERANCE_UP = config.get("conservative_surface_tolerance_up").getAsInt();
+        if (config.has("conservative_surface_tolerance_down")) CONSERVATIVE_SURFACE_TOLERANCE_DOWN = config.get("conservative_surface_tolerance_down").getAsInt();
+        if (config.has("conservative_surface_fallback")) CONSERVATIVE_SURFACE_FALLBACK = config.get("conservative_surface_fallback").getAsBoolean();
+        if (config.has("conservative_surface_fallback_value_up")) CONSERVATIVE_SURFACE_FALLBACK_VALUE_UP = config.get("conservative_surface_fallback_value_up").getAsInt();
+        if (config.has("conservative_surface_fallback_value_down")) CONSERVATIVE_SURFACE_FALLBACK_VALUE_DOWN = config.get("conservative_surface_fallback_value_down").getAsInt();
         if (config.has("structure_no_layers")) STRUCTURE_NO_LAYERS = config.get("structure_no_layers").getAsBoolean();
         if (config.has("structure_skip_elevated")) STRUCTURE_SKIP_ELEVATED = config.get("structure_skip_elevated").getAsBoolean();
         if (config.has("structure_replace_elevated")) STRUCTURE_REPLACE_ELEVATED = config.get("structure_replace_elevated").getAsBoolean();
@@ -457,6 +531,15 @@ public class LayerConfig {
             config.addProperty("enclosed_space_check", ENCLOSED_SPACE_CHECK);
             config.addProperty("enclosed_space_height", ENCLOSED_SPACE_HEIGHT);
             config.addProperty("structure_cleanup", STRUCTURE_CLEANUP);
+            config.addProperty("structure_footprint_check", STRUCTURE_FOOTPRINT_CHECK);
+            config.addProperty("structure_footprint_below_margin", STRUCTURE_FOOTPRINT_BELOW_MARGIN);
+            config.addProperty("structure_footprint_above_margin", STRUCTURE_FOOTPRINT_ABOVE_MARGIN);
+            config.addProperty("conservative_surface_heightmap", CONSERVATIVE_SURFACE_HEIGHTMAP);
+            config.addProperty("conservative_surface_tolerance_up", CONSERVATIVE_SURFACE_TOLERANCE_UP);
+            config.addProperty("conservative_surface_tolerance_down", CONSERVATIVE_SURFACE_TOLERANCE_DOWN);
+            config.addProperty("conservative_surface_fallback", CONSERVATIVE_SURFACE_FALLBACK);
+            config.addProperty("conservative_surface_fallback_value_up", CONSERVATIVE_SURFACE_FALLBACK_VALUE_UP);
+            config.addProperty("conservative_surface_fallback_value_down", CONSERVATIVE_SURFACE_FALLBACK_VALUE_DOWN);
             config.addProperty("structure_no_layers", STRUCTURE_NO_LAYERS);
             config.addProperty("structure_skip_elevated", STRUCTURE_SKIP_ELEVATED);
             config.addProperty("structure_replace_elevated", STRUCTURE_REPLACE_ELEVATED);
