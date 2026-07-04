@@ -188,7 +188,7 @@ public class LayerConfig {
      * expected base Y. 1 tolerates natural snow (+1 block) while still catching structures
      * that raised the terrain by 2+. Default 1.
      */
-    public static int CONSERVATIVE_SURFACE_TOLERANCE_UP = 1;
+    public static int CONSERVATIVE_SURFACE_TOLERANCE_UP = 0;
 
     /**
      * Maximum downward deviation (in blocks) allowed between the actual surface Y and RTF's
@@ -204,14 +204,14 @@ public class LayerConfig {
     public static boolean CONSERVATIVE_SURFACE_FALLBACK = false;
 
     /**
-     * Layer value (1-8) to use when the surface is above RTF's expected base (terrain raised by structure). Default 1.
+     * Layer value (1-8) to use when the surface is above RTF's expected base (terrain raised by structure), set to 0 to skip. Default 0.
      */
-    public static int CONSERVATIVE_SURFACE_FALLBACK_VALUE_UP = 1;
+    public static int CONSERVATIVE_SURFACE_FALLBACK_VALUE_UP = 0;
 
     /**
-     * Layer value (1-8) to use when the surface is below RTF's expected base (terrain lowered by structure). Default 1.
+     * Layer value (1-8) to use when the surface is below RTF's expected base (terrain lowered by structure), set to 0 to skip. Default 4.
      */
-    public static int CONSERVATIVE_SURFACE_FALLBACK_VALUE_DOWN = 1;
+    public static int CONSERVATIVE_SURFACE_FALLBACK_VALUE_DOWN = 4;
 
     /**
      * Enable heightmap-based structure detection.
