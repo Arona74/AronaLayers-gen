@@ -40,6 +40,16 @@ public class LayerConfig {
     public static boolean RTF_LAYER_INJECTION = false;
 
     /**
+     * Enable layer injection using Tellus (Earth-scale geo terrain) elevation data.
+     * When enabled and Tellus is installed, layers are generated from Tellus's real-world
+     * Digital Elevation Model: the sub-block fractional part of each column's continuous
+     * elevation drives the layer count (same formula as RTF injection), and the ESA
+     * WorldCover land-cover class is sampled for water/snow handling.
+     * Runs through the POST_FEATURES hook. Requires the Tellus mod. Requires game restart.
+     */
+    public static boolean TELLUS_LAYER_INJECTION = false;
+
+    /**
      * Use vanilla's NoiseRouter density functions (continents, erosion, ridges) to
      * compute a synthetic cell height for layer placement, replacing the slope-based
      * heuristic. Applies the same fractional formula as RTF layer injection for smooth,
@@ -78,6 +88,7 @@ public class LayerConfig {
     public static boolean DEBUG_LOG_TREE_SOIL          = true;
     public static boolean DEBUG_LOG_VANILLA            = true;
     public static boolean DEBUG_LOG_NBT_TREES          = true;
+    public static boolean DEBUG_LOG_TELLUS             = true;
 
     public static boolean logChunkInit()         { return DEBUG_LOGGING && DEBUG_LOG_CHUNK_INIT; }
     public static boolean logRtf()               { return DEBUG_LOGGING && DEBUG_LOG_RTF; }
@@ -93,6 +104,7 @@ public class LayerConfig {
     public static boolean logTreeSoil()          { return DEBUG_LOGGING && DEBUG_LOG_TREE_SOIL; }
     public static boolean logVanilla()           { return DEBUG_LOGGING && DEBUG_LOG_VANILLA; }
     public static boolean logNbtTrees()          { return DEBUG_LOGGING && DEBUG_LOG_NBT_TREES; }
+    public static boolean logTellus()            { return DEBUG_LOGGING && DEBUG_LOG_TELLUS; }
 
     /**
      * Enable layer placement on underwater surfaces.
@@ -395,6 +407,7 @@ public class LayerConfig {
         JsonObject config = GSON.fromJson(reader, JsonObject.class);
         if (config.has("layer_injection")) LAYER_INJECTION = config.get("layer_injection").getAsBoolean();
         if (config.has("rtf_layer_injection")) RTF_LAYER_INJECTION = config.get("rtf_layer_injection").getAsBoolean();
+        if (config.has("tellus_layer_injection")) TELLUS_LAYER_INJECTION = config.get("tellus_layer_injection").getAsBoolean();
         if (config.has("vanilla_noise_router_layer_injection")) VANILLA_NOISE_ROUTER_LAYER_INJECTION = config.get("vanilla_noise_router_layer_injection").getAsBoolean();
         if (config.has("injection_mode")) {
             try {
@@ -419,6 +432,7 @@ public class LayerConfig {
         if (config.has("debug_log_tree_soil")) DEBUG_LOG_TREE_SOIL = config.get("debug_log_tree_soil").getAsBoolean();
         if (config.has("debug_log_vanilla")) DEBUG_LOG_VANILLA = config.get("debug_log_vanilla").getAsBoolean();
         if (config.has("debug_log_nbt_trees")) DEBUG_LOG_NBT_TREES = config.get("debug_log_nbt_trees").getAsBoolean();
+        if (config.has("debug_log_tellus")) DEBUG_LOG_TELLUS = config.get("debug_log_tellus").getAsBoolean();
         if (config.has("underwater_layers")) UNDERWATER_LAYERS = config.get("underwater_layers").getAsBoolean();
         if (config.has("plant_injection")) PLANT_INJECTION = config.get("plant_injection").getAsBoolean();
         if (config.has("tree_injection")) TREE_INJECTION = config.get("tree_injection").getAsBoolean();
@@ -504,6 +518,7 @@ public class LayerConfig {
             config.addProperty("_comment", "Configuration for Arona Layers Generator. Edit this file to customize layer generation.");
             config.addProperty("layer_injection", LAYER_INJECTION);
             config.addProperty("rtf_layer_injection", RTF_LAYER_INJECTION);
+            config.addProperty("tellus_layer_injection", TELLUS_LAYER_INJECTION);
             config.addProperty("vanilla_noise_router_layer_injection", VANILLA_NOISE_ROUTER_LAYER_INJECTION);
             config.addProperty("injection_mode", INJECTION_MODE.name());
             config.addProperty("skip_snowy_biomes", SKIP_SNOWY_BIOMES);
@@ -564,6 +579,7 @@ public class LayerConfig {
             config.addProperty("cr_nbt_trees", CR_NBT_TREES);
             config.addProperty("cr_nbt_trees_vanilla_fallback", CR_NBT_TREES_VANILLA_FALLBACK);
             config.addProperty("debug_log_nbt_trees", DEBUG_LOG_NBT_TREES);
+            config.addProperty("debug_log_tellus", DEBUG_LOG_TELLUS);
 
             try (Writer writer = Files.newBufferedWriter(configPath)) {
                 GSON.newBuilder().setPrettyPrinting().create().toJson(config, writer);

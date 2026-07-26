@@ -1067,15 +1067,26 @@ public class LayerPlacementHelper {
      * Use Integer.MIN_VALUE when RTF data is not available (falls back to snapshot).
      */
     public static boolean injectLayerAt(Chunk chunk, int worldX, int worldZ, int layerCount, boolean useSnowLayers, int rtfExpectedBaseY) {
-        return injectLayerAtImpl(chunk, worldX, worldZ, layerCount, useSnowLayers, rtfExpectedBaseY);
+        return injectLayerAtImpl(chunk, worldX, worldZ, layerCount, useSnowLayers, rtfExpectedBaseY, false);
     }
 
     /** Non-RTF callers: no expected base Y available, falls back to snapshot. */
     public static boolean injectLayerAt(Chunk chunk, int worldX, int worldZ, int layerCount, boolean useSnowLayers) {
-        return injectLayerAtImpl(chunk, worldX, worldZ, layerCount, useSnowLayers, Integer.MIN_VALUE);
+        return injectLayerAtImpl(chunk, worldX, worldZ, layerCount, useSnowLayers, Integer.MIN_VALUE, false);
     }
 
-    private static boolean injectLayerAtImpl(Chunk chunk, int worldX, int worldZ, int layerCount, boolean useSnowLayers, int rtfExpectedBaseY) {
+    /**
+     * Tellus variant. Same as {@link #injectLayerAt(Chunk,int,int,int,boolean,int)} but, when the
+     * OCEAN_FLOOR surface block is a {@code minecraft:snow} layer (Tellus places these — typically
+     * value 8 — as the top block on snowy columns), a snow layer of {@code layerCount} is placed
+     * ON TOP of the snow stack instead of trying to map the snow as a material surface. RTF and
+     * vanilla keep their existing snow handling, so this behaviour is Tellus-only.
+     */
+    public static boolean injectLayerAtTellus(Chunk chunk, int worldX, int worldZ, int layerCount, boolean useSnowLayers, int expectedBaseY) {
+        return injectLayerAtImpl(chunk, worldX, worldZ, layerCount, useSnowLayers, expectedBaseY, true);
+    }
+
+    private static boolean injectLayerAtImpl(Chunk chunk, int worldX, int worldZ, int layerCount, boolean useSnowLayers, int rtfExpectedBaseY, boolean tellusOverSnow) {
         int localX = worldX & 15;
         int localZ = worldZ & 15;
 
@@ -1090,6 +1101,61 @@ public class LayerPlacementHelper {
         if (surfaceY <= chunk.getBottomY()) {
             debugSkipNoSurface.incrementAndGet();
             return false;
+        }
+
+        // Tellus covers snowy columns with a snow_block (Blocks.SNOW_BLOCK) during the surface
+        // build. Without intervention the mod's snowy path converts that to snow[8] in place; we
+        // instead want a snow-layer terrace of our computed count ABOVE it. Normalise a snow_block
+        // to snow[8] so the whole stack reads as snow layers, and stack our layer above.
+        //
+        // Detection reads block states directly rather than a heightmap: Tellus builds some chunks
+        // via a section-writer fast path that can leave the WG heightmaps stale at generateFeatures
+        // time (which was making snow detection chunk-dependent). Anchor the scan on the DEM
+        // surface Y we were handed (rtfExpectedBaseY = ceil(scaled)+offset, where Tellus places the
+        // snow), falling back to WORLD_SURFACE only when no DEM base is available. Tellus-only; runs
+        // before the snowy-biome skip because these are exactly the columns the user wants layered.
+        if (tellusOverSnow) {
+            int anchor;
+            if (rtfExpectedBaseY != Integer.MIN_VALUE) {
+                anchor = rtfExpectedBaseY + 2;
+            } else {
+                Heightmap.Type wsType = isWorldChunk ? Heightmap.Type.WORLD_SURFACE : Heightmap.Type.WORLD_SURFACE_WG;
+                anchor = chunk.getHeightmap(wsType).get(localX, localZ) + 1;
+            }
+            int topSnowY = Integer.MIN_VALUE;
+            Block topBlock = null;
+            int lo = Math.max(chunk.getBottomY() + 1, anchor - 4);
+            for (int y = anchor; y >= lo; y--) {
+                Block b = chunk.getBlockState(new BlockPos(worldX, y, worldZ)).getBlock();
+                if (b == Blocks.SNOW_BLOCK || b == Blocks.SNOW) {
+                    topSnowY = y;
+                    topBlock = b;
+                    break;
+                }
+            }
+            if (topSnowY != Integer.MIN_VALUE) {
+                if (layerCount <= 0) {
+                    debugSkipLayerZero.incrementAndGet();
+                    return false;
+                }
+                BlockPos topPos = new BlockPos(worldX, topSnowY, worldZ);
+                BlockPos snowAbove = topPos.up();
+                if (!chunk.getBlockState(snowAbove).isAir()) {
+                    debugSkipNotAir.incrementAndGet();
+                    return false;
+                }
+                if (LayerConfig.STRUCTURE_INJECTION && isInsideStructure(chunk, snowAbove)) {
+                    return false;
+                }
+                // Normalise a full snow_block surface to snow[8] so the terrace above reads as
+                // continuous snow layers rather than sitting on a distinct snow_block.
+                if (topBlock == Blocks.SNOW_BLOCK) {
+                    setBlockStateSafe(chunk, topPos, Blocks.SNOW.getDefaultState().with(Properties.LAYERS, 8));
+                }
+                setBlockStateSafe(chunk, snowAbove, Blocks.SNOW.getDefaultState()
+                    .with(Properties.LAYERS, Math.min(8, layerCount)));
+                return true;
+            }
         }
 
         // Conservative surface heightmap: skip if the actual surface Y deviates from RTF's
@@ -1616,22 +1682,23 @@ public class LayerPlacementHelper {
         }
 
         BlockPos decorPos = layerPlaced ? abovePos.up() : abovePos;
+        BlockPos placedLayerPos = layerPlaced ? abovePos : null;
 
         boolean enhancedRockHandled = false;
         if (replacedPlant == null && LayerConfig.CONQUEST_ENHANCED_ROCKS) {
-            enhancedRockHandled = tryPlaceEnhancedRock(chunk, decorPos, surfaceBlock, worldX, worldZ, layerPlaced ? abovePos : null);
+            enhancedRockHandled = tryPlaceEnhancedRock(chunk, decorPos, surfaceBlock, worldX, worldZ, placedLayerPos);
         }
 
         if (replacedPlant == null && LayerConfig.PLACE_ROCKS && !enhancedRockHandled) {
-            tryPlaceRock(chunk, decorPos, surfaceBlock, worldX, worldZ, layerPlaced ? abovePos : null);
+            tryPlaceRock(chunk, decorPos, surfaceBlock, worldX, worldZ, placedLayerPos);
         }
 
         if (replacedPlant == null && LayerConfig.CONQUEST_ENHANCED_EXTRA_FOLIAGE) {
-            tryPlaceEnhancedFoliage(chunk, decorPos, surfaceBlock, worldX, worldZ, layerPlaced ? abovePos : null);
+            tryPlaceEnhancedFoliage(chunk, decorPos, surfaceBlock, worldX, worldZ, placedLayerPos);
         }
 
         if (replacedPlant == null && LayerConfig.PLACE_EXTRA_FOLIAGE) {
-            tryPlaceExtraFoliage(chunk, decorPos, surfaceBlock, worldX, worldZ, layerPlaced ? abovePos : null);
+            tryPlaceExtraFoliage(chunk, decorPos, surfaceBlock, worldX, worldZ, placedLayerPos);
         }
 
         return layerPlaced;

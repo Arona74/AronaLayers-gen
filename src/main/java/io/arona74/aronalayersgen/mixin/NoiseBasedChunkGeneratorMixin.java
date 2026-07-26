@@ -9,6 +9,7 @@ import io.arona74.aronalayersgen.injection.PreStructureHeightmapStorage;
 import io.arona74.aronalayersgen.injection.RTFCompat;
 import io.arona74.aronalayersgen.injection.RTFLayerInjector;
 import io.arona74.aronalayersgen.injection.RandomStateHolder;
+import io.arona74.aronalayersgen.injection.TellusCompat;
 import java.util.Set;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.chunk.WorldChunk;
@@ -34,7 +35,7 @@ public class NoiseBasedChunkGeneratorMixin {
         at = @At("RETURN")
     )
     private void onChunkCreate(ServerWorld world, net.minecraft.world.chunk.ProtoChunk protoChunk, WorldChunk.EntityLoader entityLoader, CallbackInfo ci) {
-        if (!LayerConfig.LAYER_INJECTION && !LayerConfig.RTF_LAYER_INJECTION) {
+        if (!LayerConfig.LAYER_INJECTION && !LayerConfig.RTF_LAYER_INJECTION && !LayerConfig.TELLUS_LAYER_INJECTION) {
             return;
         }
 
@@ -59,7 +60,26 @@ public class NoiseBasedChunkGeneratorMixin {
                 }
             }
 
-            if (LayerConfig.RTF_LAYER_INJECTION) {
+            if (LayerConfig.TELLUS_LAYER_INJECTION && TellusCompat.isAvailable()) {
+                // ChunkGeneratorFeaturesMixin is the primary injector for Tellus worlds, but
+                // re-run Tellus here as a safety net: for some chunks the WG heightmap is still
+                // empty at generateFeatures() time (every column reports noSurface and nothing
+                // gets placed). By WorldChunk.<init> the heightmaps are rebuilt, so those chunks
+                // are recovered. Chunks already done are effectively a no-op because
+                // injectLayerAt skips positions that already hold a non-air block.
+                //
+                // Deliberately NOT VanillaLayerInjector: that one is slope/edge based and would
+                // stack a second set of layers on every riser, which is the double injection that
+                // caused the "edges getting extra layers" artifact.
+                if (TellusCompat.needsRerun(chunk)) {
+                    AronaLayersGen.LOGGER.info("[ChunkInit] Tellus re-run at {},{} — features pass found no surface (empty heightmap)",
+                        chunk.getPos().x, chunk.getPos().z);
+                    TellusCompat.injectLayersWithTellus(chunk, world.getChunkManager().getChunkGenerator());
+                } else if (LayerConfig.logChunkInit()) {
+                    AronaLayersGen.LOGGER.info("[ChunkInit] Tellus already handled {},{} at features time",
+                        chunk.getPos().x, chunk.getPos().z);
+                }
+            } else if (LayerConfig.RTF_LAYER_INJECTION) {
                 boolean rtfAvailable = RTFCompat.isRTFAvailable() && RandomStateHolder.hasRTFRandomState();
                 boolean isPostFeaturesMode = LayerConfig.INJECTION_MODE == LayerConfig.InjectionMode.POST_FEATURES;
 
@@ -94,7 +114,7 @@ public class NoiseBasedChunkGeneratorMixin {
                         stepStart = System.nanoTime();
                     }
                 }
-            } else {
+            } else if (LayerConfig.LAYER_INJECTION) {
                 if (LayerConfig.logChunkInit())
                     AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject START {},{}", chunk.getPos().x, chunk.getPos().z);
                 VanillaLayerInjector.injectLayers(chunk, null);

@@ -8,6 +8,7 @@ import io.arona74.aronalayersgen.injection.PreStructureHeightmapStorage;
 import io.arona74.aronalayersgen.injection.RTFCompat;
 import io.arona74.aronalayersgen.injection.RTFLayerInjector;
 import io.arona74.aronalayersgen.injection.RandomStateHolder;
+import io.arona74.aronalayersgen.injection.TellusCompat;
 import io.arona74.aronalayersgen.injection.VanillaLayerInjector;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.ChunkRegion;
@@ -38,12 +39,14 @@ import java.util.Set;
 @Mixin(ChunkGenerator.class)
 public class ChunkGeneratorFeaturesMixin {
 
+    private static boolean warnedTellusFallback = false;
+
     @Inject(
         method = "generateFeatures",
         at = @At("RETURN")
     )
     private void onGenerateFeaturesComplete(StructureWorldAccess world, Chunk chunk, StructureAccessor structureAccessor, CallbackInfo ci) {
-        if (!LayerConfig.LAYER_INJECTION && !LayerConfig.RTF_LAYER_INJECTION) {
+        if (!LayerConfig.LAYER_INJECTION && !LayerConfig.RTF_LAYER_INJECTION && !LayerConfig.TELLUS_LAYER_INJECTION) {
             return;
         }
         if (LayerConfig.INJECTION_MODE != LayerConfig.InjectionMode.POST_FEATURES) {
@@ -79,7 +82,26 @@ public class ChunkGeneratorFeaturesMixin {
                 }
             }
 
-            if (LayerConfig.RTF_LAYER_INJECTION) {
+            // Tellus takes priority when enabled and the active generator is Tellus's
+            // EarthChunkGenerator. `this` is the ChunkGenerator instance (mixin target).
+            boolean tellusHandled = false;
+            if (LayerConfig.TELLUS_LAYER_INJECTION) {
+                if (TellusCompat.isAvailable()) {
+                    ChunkGenerator self = (ChunkGenerator) (Object) this;
+                    tellusHandled = TellusCompat.injectLayersWithTellus(chunk, self);
+                }
+                if (!tellusHandled && !warnedTellusFallback) {
+                    warnedTellusFallback = true;
+                    AronaLayersGen.LOGGER.warn("[GenerateFeatures] tellus_layer_injection is on but Tellus did not handle chunk {},{} " +
+                        "(available={}) — falling back to {}",
+                        chunk.getPos().x, chunk.getPos().z, TellusCompat.isAvailable(),
+                        LayerConfig.RTF_LAYER_INJECTION ? "RTF/vanilla" : (LayerConfig.LAYER_INJECTION ? "vanilla" : "nothing"));
+                }
+            }
+
+            if (tellusHandled) {
+                // Tellus injected; nothing more to do for the injection step.
+            } else if (LayerConfig.RTF_LAYER_INJECTION) {
                 boolean rtfAvailable = RTFCompat.isRTFAvailable() && RandomStateHolder.hasRTFRandomState();
 
                 if (rtfAvailable) {
@@ -92,7 +114,7 @@ public class ChunkGeneratorFeaturesMixin {
                 } else if (LayerConfig.LAYER_INJECTION) {
                     VanillaLayerInjector.injectLayers(chunk, null);
                 }
-            } else {
+            } else if (LayerConfig.LAYER_INJECTION) {
                 VanillaLayerInjector.injectLayers(chunk, null);
             }
 
@@ -100,7 +122,7 @@ public class ChunkGeneratorFeaturesMixin {
                 PreStructureHeightmapStorage.discardSurfaceSnapshot(chunk);
             }
 
-            if (LayerConfig.RTF_LAYER_INJECTION && LayerConfig.STRUCTURE_NO_LAYERS) {
+            if ((LayerConfig.RTF_LAYER_INJECTION || LayerConfig.TELLUS_LAYER_INJECTION) && LayerConfig.STRUCTURE_NO_LAYERS) {
                 Set<Integer> changedColumns = PreStructureHeightmapStorage.getChangedColumns(chunk);
                 if (changedColumns != null && !changedColumns.isEmpty()) {
                     RTFLayerInjector.removeLayersAtColumns(chunk, changedColumns);

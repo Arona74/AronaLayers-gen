@@ -4,6 +4,8 @@
   "layer_injection": true,
   "_comment_rtf_layer_injection": "Enable layer injection using ReTerraForged terrain data. Requires ReTerraForged mod.",
   "rtf_layer_injection": true,
+  "_comment_tellus_layer_injection": "Enable layer injection using Tellus (Earth-scale geo terrain) elevation data. The sub-block fractional part of each column's real-world elevation drives the layer count; ESA WorldCover land cover is sampled for water/snow handling. Runs through POST_FEATURES. Requires the Tellus mod. Takes priority over RTF/vanilla when the active generator is Tellus.",
+  "tellus_layer_injection": false,
   "_comment_vanilla_noise_router_layer_injection": "Use vanilla's NoiseRouter density functions (continents, erosion, ridges) to derive a smooth synthetic cell height for layer placement. Replaces the slope-based heuristic with the same fractional formula used by RTF injection. Has no effect when RTF is active. Requires layer_injection=true. Default: false",
   "vanilla_noise_router_layer_injection": false,
   "_comment_injection_mode": "When to inject layers: CARVERS (before structures, may need cleanup) or POST_FEATURES (after structures, cleaner result). Requires restart.",
@@ -122,5 +124,6 @@
   "debug_log_snow": true,
   "debug_log_tree_soil": true,
   "debug_log_vanilla": true,
-  "debug_log_nbt_trees": true
+  "debug_log_nbt_trees": true,
+  "debug_log_tellus": true
 }

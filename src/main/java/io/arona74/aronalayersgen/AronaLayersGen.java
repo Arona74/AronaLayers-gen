@@ -1,7 +1,10 @@
 package io.arona74.aronalayersgen;
 
+import io.arona74.aronalayersgen.block.LayerBlock;
 import io.arona74.aronalayersgen.block.PowderSnowLayerBlock;
 import io.arona74.aronalayersgen.command.ChunkDebugCommand;
+import io.arona74.aronalayersgen.command.TellusDebugCommand;
+import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
 import io.arona74.aronalayersgen.injection.NbtTreeInjector;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
@@ -24,6 +27,10 @@ public class AronaLayersGen implements ModInitializer {
             FabricBlockSettings.copyOf(Blocks.SNOW).velocityMultiplier(0.9f)
     );
 
+    // Native layer blocks for surfaces whose backend has no matching layer block.
+    public static final Block DEEPSLATE_LAYER = new LayerBlock(FabricBlockSettings.copyOf(Blocks.DEEPSLATE));
+    public static final Block MOSS_LAYER = new LayerBlock(FabricBlockSettings.copyOf(Blocks.MOSS_BLOCK));
+
     @Override
     public void onInitialize() {
         LOGGER.info("Initializing Arona Layers Generator");
@@ -32,7 +39,24 @@ public class AronaLayersGen implements ModInitializer {
         Registry.register(Registries.ITEM, Compat.id(MOD_ID, "powder_snow_layer"),
                 new BlockItem(POWDER_SNOW_LAYER, new Item.Settings()));
 
+        Registry.register(Registries.BLOCK, Compat.id(MOD_ID, "deepslate_layer"), DEEPSLATE_LAYER);
+        Registry.register(Registries.ITEM, Compat.id(MOD_ID, "deepslate_layer"),
+                new BlockItem(DEEPSLATE_LAYER, new Item.Settings()));
+
+        Registry.register(Registries.BLOCK, Compat.id(MOD_ID, "moss_layer"), MOSS_LAYER);
+        Registry.register(Registries.ITEM, Compat.id(MOD_ID, "moss_layer"),
+                new BlockItem(MOSS_LAYER, new Item.Settings()));
+
         ChunkDebugCommand.register();
+        TellusDebugCommand.register();
+
+        // cr_nbt_trees places Conquest Reforged NBT tree structures; without CR present the
+        // referenced blocks don't exist, so the feature must not run even if the flag is on.
+        // Force it off once here so every downstream gate (mixins, injector) sees it disabled.
+        if (LayerConfig.CR_NBT_TREES && !LayerPlacementHelper.isConquestReforged()) {
+            LayerConfig.CR_NBT_TREES = false;
+            LOGGER.warn("[AronaLayersGen] cr_nbt_trees is enabled but Conquest Reforged is not present — disabling the feature.");
+        }
 
         ServerChunkEvents.CHUNK_LOAD.register((world, chunk) -> NbtTreeInjector.onChunkLoad(world, chunk));
         ServerTickEvents.END_SERVER_TICK.register(server -> NbtTreeInjector.flushReadyChunks());
