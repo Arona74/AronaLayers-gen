@@ -328,7 +328,12 @@ public class TellusCompat {
                     }
                     boolean useSnowLayers = (isSnowyBiome || coverClass == 70) && LayerConfig.IMPROVE_SNOWY_BIOMES;
 
-                    int layerCount = calculateLayerCount(depth, useSnowLayers);
+                    // Layer-count reduction is decoupled from the snow decision: snow columns
+                    // always keep the raw value, and non-snow columns keep it too unless
+                    // tellus_reduce_layer_count is on. This stops improve_snowy_biomes from
+                    // silently changing material-layer thickness.
+                    boolean skipReduction = useSnowLayers || !LayerConfig.TELLUS_REDUCE_LAYER_COUNT;
+                    int layerCount = calculateLayerCount(depth, skipReduction);
                     if (layerCount >= 1) locLayerGe1++; else locLayer0++;
 
                     // Pre-inspect this column the way injectLayerAt will, so we can attribute
@@ -415,8 +420,10 @@ public class TellusCompat {
     }
 
     /**
-     * Same fractional snow-layer formula as {@link RTFLayerInjector}:
-     * {@code layers = round(depth * 8)}, minus 1 unless snow layers keep the raw value.
+     * Fractional layer count: {@code layers = round(depth * 8)}. When {@code skipReduction} is
+     * false one layer is subtracted (a legacy RTF aesthetic tweak). The caller decides the
+     * reduction policy — it is no longer tied to whether snow layers are used (see the
+     * {@code skipReduction} computation at the call site).
      */
     private static int calculateLayerCount(double depth, boolean skipReduction) {
         int layers = (int) Math.round(depth * 8.0);
@@ -630,7 +637,8 @@ public class TellusCompat {
                 }
             }
 
-            p.stackLayers = calculateLayerCount(p.depth, false);
+            // Mirror the injector's reduction policy so the reported value matches what lands.
+            p.stackLayers = calculateLayerCount(p.depth, p.snowColumn || !LayerConfig.TELLUS_REDUCE_LAYER_COUNT);
             p.predictedLayerY = p.tellusSurfaceY + 1;
 
             // Recover where the natural surface was BEFORE we wrote a layer, so MISMATCH

@@ -50,6 +50,18 @@ public class LayerConfig {
     public static boolean TELLUS_LAYER_INJECTION = false;
 
     /**
+     * Reduce the Tellus layer count by one (round(depth*8) - 1) instead of using the raw value.
+     * The reduction is a legacy aesthetic tweak inherited from RTF; leaving it OFF makes the
+     * layer height track the true sub-block elevation more closely and removes the ~19% of
+     * columns that would otherwise drop to zero layers on near-integer elevations.
+     *
+     * Applied uniformly and independently of snow: snow columns always use the un-reduced value
+     * (as before), so setting this true restores the old behaviour exactly — non-snow columns
+     * reduced, snow columns not. Only affects the Tellus backend.
+     */
+    public static boolean TELLUS_REDUCE_LAYER_COUNT = false;
+
+    /**
      * Use vanilla's NoiseRouter density functions (continents, erosion, ridges) to
      * compute a synthetic cell height for layer placement, replacing the slope-based
      * heuristic. Applies the same fractional formula as RTF layer injection for smooth,
@@ -408,6 +420,7 @@ public class LayerConfig {
         if (config.has("layer_injection")) LAYER_INJECTION = config.get("layer_injection").getAsBoolean();
         if (config.has("rtf_layer_injection")) RTF_LAYER_INJECTION = config.get("rtf_layer_injection").getAsBoolean();
         if (config.has("tellus_layer_injection")) TELLUS_LAYER_INJECTION = config.get("tellus_layer_injection").getAsBoolean();
+        if (config.has("tellus_reduce_layer_count")) TELLUS_REDUCE_LAYER_COUNT = config.get("tellus_reduce_layer_count").getAsBoolean();
         if (config.has("vanilla_noise_router_layer_injection")) VANILLA_NOISE_ROUTER_LAYER_INJECTION = config.get("vanilla_noise_router_layer_injection").getAsBoolean();
         if (config.has("injection_mode")) {
             try {
@@ -519,6 +532,7 @@ public class LayerConfig {
             config.addProperty("layer_injection", LAYER_INJECTION);
             config.addProperty("rtf_layer_injection", RTF_LAYER_INJECTION);
             config.addProperty("tellus_layer_injection", TELLUS_LAYER_INJECTION);
+            config.addProperty("tellus_reduce_layer_count", TELLUS_REDUCE_LAYER_COUNT);
             config.addProperty("vanilla_noise_router_layer_injection", VANILLA_NOISE_ROUTER_LAYER_INJECTION);
             config.addProperty("injection_mode", INJECTION_MODE.name());
             config.addProperty("skip_snowy_biomes", SKIP_SNOWY_BIOMES);

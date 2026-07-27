@@ -72,8 +72,10 @@ public class NoiseBasedChunkGeneratorMixin {
                 // stack a second set of layers on every riser, which is the double injection that
                 // caused the "edges getting extra layers" artifact.
                 if (TellusCompat.needsRerun(chunk)) {
-                    AronaLayersGen.LOGGER.info("[ChunkInit] Tellus re-run at {},{} — features pass found no surface (empty heightmap)",
-                        chunk.getPos().x, chunk.getPos().z);
+                    if (LayerConfig.logTellus()) {
+                        AronaLayersGen.LOGGER.info("[ChunkInit] Tellus re-run at {},{} — features pass found no surface (empty heightmap)",
+                            chunk.getPos().x, chunk.getPos().z);
+                    }
                     TellusCompat.injectLayersWithTellus(chunk, world.getChunkManager().getChunkGenerator());
                 } else if (LayerConfig.logChunkInit()) {
                     AronaLayersGen.LOGGER.info("[ChunkInit] Tellus already handled {},{} at features time",

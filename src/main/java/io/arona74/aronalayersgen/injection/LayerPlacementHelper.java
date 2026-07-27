@@ -246,6 +246,19 @@ public class LayerPlacementHelper {
         return result == Blocks.AIR ? null : result;
     }
 
+    /**
+     * Full-block to place when a native layer block maxes out at 8 layers, mirroring
+     * powder_snow_layer -> powder_snow. Placing the full block directly avoids the cascading
+     * onBlockAdded conversion (which can hang during chunk init). Returns the input unchanged for
+     * sub-8 counts and for backend (CR / VLP) layer blocks, which keep their own layers=8 model.
+     */
+    private static Block resolveMaxedLayerBlock(Block layerBlock, int layerCount) {
+        if (layerCount < 8) return layerBlock;
+        if (layerBlock == AronaLayersGen.POWDER_SNOW_LAYER) return Blocks.POWDER_SNOW;
+        if (layerBlock instanceof io.arona74.aronalayersgen.block.LayerBlock lb) return lb.getFullBlock();
+        return layerBlock;
+    }
+
     // Cached block references for wet-sand substitution (Blocks.AIR = not found)
     private static volatile Block cachedSandLayerBlock = null;
     private static volatile Block cachedWetSandLayerBlock = null;
@@ -1375,9 +1388,7 @@ public class LayerPlacementHelper {
                     // layerCount > 0: replace the raised surface block with the layer in-place.
                     Block layerBlock = useSnowLayers ? Blocks.SNOW : getMappingRegistry().getLayerBlock(surfaceBlock, layerCount);
                     if (layerBlock != null) {
-                        if (layerBlock == AronaLayersGen.POWDER_SNOW_LAYER && layerCount >= 8) {
-                            layerBlock = Blocks.POWDER_SNOW;
-                        }
+                        layerBlock = resolveMaxedLayerBlock(layerBlock, layerCount);
                         BlockState layerState = layerBlock.getDefaultState();
                         layerState = applyLayerCount(layerState, layerBlock, layerCount);
                         if (LayerConfig.logSkipElevated()) {
@@ -1427,9 +1438,7 @@ public class LayerPlacementHelper {
                     Block naturalBlock = chunk.getBlockState(new BlockPos(worldX, expectedBaseY, worldZ)).getBlock();
                     Block layerBlock = useSnowLayers ? Blocks.SNOW : getMappingRegistry().getLayerBlock(naturalBlock, layerCount);
                     if (layerBlock != null) {
-                        if (layerBlock == AronaLayersGen.POWDER_SNOW_LAYER && layerCount >= 8) {
-                            layerBlock = Blocks.POWDER_SNOW;
-                        }
+                        layerBlock = resolveMaxedLayerBlock(layerBlock, layerCount);
                         BlockState layerState = layerBlock.getDefaultState();
                         layerState = applyLayerCount(layerState, layerBlock, layerCount);
                         if (LayerConfig.logSkipElevated()) {
@@ -1487,12 +1496,11 @@ public class LayerPlacementHelper {
         BlockState replacedPlantState = null;
         if (layerCount > 0) {
             Block layerBlock = useSnowLayers ? Blocks.SNOW : getMappingRegistry().getLayerBlock(surfaceBlock, layerCount);
-            // powder_snow_layer(8) triggers onBlockAdded -> world.setBlockState(NOTIFY_ALL) which
-            // cascades block updates during WorldChunk init and can hang the server tick.
-            // Place the full block (powder_snow) directly instead; it's equivalent to 8 layers.
-            if (layerBlock == AronaLayersGen.POWDER_SNOW_LAYER && layerCount >= 8) {
-                layerBlock = Blocks.POWDER_SNOW;
-            }
+            // A native layer block at 8 (powder_snow_layer, deepslate_layer, moss_layer) converts to
+            // its full block. Place the full block directly instead of relying on the layer's
+            // onBlockAdded conversion, which does setBlockState(NOTIFY_ALL) and can cascade / hang
+            // during WorldChunk init.
+            layerBlock = resolveMaxedLayerBlock(layerBlock, layerCount);
             if (layerBlock == null) {
                 debugSkipNoLayerBlock.incrementAndGet();
             } else {

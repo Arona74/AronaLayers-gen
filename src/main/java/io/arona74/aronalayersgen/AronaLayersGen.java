@@ -28,8 +28,9 @@ public class AronaLayersGen implements ModInitializer {
     );
 
     // Native layer blocks for surfaces whose backend has no matching layer block.
-    public static final Block DEEPSLATE_LAYER = new LayerBlock(FabricBlockSettings.copyOf(Blocks.DEEPSLATE));
-    public static final Block MOSS_LAYER = new LayerBlock(FabricBlockSettings.copyOf(Blocks.MOSS_BLOCK));
+    // At layers=8 they convert to the given full block (like powder_snow_layer -> powder_snow).
+    public static final Block DEEPSLATE_LAYER = new LayerBlock(FabricBlockSettings.copyOf(Blocks.DEEPSLATE), Blocks.DEEPSLATE);
+    public static final Block MOSS_LAYER = new LayerBlock(FabricBlockSettings.copyOf(Blocks.MOSS_BLOCK), Blocks.MOSS_BLOCK);
 
     @Override
     public void onInitialize() {

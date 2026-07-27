@@ -1,7 +1,6 @@
 {
-  "parent": "minecraft:block/snow_height16",
+  "parent": "minecraft:block/cube_all",
   "textures": {
-    "texture": "minecraft:block/deepslate",
-    "particle": "minecraft:block/deepslate"
+    "all": "minecraft:block/deepslate"
   }
 }
