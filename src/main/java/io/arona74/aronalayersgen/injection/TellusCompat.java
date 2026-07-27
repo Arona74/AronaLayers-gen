@@ -324,7 +324,13 @@ public class TellusCompat {
                     boolean isSnowyBiome = false;
                     if (floorY > chunk.getBottomY()) {
                         var biome = chunk.getBiomeForNoiseGen(localX >> 2, floorY >> 2, localZ >> 2);
-                        isSnowyBiome = biome.value().isCold(new BlockPos(worldX, floorY, worldZ));
+                        // Check the biome's INHERENT coldness, not block-Y altitude. Vanilla isCold
+                        // subtracts a temperature penalty above ~Y 80, so at low world scales (1:1)
+                        // terrain sitting at a huge block Y reads as cold for every biome, painting
+                        // snow onto temperate plains/meadows. Tellus already assigns biomes from
+                        // real Köppen climate, so trust that: cap the Y below the altitude penalty.
+                        int coldCheckY = Math.min(floorY, 80);
+                        isSnowyBiome = biome.value().isCold(new BlockPos(worldX, coldCheckY, worldZ));
                     }
                     boolean useSnowLayers = (isSnowyBiome || coverClass == 70) && LayerConfig.IMPROVE_SNOWY_BIOMES;
 
@@ -486,6 +492,11 @@ public class TellusCompat {
         public int mismatch;
         public int coverClass;
         public boolean submerged, surfaceMapped;
+        public String biome = "?";
+        /** isCold at the real (high) surface Y — includes vanilla's altitude penalty. */
+        public boolean coldAtSurface;
+        /** isCold at Y capped to 80 — the biome's inherent coldness, what the fix now uses. */
+        public boolean coldAtBase;
         /** True when this column is skipped: submerged water with no bathymetry (no real bed). */
         public boolean skippedNoBedData;
         /** True when this is a Tellus snow column (snow_block / snow stack); our layer joins it. */
@@ -578,6 +589,14 @@ public class TellusCompat {
 
             p.coverClass = (int) sampleCoverClassMemoryOnly.invoke(
                 landCoverSource, (double) worldX, (double) worldZ, worldScale, worldScale);
+
+            // Biome + cold checks, so we can tell biome-driven snow from stale-chunk snow.
+            if (floorY > chunk.getBottomY()) {
+                var biome = chunk.getBiomeForNoiseGen((worldX & 15) >> 2, floorY >> 2, (worldZ & 15) >> 2);
+                p.biome = biome.getKey().map(k -> k.getValue().toString()).orElse("unknown");
+                p.coldAtSurface = biome.value().isCold(new BlockPos(worldX, floorY, worldZ));
+                p.coldAtBase = biome.value().isCold(new BlockPos(worldX, Math.min(floorY, 80), worldZ));
+            }
 
             if (floorY > chunk.getBottomY()) {
                 BlockState surfaceState = chunk.getBlockState(new BlockPos(worldX, floorY - 1, worldZ));

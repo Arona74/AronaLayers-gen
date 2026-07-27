@@ -1199,7 +1199,13 @@ public class LayerPlacementHelper {
         boolean isSnowyBiome = false;
         {
             RegistryEntry<Biome> biome = chunk.getBiomeForNoiseGen(localX >> 2, surfaceY >> 2, localZ >> 2);
-            BlockPos biomePos = new BlockPos(worldX, surfaceY - 1, worldZ);
+            // For Tellus, cap the cold-check Y below vanilla's altitude temperature penalty (which
+            // starts above Y 80). At low world scales terrain sits at a huge block Y, so isCold at
+            // the real surface reads every biome as cold and paints snow onto temperate plains.
+            // Tellus assigns biomes from real Köppen climate, so trust that. RTF/vanilla keep their
+            // altitude-aware behaviour.
+            int coldY = tellusOverSnow ? Math.min(surfaceY - 1, 80) : surfaceY - 1;
+            BlockPos biomePos = new BlockPos(worldX, coldY, worldZ);
             isSnowyBiome = biome.value().isCold(biomePos);
         }
 

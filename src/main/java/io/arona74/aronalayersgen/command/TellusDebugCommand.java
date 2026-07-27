@@ -87,6 +87,9 @@ public class TellusDebugCommand {
         send(src, "  MISMATCH=" + p.mismatch
                 + (p.mismatch != 0 ? "  <-- DEM disagrees with built terrain" : "  (DEM agrees)"));
         send(src, "  surface=" + p.surfaceBlock + " (mapped=" + p.surfaceMapped + ")  above=" + p.aboveBlock);
+        send(src, "  biome=" + p.biome + "  isCold(surfaceY)=" + p.coldAtSurface
+                + "  isCold(base<=80)=" + p.coldAtBase
+                + "  -> snow-eligible=" + (p.coldAtBase || p.coverClass == 70));
         if (p.snowColumn) {
             send(src, "  SNOW COLUMN: stack (top->down) = " + p.snowStack);
         }
