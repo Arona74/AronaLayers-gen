@@ -8,7 +8,7 @@
     "NoiseBasedChunkGeneratorMixin",
     "ChunkGeneratorMixin",
     "ChunkGeneratorFeaturesMixin",
-    "ThreadedAnvilChunkStorageMixin",
+    "ChunkMapMixin",
     "PlantBlockMixin",
     "TreeFeatureMixin",
     "NbtTreeFeatureMixin",

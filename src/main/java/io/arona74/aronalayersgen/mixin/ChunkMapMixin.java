@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ChunkMap.class)
-public class ThreadedAnvilChunkStorageMixin {
+public class ChunkMapMixin {
 
     @Shadow
     private net.minecraft.world.level.levelgen.RandomState randomState;
@@ -22,7 +22,7 @@ public class ThreadedAnvilChunkStorageMixin {
     )
     private void onInit(CallbackInfo ci) {
         if (randomState != null) {
-            AronaLayersGen.LOGGER.info("[TACS Mixin] Capturing NoiseConfig/RandomState: {}", randomState.getClass().getName());
+            AronaLayersGen.LOGGER.info("[ChunkMap Mixin] Capturing NoiseConfig/RandomState: {}", randomState.getClass().getName());
             RandomStateHolder.setNoiseConfig(randomState);
             RandomStateHolder.setRandomState(randomState);
         }
@@ -35,6 +35,6 @@ public class ThreadedAnvilChunkStorageMixin {
     private void onClose(CallbackInfo ci) {
         RandomStateHolder.clear();
         RTFCompat.resetWorldState();
-        AronaLayersGen.LOGGER.info("[TACS Mixin] Cleared world state on chunk manager close");
+        AronaLayersGen.LOGGER.info("[ChunkMap Mixin] Cleared world state on chunk manager close");
     }
 }
