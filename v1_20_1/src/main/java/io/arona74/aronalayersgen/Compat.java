@@ -47,12 +47,18 @@ public final class Compat {
         return parsed == null ? null : parsed.toString();
     }
 
-    /** Block for an id string, or null if the id is malformed or not registered. */
+    /**
+     * Block for an id string.
+     *
+     * <p>Returns {@link Blocks#AIR} when the id is malformed or not registered,
+     * matching what the registry lookup itself returns. Callers rely on that
+     * sentinel — several cache a miss as AIR, so returning null instead would
+     * defeat those caches and re-query the registry on every call.
+     */
     public static Block blockFromId(String id) {
         ResourceLocation parsed = ResourceLocation.tryParse(id);
-        if (parsed == null) return null;
-        Block block = BuiltInRegistries.BLOCK.get(parsed);
-        return block == Blocks.AIR ? null : block;
+        if (parsed == null) return Blocks.AIR;
+        return BuiltInRegistries.BLOCK.get(parsed);
     }
 
     /** Registry id of a block, in canonical string form. */
