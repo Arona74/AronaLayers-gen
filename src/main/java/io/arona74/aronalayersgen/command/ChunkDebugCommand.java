@@ -39,7 +39,7 @@ public class ChunkDebugCommand {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
             dispatcher.register(
                 Commands.literal("algdebug")
-                    .requires(src -> src.hasPermission(2))
+                    .requires(src -> Compat.hasPermission(src, 2))
                     .executes(ChunkDebugCommand::execute)
             )
         );
@@ -131,9 +131,9 @@ public class ChunkDebugCommand {
         // ---- biome at player position ----
         Holder<Biome> biomeEntry = chunk.getNoiseBiome(plx >> 2, playerPos.getY() >> 2, plz >> 2);
         String biomeName = biomeEntry.unwrapKey().isPresent()
-                ? biomeEntry.unwrapKey().get().location().toString()
+                ? Compat.keyId(biomeEntry.unwrapKey().get())
                 : "unknown";
-        boolean isSnowyBiome = biomeEntry.value().coldEnoughToSnow(playerPos);
+        boolean isSnowyBiome = Compat.coldEnoughToSnow(biomeEntry.value(), playerPos);
 
         // ======== output ========
         String colMarker = buildColMarker(plx);

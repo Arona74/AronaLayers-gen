@@ -88,9 +88,9 @@ public class PlantConversionHelper {
                     // Orphaned vanilla plant above a CR foliage/decorator — clear it.
                     // This happens when carvers or RTF terrain adjustments removed the solid block
                     // that originally supported the vanilla feature-placed plant.
-                    chunk.setBlockState(plantPos, Blocks.AIR.defaultBlockState(), false);
+                    Compat.chunkSetBlockState(chunk, plantPos, Blocks.AIR.defaultBlockState());
                     if (upperPos != null) {
-                        chunk.setBlockState(upperPos, Blocks.AIR.defaultBlockState(), false);
+                        Compat.chunkSetBlockState(chunk, upperPos, Blocks.AIR.defaultBlockState());
                     }
                     converted++;
                     continue;
@@ -120,22 +120,22 @@ public class PlantConversionHelper {
                     if (conquestLower.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)) {
                         conquestLower = conquestLower.setValue(BlockStateProperties.DOUBLE_BLOCK_HALF, DoubleBlockHalf.LOWER);
                     }
-                    chunk.setBlockState(plantPos, conquestLower, false);
+                    Compat.chunkSetBlockState(chunk, plantPos, conquestLower);
 
                     if (conquestPlant.defaultBlockState().hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)) {
                         // CR equivalent is also tall — place upper half
                         BlockState conquestUpper = conquestPlant.defaultBlockState();
                         conquestUpper = RTFLayerInjector.applyLayerCount(conquestUpper, conquestPlant, layerCount);
                         conquestUpper = conquestUpper.setValue(BlockStateProperties.DOUBLE_BLOCK_HALF, DoubleBlockHalf.UPPER);
-                        chunk.setBlockState(upperPos, conquestUpper, false);
+                        Compat.chunkSetBlockState(chunk, upperPos, conquestUpper);
                     } else {
                         // CR equivalent is a single-block plant — clear the orphaned vanilla upper half
-                        chunk.setBlockState(upperPos, Blocks.AIR.defaultBlockState(), false);
+                        Compat.chunkSetBlockState(chunk, upperPos, Blocks.AIR.defaultBlockState());
                     }
                 } else {
                     BlockState conquestState = conquestPlant.defaultBlockState();
                     conquestState = RTFLayerInjector.applyLayerCount(conquestState, conquestPlant, layerCount);
-                    chunk.setBlockState(plantPos, conquestState, false);
+                    Compat.chunkSetBlockState(chunk, plantPos, conquestState);
                 }
 
                 converted++;

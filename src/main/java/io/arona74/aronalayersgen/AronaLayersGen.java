@@ -9,7 +9,6 @@ import io.arona74.aronalayersgen.injection.NbtTreeInjector;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.fabricmc.fabric.api.object.builder.v1.block.FabricBlockSettings;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.item.BlockItem;
@@ -24,13 +23,13 @@ public class AronaLayersGen implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     public static final Block POWDER_SNOW_LAYER = new PowderSnowLayerBlock(
-            FabricBlockSettings.copyOf(Blocks.SNOW).velocityMultiplier(0.9f)
+            Compat.blockSettings(Blocks.SNOW, "powder_snow_layer").speedFactor(0.9f)
     );
 
     // Native layer blocks for surfaces whose backend has no matching layer block.
     // At layers=8 they convert to the given full block (like powder_snow_layer -> powder_snow).
-    public static final Block DEEPSLATE_LAYER = new LayerBlock(FabricBlockSettings.copyOf(Blocks.DEEPSLATE), Blocks.DEEPSLATE);
-    public static final Block MOSS_LAYER = new LayerBlock(FabricBlockSettings.copyOf(Blocks.MOSS_BLOCK), Blocks.MOSS_BLOCK);
+    public static final Block DEEPSLATE_LAYER = new LayerBlock(Compat.blockSettings(Blocks.DEEPSLATE, "deepslate_layer"), Blocks.DEEPSLATE);
+    public static final Block MOSS_LAYER = new LayerBlock(Compat.blockSettings(Blocks.MOSS_BLOCK, "moss_layer"), Blocks.MOSS_BLOCK);
 
     @Override
     public void onInitialize() {
@@ -38,15 +37,15 @@ public class AronaLayersGen implements ModInitializer {
 
         Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "powder_snow_layer"), POWDER_SNOW_LAYER);
         Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "powder_snow_layer"),
-                new BlockItem(POWDER_SNOW_LAYER, new Item.Properties()));
+                new BlockItem(POWDER_SNOW_LAYER, Compat.itemSettings("powder_snow_layer")));
 
         Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "deepslate_layer"), DEEPSLATE_LAYER);
         Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "deepslate_layer"),
-                new BlockItem(DEEPSLATE_LAYER, new Item.Properties()));
+                new BlockItem(DEEPSLATE_LAYER, Compat.itemSettings("deepslate_layer")));
 
         Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "moss_layer"), MOSS_LAYER);
         Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "moss_layer"),
-                new BlockItem(MOSS_LAYER, new Item.Properties()));
+                new BlockItem(MOSS_LAYER, Compat.itemSettings("moss_layer")));
 
         ChunkDebugCommand.register();
         TellusDebugCommand.register();

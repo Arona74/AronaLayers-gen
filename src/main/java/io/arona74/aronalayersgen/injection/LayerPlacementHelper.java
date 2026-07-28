@@ -1207,7 +1207,7 @@ public class LayerPlacementHelper {
             // altitude-aware behaviour.
             int coldY = tellusOverSnow ? Math.min(surfaceY - 1, 80) : surfaceY - 1;
             BlockPos biomePos = new BlockPos(worldX, coldY, worldZ);
-            isSnowyBiome = biome.value().coldEnoughToSnow(biomePos);
+            isSnowyBiome = Compat.coldEnoughToSnow(biome.value(), biomePos);
         }
 
         // Peek ahead to detect powder_snow before the snowy-biome skip.
@@ -1785,7 +1785,7 @@ public class LayerPlacementHelper {
                 entry.getValue().update(lx, y, lz, state);
             }
         } else {
-            chunk.setBlockState(pos, state, false);
+            Compat.chunkSetBlockState(chunk, pos, state);
         }
     }
 

@@ -395,12 +395,12 @@ public class NbtTreeInjector {
     private static BlockPos computeAnchor(CompoundTag nbt) {
         if (!nbt.contains("blocks") || !nbt.contains("palette")) return BlockPos.ZERO;
 
-        ListTag palette = nbt.getList("palette", Tag.TAG_COMPOUND);
-        ListTag blocks  = nbt.getList("blocks",  Tag.TAG_COMPOUND);
+        ListTag palette = Compat.nbtList(nbt, "palette");
+        ListTag blocks  = Compat.nbtList(nbt, "blocks");
 
         boolean[] isLog = new boolean[palette.size()];
         for (int i = 0; i < palette.size(); i++) {
-            String name = palette.getCompound(i).getString("Name");
+            String name = Compat.nbtString(Compat.nbtCompound(palette, i), "Name");
             isLog[i] = name.contains("log") || name.contains("stem")
                     || name.contains("trunk") || name.contains("hyphae");
         }
@@ -408,13 +408,13 @@ public class NbtTreeInjector {
         BlockPos best = null;
         int bestY = Integer.MAX_VALUE;
         for (int i = 0; i < blocks.size(); i++) {
-            CompoundTag block = blocks.getCompound(i);
-            if (!isLog[block.getInt("state")]) continue;
-            ListTag pos = block.getList("pos", Tag.TAG_INT);
-            int y = pos.getInt(1);
+            CompoundTag block = Compat.nbtCompound(blocks, i);
+            if (!isLog[Compat.nbtInt(block, "state")]) continue;
+            ListTag pos = Compat.nbtIntList(block, "pos");
+            int y = Compat.nbtInt(pos, 1);
             if (y < bestY) {
                 bestY = y;
-                best = new BlockPos(pos.getInt(0), y, pos.getInt(2));
+                best = new BlockPos(Compat.nbtInt(pos, 0), y, Compat.nbtInt(pos, 2));
             }
         }
         return best != null ? best : BlockPos.ZERO;

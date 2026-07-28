@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.command;
 
+import io.arona74.aronalayersgen.Compat;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -31,7 +32,7 @@ public class TellusDebugCommand {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
             dispatcher.register(
                 Commands.literal("algtellus")
-                    .requires(src -> src.hasPermission(2))
+                    .requires(src -> Compat.hasPermission(src, 2))
                     .executes(ctx -> here(ctx))
                     .then(Commands.literal("grid")
                         .executes(ctx -> grid(ctx, 8))

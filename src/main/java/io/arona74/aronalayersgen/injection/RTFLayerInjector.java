@@ -109,7 +109,7 @@ public class RTFLayerInjector {
         if (surfaceY > Compat.minY(chunk)) {
             BlockPos biomePos = new BlockPos(worldX, surfaceY - 1, worldZ);
             var biome = chunk.getNoiseBiome(localX >> 2, surfaceY >> 2, localZ >> 2);
-            isSnowyBiome = biome.value().coldEnoughToSnow(biomePos);
+            isSnowyBiome = Compat.coldEnoughToSnow(biome.value(), biomePos);
         }
 
         boolean useSnowLayers = isSnowyBiome && LayerConfig.IMPROVE_SNOWY_BIOMES;

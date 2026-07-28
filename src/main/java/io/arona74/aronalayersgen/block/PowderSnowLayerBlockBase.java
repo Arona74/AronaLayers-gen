@@ -29,9 +29,9 @@ import net.minecraft.world.level.LevelReader;
  *   triggering freeze-tick accumulation and eventual freeze damage.
  * - When the layer count reaches 8, the block converts to minecraft:powder_snow.
  */
-public class PowderSnowLayerBlock extends SnowLayerBlock {
+public abstract class PowderSnowLayerBlockBase extends SnowLayerBlock {
 
-    public PowderSnowLayerBlock(Properties settings) {
+    protected PowderSnowLayerBlockBase(Properties settings) {
         super(settings);
     }
 
@@ -77,12 +77,14 @@ public class PowderSnowLayerBlock extends SnowLayerBlock {
     }
 
     /**
-     * While inside the block:
-     * - Applies movement slowdown (unless wearing leather boots).
-     * - Sets inPowderSnow so vanilla Entity.baseTick() accumulates frozenTicks.
+     * Effects applied while an entity is inside the block:
+     * - movement slowdown (unless wearing leather boots);
+     * - sets inPowderSnow so vanilla Entity.baseTick() accumulates frozenTicks.
+     *
+     * <p>Lives here rather than in entityInside because 1.21.11 changed that
+     * override's signature; each version's subclass adapts and delegates here.
      */
-    @Override
-    public void entityInside(BlockState state, Level world, BlockPos pos, Entity entity) {
+    protected void applyInsideEffects(BlockState state, Entity entity) {
         boolean wearingLeatherBoots = entity instanceof LivingEntity living &&
                 living.getItemBySlot(EquipmentSlot.FEET).is(Items.LEATHER_BOOTS);
 

@@ -9,6 +9,16 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -69,5 +79,73 @@ public final class Compat {
 
     public static int maxY(net.minecraft.world.level.LevelHeightAccessor level) {
         return level.getMaxY();
+    }
+
+    // ---- NBT ------------------------------------------------------------
+    // These accessors return Optional in this version; the *Or/OrEmpty variants
+    // reproduce the defaults the older versions had.
+
+    public static ListTag nbtList(CompoundTag tag, String key) {
+        return tag.getListOrEmpty(key);
+    }
+
+    public static ListTag nbtIntList(CompoundTag tag, String key) {
+        return tag.getListOrEmpty(key);
+    }
+
+    public static CompoundTag nbtCompound(ListTag list, int index) {
+        return list.getCompoundOrEmpty(index);
+    }
+
+    public static String nbtString(CompoundTag tag, String key) {
+        return tag.getStringOr(key, "");
+    }
+
+    public static int nbtInt(CompoundTag tag, String key) {
+        return tag.getIntOr(key, 0);
+    }
+
+    public static int nbtInt(ListTag list, int index) {
+        return list.getIntOr(index, 0);
+    }
+
+    // ---- world / blocks -------------------------------------------------
+
+    /** The third argument became int flags here; the two-arg overload is the plain write. */
+    public static BlockState chunkSetBlockState(ChunkAccess chunk, BlockPos pos, BlockState state) {
+        return chunk.setBlockState(pos, state);
+    }
+
+    /**
+     * This version takes the sea level explicitly. 63 is vanilla's default and matches
+     * what the older versions used internally, so default worlds behave as before.
+     */
+    public static boolean coldEnoughToSnow(Biome biome, BlockPos pos) {
+        return biome.coldEnoughToSnow(pos, 63);
+    }
+
+    /**
+     * FabricBlockSettings is gone in this version, so this uses vanilla. ofLegacyCopy
+     * is the closer match to the old copy semantics (ofFullCopy would also carry over
+     * the source block's loot table, overriding our own). Settings must also carry a
+     * registry key from 1.21.2 onward.
+     */
+    public static BlockBehaviour.Properties blockSettings(net.minecraft.world.level.block.Block copyFrom, String path) {
+        return BlockBehaviour.Properties.ofLegacyCopy(copyFrom)
+                .setId(ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK,
+                        Identifier.fromNamespaceAndPath(AronaLayersGen.MOD_ID, path)));
+    }
+
+    public static Item.Properties itemSettings(String path) {
+        return new Item.Properties()
+                .setId(ResourceKey.create(net.minecraft.core.registries.Registries.ITEM,
+                        Identifier.fromNamespaceAndPath(AronaLayersGen.MOD_ID, path)));
+    }
+
+    /** Integer permission levels became PermissionSet here; byId maps the old levels over. */
+    public static boolean hasPermission(CommandSourceStack source, int level) {
+        return source.permissions().hasPermission(
+                new net.minecraft.server.permissions.Permission.HasCommandLevel(
+                        net.minecraft.server.permissions.PermissionLevel.byId(level)));
     }
 }

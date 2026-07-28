@@ -97,7 +97,7 @@ public class VanillaLayerInjector {
                 boolean isSnowyBiome = false;
                 if (floorY > worldBottom) {
                     var biome = chunk.getNoiseBiome(localX >> 2, floorY >> 2, localZ >> 2);
-                    isSnowyBiome = biome.value().coldEnoughToSnow(new BlockPos(worldX, floorY, worldZ));
+                    isSnowyBiome = Compat.coldEnoughToSnow(biome.value(), new BlockPos(worldX, floorY, worldZ));
                 }
                 boolean useSnowLayers = isSnowyBiome && LayerConfig.IMPROVE_SNOWY_BIOMES;
 

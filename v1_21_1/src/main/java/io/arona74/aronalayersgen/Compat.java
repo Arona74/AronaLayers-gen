@@ -9,6 +9,16 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -64,5 +74,67 @@ public final class Compat {
 
     public static int maxY(net.minecraft.world.level.LevelHeightAccessor level) {
         return level.getMaxBuildHeight();
+    }
+
+    // ---- NBT ------------------------------------------------------------
+    // 1.21.11 made these accessors return Optional; the *Or/OrEmpty variants
+    // there reproduce the behaviour this version has by default.
+
+    public static ListTag nbtList(net.minecraft.nbt.CompoundTag tag, String key) {
+        return tag.getList(key, Tag.TAG_COMPOUND);
+    }
+
+    public static ListTag nbtIntList(net.minecraft.nbt.CompoundTag tag, String key) {
+        return tag.getList(key, Tag.TAG_INT);
+    }
+
+    public static net.minecraft.nbt.CompoundTag nbtCompound(ListTag list, int index) {
+        return list.getCompound(index);
+    }
+
+    public static String nbtString(net.minecraft.nbt.CompoundTag tag, String key) {
+        return tag.getString(key);
+    }
+
+    public static int nbtInt(net.minecraft.nbt.CompoundTag tag, String key) {
+        return tag.getInt(key);
+    }
+
+    public static int nbtInt(ListTag list, int index) {
+        return list.getInt(index);
+    }
+
+    // ---- world / blocks -------------------------------------------------
+
+    /** 1.21.11 changed the third argument from a boolean 'moved' flag to int flags. */
+    public static BlockState chunkSetBlockState(ChunkAccess chunk, BlockPos pos, BlockState state) {
+        return chunk.setBlockState(pos, state, false);
+    }
+
+    /** 1.21.11 added a sea-level parameter to this. */
+    public static boolean coldEnoughToSnow(Biome biome, BlockPos pos) {
+        return biome.coldEnoughToSnow(pos);
+    }
+
+    /**
+     * Block settings copied from another block.
+     *
+     * <p>Kept on FabricBlockSettings here on purpose: its copyOf() takes the source
+     * block's own Properties instance via an accessor mixin, which is not equivalent
+     * to either vanilla ofFullCopy or ofLegacyCopy. Preserving it avoids changing the
+     * behaviour of a shipped version. {@code path} is unused until 1.21.2+, where
+     * settings must carry their registry key.
+     */
+    public static BlockBehaviour.Properties blockSettings(net.minecraft.world.level.block.Block copyFrom, String path) {
+        return net.fabricmc.fabric.api.object.builder.v1.block.FabricBlockSettings.copyOf(copyFrom);
+    }
+
+    public static Item.Properties itemSettings(String path) {
+        return new Item.Properties();
+    }
+
+    /** 1.21.11 replaced integer permission levels with PermissionSet. */
+    public static boolean hasPermission(CommandSourceStack source, int level) {
+        return source.hasPermission(level);
     }
 }

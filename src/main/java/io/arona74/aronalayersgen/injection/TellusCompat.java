@@ -331,7 +331,7 @@ public class TellusCompat {
                         // snow onto temperate plains/meadows. Tellus already assigns biomes from
                         // real Köppen climate, so trust that: cap the Y below the altitude penalty.
                         int coldCheckY = Math.min(floorY, 80);
-                        isSnowyBiome = biome.value().coldEnoughToSnow(new BlockPos(worldX, coldCheckY, worldZ));
+                        isSnowyBiome = Compat.coldEnoughToSnow(biome.value(), new BlockPos(worldX, coldCheckY, worldZ));
                     }
                     boolean useSnowLayers = (isSnowyBiome || coverClass == 70) && LayerConfig.IMPROVE_SNOWY_BIOMES;
 
@@ -594,9 +594,9 @@ public class TellusCompat {
             // Biome + cold checks, so we can tell biome-driven snow from stale-chunk snow.
             if (floorY > Compat.minY(chunk)) {
                 var biome = chunk.getNoiseBiome((worldX & 15) >> 2, floorY >> 2, (worldZ & 15) >> 2);
-                p.biome = biome.unwrapKey().map(k -> k.location().toString()).orElse("unknown");
-                p.coldAtSurface = biome.value().coldEnoughToSnow(new BlockPos(worldX, floorY, worldZ));
-                p.coldAtBase = biome.value().coldEnoughToSnow(new BlockPos(worldX, Math.min(floorY, 80), worldZ));
+                p.biome = biome.unwrapKey().map(Compat::keyId).orElse("unknown");
+                p.coldAtSurface = Compat.coldEnoughToSnow(biome.value(), new BlockPos(worldX, floorY, worldZ));
+                p.coldAtBase = Compat.coldEnoughToSnow(biome.value(), new BlockPos(worldX, Math.min(floorY, 80), worldZ));
             }
 
             if (floorY > Compat.minY(chunk)) {
