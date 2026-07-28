@@ -1112,7 +1112,7 @@ public class LayerPlacementHelper {
         boolean isPostFeaturesContext = (LayerConfig.INJECTION_MODE == LayerConfig.InjectionMode.POST_FEATURES)
             || isWorldChunk;
 
-        if (surfaceY <= chunk.getMinBuildHeight()) {
+        if (surfaceY <= Compat.minY(chunk)) {
             debugSkipNoSurface.incrementAndGet();
             return false;
         }
@@ -1138,7 +1138,7 @@ public class LayerPlacementHelper {
             }
             int topSnowY = Integer.MIN_VALUE;
             Block topBlock = null;
-            int lo = Math.max(chunk.getMinBuildHeight() + 1, anchor - 4);
+            int lo = Math.max(Compat.minY(chunk) + 1, anchor - 4);
             for (int y = anchor; y >= lo; y--) {
                 Block b = chunk.getBlockState(new BlockPos(worldX, y, worldZ)).getBlock();
                 if (b == Blocks.SNOW_BLOCK || b == Blocks.SNOW) {
@@ -1286,7 +1286,7 @@ public class LayerPlacementHelper {
             boolean found = false;
             for (int dy = 1; dy <= 30; dy++) {
                 int checkY = surfaceY - 1 - dy;
-                if (checkY <= chunk.getMinBuildHeight()) break;
+                if (checkY <= Compat.minY(chunk)) break;
 
                 BlockPos checkPos = new BlockPos(worldX, checkY, worldZ);
                 BlockState checkState = chunk.getBlockState(checkPos);
@@ -1341,7 +1341,7 @@ public class LayerPlacementHelper {
                 expectedBaseY = rtfExpectedBaseY; // RTF: floor(height * worldHeight)
             } else {
                 int preY = PreStructureHeightmapStorage.peekSurfaceY(chunk, localX, localZ);
-                if (preY > chunk.getMinBuildHeight()) {
+                if (preY > Compat.minY(chunk)) {
                     expectedBaseY = preY - 1; // snapshot is exclusive; convert to inclusive base Y
                 }
             }
@@ -1747,7 +1747,7 @@ public class LayerPlacementHelper {
                         || nz < chunkMinZ || nz >= chunkMinZ + 16) continue;
                 for (int dy = -2; dy <= 2; dy++) {
                     int ny = centerY + dy;
-                    if (ny < chunk.getMinBuildHeight() || ny >= chunk.getMaxBuildHeight()) continue;
+                    if (ny < Compat.minY(chunk) || ny >= Compat.maxY(chunk)) continue;
                     BlockPos pos = new BlockPos(nx, ny, nz);
                     BlockState state = chunk.getBlockState(pos);
                     boolean isLayer = state.hasProperty(BlockStateProperties.LAYERS)
@@ -1766,7 +1766,7 @@ public class LayerPlacementHelper {
      * Called after removing an elevated block so stranded plants don't float.
      */
     private static void clearVegetationAbove(ChunkAccess chunk, int worldX, int worldZ, int aboveY) {
-        for (int y = aboveY; y < chunk.getMaxBuildHeight(); y++) {
+        for (int y = aboveY; y < Compat.maxY(chunk); y++) {
             BlockState state = chunk.getBlockState(new BlockPos(worldX, y, worldZ));
             if (state.isAir()) break;
             if (!state.canBeReplaced()) break;
@@ -1807,7 +1807,7 @@ public class LayerPlacementHelper {
                 int worldZ = startZ + localZ;
 
                 int heightmapY = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR).getFirstAvailable(localX, localZ);
-                if (heightmapY <= chunk.getMinBuildHeight() + 1) continue;
+                if (heightmapY <= Compat.minY(chunk) + 1) continue;
 
                 BlockPos layerPos = null;
                 BlockPos surfacePos = null;
@@ -1944,7 +1944,7 @@ public class LayerPlacementHelper {
             int worldZ = startZ + localZ;
 
             int heightmapY = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR).getFirstAvailable(localX, localZ);
-            if (heightmapY <= chunk.getMinBuildHeight() + 1) continue;
+            if (heightmapY <= Compat.minY(chunk) + 1) continue;
 
             for (int dy = -1; dy <= 0; dy++) {
                 BlockPos pos = new BlockPos(worldX, heightmapY + dy, worldZ);

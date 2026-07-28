@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.injection;
 
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import net.minecraft.world.level.block.Block;
@@ -79,8 +80,8 @@ public class VanillaLayerInjector {
         Heightmap.Types hmType        = (chunk instanceof LevelChunk) ? Heightmap.Types.OCEAN_FLOOR    : Heightmap.Types.OCEAN_FLOOR_WG;
         Heightmap.Types surfaceHmType = (chunk instanceof LevelChunk) ? Heightmap.Types.WORLD_SURFACE  : Heightmap.Types.WORLD_SURFACE_WG;
 
-        int worldBottom  = chunk.getMinBuildHeight();
-        int worldHeight  = chunk.getMaxBuildHeight() - worldBottom;
+        int worldBottom  = Compat.minY(chunk);
+        int worldHeight  = Compat.maxY(chunk) - worldBottom;
 
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
@@ -174,7 +175,7 @@ public class VanillaLayerInjector {
                 int worldX = startX + localX;
                 int worldZ = startZ + localZ;
 
-                int layerCount = calculateLayerCount(groundHeights, localX, localZ, chunk.getMinBuildHeight());
+                int layerCount = calculateLayerCount(groundHeights, localX, localZ, Compat.minY(chunk));
 
                 if (LayerPlacementHelper.injectLayerAt(chunk, worldX, worldZ, layerCount, false)) {
                     layersPlaced++;
@@ -206,7 +207,7 @@ public class VanillaLayerInjector {
         int[][] heights = new int[16][16];
         int startX = chunk.getPos().getMinBlockX();
         int startZ = chunk.getPos().getMinBlockZ();
-        int bottomY = chunk.getMinBuildHeight();
+        int bottomY = Compat.minY(chunk);
 
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {

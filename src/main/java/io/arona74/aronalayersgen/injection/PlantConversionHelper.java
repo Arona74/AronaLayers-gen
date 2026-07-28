@@ -55,7 +55,7 @@ public class PlantConversionHelper {
 
                 int topY = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE).getFirstAvailable(localX, localZ);
 
-                if (topY <= chunk.getMinBuildHeight() + 2) continue;
+                if (topY <= Compat.minY(chunk) + 2) continue;
 
                 BlockPos plantPos = new BlockPos(worldX, topY - 1, worldZ);
                 BlockState plantState = chunk.getBlockState(plantPos);

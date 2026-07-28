@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.injection;
 
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import net.minecraft.world.level.block.Block;
@@ -105,7 +106,7 @@ public class RTFLayerInjector {
         int surfaceY = chunk.getOrCreateHeightmapUnprimed(hmType).getFirstAvailable(localX, localZ);
 
         boolean isSnowyBiome = false;
-        if (surfaceY > chunk.getMinBuildHeight()) {
+        if (surfaceY > Compat.minY(chunk)) {
             BlockPos biomePos = new BlockPos(worldX, surfaceY - 1, worldZ);
             var biome = chunk.getNoiseBiome(localX >> 2, surfaceY >> 2, localZ >> 2);
             isSnowyBiome = biome.value().coldEnoughToSnow(biomePos);

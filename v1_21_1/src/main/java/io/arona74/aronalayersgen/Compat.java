@@ -56,4 +56,13 @@ public final class Compat {
     public static String keyId(ResourceKey<?> key) {
         return key.location().toString();
     }
+
+    /** 1.21.11 renamed LevelHeightAccessor.getMinBuildHeight/getMaxBuildHeight to getMinY/getMaxY. */
+    public static int minY(net.minecraft.world.level.LevelHeightAccessor level) {
+        return level.getMinBuildHeight();
+    }
+
+    public static int maxY(net.minecraft.world.level.LevelHeightAccessor level) {
+        return level.getMaxBuildHeight();
+    }
 }

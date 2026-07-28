@@ -61,7 +61,7 @@ public class ChunkDebugCommand {
         int startZ = cp.getMinBlockZ();
         int plx    = playerPos.getX() - startX;   // 0..15
         int plz    = playerPos.getZ() - startZ;   // 0..15
-        int bottomY = chunk.getMinBuildHeight();
+        int bottomY = Compat.minY(chunk);
 
         // ---- compute ground heights (mirrors VanillaLayerInjector) ----
         int[][] groundHeights = computeGroundHeights(chunk, startX, startZ, bottomY);

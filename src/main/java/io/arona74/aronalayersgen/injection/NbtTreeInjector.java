@@ -252,7 +252,7 @@ public class NbtTreeInjector {
 
         int startX = cp.getMinBlockX();
         int startZ = cp.getMinBlockZ();
-        int bottomY = world.getMinBuildHeight();
+        int bottomY = Compat.minY(world);
 
         // Track trunk positions already processed to avoid duplicate CR trees
         // (e.g. 2×2 jungle trunks appear in four columns; 2-block radius deduplicates them)

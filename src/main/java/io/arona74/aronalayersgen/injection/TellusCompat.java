@@ -323,7 +323,7 @@ public class TellusCompat {
                         landCoverSource, (double) worldX, (double) worldZ, worldScale, worldScale);
 
                     boolean isSnowyBiome = false;
-                    if (floorY > chunk.getMinBuildHeight()) {
+                    if (floorY > Compat.minY(chunk)) {
                         var biome = chunk.getNoiseBiome(localX >> 2, floorY >> 2, localZ >> 2);
                         // Check the biome's INHERENT coldness, not block-Y altitude. Vanilla isCold
                         // subtracts a temperature penalty above ~Y 80, so at low world scales (1:1)
@@ -348,7 +348,7 @@ public class TellusCompat {
                     // i.e. our floorY, matches what injectLayerAt reads for a LevelChunk).
                     String surfaceId = "?", aboveId = "?";
                     boolean surfaceMapped = false;
-                    boolean hasSurface = floorY > chunk.getMinBuildHeight();
+                    boolean hasSurface = floorY > Compat.minY(chunk);
                     if (hasSurface) locHasSurface++;
                     if (hasSurface) {
                         var surfaceState = chunk.getBlockState(new BlockPos(worldX, floorY - 1, worldZ));
@@ -551,7 +551,7 @@ public class TellusCompat {
             // otherwise MISMATCH reports our own output as a DEM disagreement.
             int natural = floorY - 1;
             int guard = 0;
-            while (natural > chunk.getMinBuildHeight() && guard++ < 8
+            while (natural > Compat.minY(chunk) && guard++ < 8
                    && LayerPlacementHelper.hasLayerProperty(chunk.getBlockState(new BlockPos(worldX, natural, worldZ)))) {
                 natural--;
             }
@@ -592,14 +592,14 @@ public class TellusCompat {
                 landCoverSource, (double) worldX, (double) worldZ, worldScale, worldScale);
 
             // Biome + cold checks, so we can tell biome-driven snow from stale-chunk snow.
-            if (floorY > chunk.getMinBuildHeight()) {
+            if (floorY > Compat.minY(chunk)) {
                 var biome = chunk.getNoiseBiome((worldX & 15) >> 2, floorY >> 2, (worldZ & 15) >> 2);
                 p.biome = biome.unwrapKey().map(k -> k.location().toString()).orElse("unknown");
                 p.coldAtSurface = biome.value().coldEnoughToSnow(new BlockPos(worldX, floorY, worldZ));
                 p.coldAtBase = biome.value().coldEnoughToSnow(new BlockPos(worldX, Math.min(floorY, 80), worldZ));
             }
 
-            if (floorY > chunk.getMinBuildHeight()) {
+            if (floorY > Compat.minY(chunk)) {
                 BlockState surfaceState = chunk.getBlockState(new BlockPos(worldX, floorY - 1, worldZ));
                 BlockState aboveState = chunk.getBlockState(new BlockPos(worldX, floorY, worldZ));
                 p.surfaceBlock = String.valueOf(Compat.blockId(surfaceState.getBlock()));
@@ -613,14 +613,14 @@ public class TellusCompat {
                     ? net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE
                     : net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG;
                 int wsY = chunk.getOrCreateHeightmapUnprimed(wsType).getFirstAvailable(worldX & 15, worldZ & 15);
-                net.minecraft.world.level.block.Block topBlock = wsY > chunk.getMinBuildHeight()
+                net.minecraft.world.level.block.Block topBlock = wsY > Compat.minY(chunk)
                     ? chunk.getBlockState(new BlockPos(worldX, wsY - 1, worldZ)).getBlock()
                     : net.minecraft.world.level.block.Blocks.AIR;
                 if (topBlock == net.minecraft.world.level.block.Blocks.SNOW_BLOCK || topBlock == net.minecraft.world.level.block.Blocks.SNOW) {
                     p.snowColumn = true;
                     p.snowStackTopY = wsY - 1;
                     StringBuilder stack = new StringBuilder();
-                    for (int y = wsY - 1; y > chunk.getMinBuildHeight(); y--) {
+                    for (int y = wsY - 1; y > Compat.minY(chunk); y--) {
                         BlockState s = chunk.getBlockState(new BlockPos(worldX, y, worldZ));
                         if (s.getBlock() == net.minecraft.world.level.block.Blocks.SNOW) {
                             int v = LayerPlacementHelper.readLayerCount(s);
@@ -645,7 +645,7 @@ public class TellusCompat {
                     }
                 } else {
                     // Find where a layer actually landed (stacking writes one above the surface).
-                    for (int y = p.rawTopSolidY + 1; y >= p.rawTopSolidY - 2 && y > chunk.getMinBuildHeight(); y--) {
+                    for (int y = p.rawTopSolidY + 1; y >= p.rawTopSolidY - 2 && y > Compat.minY(chunk); y--) {
                         BlockState s = chunk.getBlockState(new BlockPos(worldX, y, worldZ));
                         if (LayerPlacementHelper.hasLayerProperty(s)) {
                             p.existingLayer = String.valueOf(Compat.blockId(s.getBlock()));
