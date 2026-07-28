@@ -11,15 +11,15 @@ import io.arona74.aronalayersgen.injection.RTFLayerInjector;
 import io.arona74.aronalayersgen.injection.RandomStateHolder;
 import io.arona74.aronalayersgen.injection.TellusCompat;
 import java.util.Set;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Mixin to inject layer generation when a WorldChunk is created.
+ * Mixin to inject layer generation when a LevelChunk is created.
  *
  * Handles two injection modes:
  * - CARVERS: Layers were placed earlier in ChunkGeneratorMixin. This mixin only
@@ -27,20 +27,20 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * - POST_FEATURES: Primary injection happens here, AFTER all structures/features
  *   are placed. This ensures layers don't appear inside buildings.
  */
-@Mixin(WorldChunk.class)
+@Mixin(LevelChunk.class)
 public class NoiseBasedChunkGeneratorMixin {
 
     @Inject(
-        method = "<init>(Lnet/minecraft/server/world/ServerWorld;Lnet/minecraft/world/chunk/ProtoChunk;Lnet/minecraft/world/chunk/WorldChunk$EntityLoader;)V",
+        method = "<init>(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ProtoChunk;Lnet/minecraft/world/level/chunk/LevelChunk$PostLoadProcessor;)V",
         at = @At("RETURN")
     )
-    private void onChunkCreate(ServerWorld world, net.minecraft.world.chunk.ProtoChunk protoChunk, WorldChunk.EntityLoader entityLoader, CallbackInfo ci) {
+    private void onChunkCreate(ServerLevel world, net.minecraft.world.level.chunk.ProtoChunk protoChunk, LevelChunk.PostLoadProcessor entityLoader, CallbackInfo ci) {
         if (!LayerConfig.LAYER_INJECTION && !LayerConfig.RTF_LAYER_INJECTION && !LayerConfig.TELLUS_LAYER_INJECTION) {
             return;
         }
 
         try {
-            WorldChunk chunk = (WorldChunk)(Object)this;
+            LevelChunk chunk = (LevelChunk)(Object)this;
 
             long stepStart = 0L;
             if (LayerConfig.logChunkInit()) {
@@ -64,7 +64,7 @@ public class NoiseBasedChunkGeneratorMixin {
                 // ChunkGeneratorFeaturesMixin is the primary injector for Tellus worlds, but
                 // re-run Tellus here as a safety net: for some chunks the WG heightmap is still
                 // empty at generateFeatures() time (every column reports noSurface and nothing
-                // gets placed). By WorldChunk.<init> the heightmaps are rebuilt, so those chunks
+                // gets placed). By LevelChunk.<init> the heightmaps are rebuilt, so those chunks
                 // are recovered. Chunks already done are effectively a no-op because
                 // injectLayerAt skips positions that already hold a non-air block.
                 //
@@ -76,7 +76,7 @@ public class NoiseBasedChunkGeneratorMixin {
                         AronaLayersGen.LOGGER.info("[ChunkInit] Tellus re-run at {},{} — features pass found no surface (empty heightmap)",
                             chunk.getPos().x, chunk.getPos().z);
                     }
-                    TellusCompat.injectLayersWithTellus(chunk, world.getChunkManager().getChunkGenerator());
+                    TellusCompat.injectLayersWithTellus(chunk, world.getChunkSource().getGenerator());
                 } else if (LayerConfig.logChunkInit()) {
                     AronaLayersGen.LOGGER.info("[ChunkInit] Tellus already handled {},{} at features time",
                         chunk.getPos().x, chunk.getPos().z);
@@ -89,7 +89,7 @@ public class NoiseBasedChunkGeneratorMixin {
                     if (isPostFeaturesMode) {
                         // In POST_FEATURES mode, ChunkGeneratorFeaturesMixin is the primary injector
                         // (fires at generateFeatures() RETURN, while the tile is still in cache).
-                        // On NeoForge+ETcomehome the tile is dropped before WorldChunk.<init> fires,
+                        // On NeoForge+ETcomehome the tile is dropped before LevelChunk.<init> fires,
                         // so the RTF attempt here will always miss. Do not run the vanilla fallback:
                         // ChunkGeneratorFeaturesMixin already placed RTF layers (or its own vanilla
                         // fallback). Calling vanilla here would overwrite correct RTF layers.

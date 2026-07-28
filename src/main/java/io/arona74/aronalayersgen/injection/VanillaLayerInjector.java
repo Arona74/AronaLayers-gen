@@ -2,14 +2,14 @@ package io.arona74.aronalayersgen.injection;
 
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.gen.noise.NoiseConfig;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.levelgen.RandomState;
 
 /**
  * Vanilla layer injector using heightmap edge detection.
@@ -28,7 +28,7 @@ public class VanillaLayerInjector {
     /**
      * Inject layers into a chunk during terrain generation.
      *
-     * When vanilla_noise_router_layer_injection is enabled and a NoiseConfig is
+     * When vanilla_noise_router_layer_injection is enabled and a RandomState is
      * available, uses the same fractional height formula as RTFLayerInjector but
      * with a synthetic cell height derived from vanilla's continents, erosion, and
      * ridges density functions. Falls back to the slope-based heuristic otherwise.
@@ -36,18 +36,18 @@ public class VanillaLayerInjector {
      * @param chunk The chunk being generated
      * @param noiseConfig The noise configuration (may be null; resolved from RandomStateHolder if needed)
      */
-    public static void injectLayers(Chunk chunk, NoiseConfig noiseConfig) {
+    public static void injectLayers(ChunkAccess chunk, RandomState noiseConfig) {
         // Only use the noise router when RTF is not the active worldgen.
         // RTF replaces vanilla's density functions with its own pipeline,
         // so its continents/erosion/ridges return near-constant values that
         // map to 0 layers through our formula.
         if (LayerConfig.VANILLA_NOISE_ROUTER_LAYER_INJECTION && !RandomStateHolder.hasRTFRandomState()) {
-            NoiseConfig resolved = (noiseConfig != null) ? noiseConfig : RandomStateHolder.getNoiseConfig();
+            RandomState resolved = (noiseConfig != null) ? noiseConfig : RandomStateHolder.getNoiseConfig();
             if (resolved != null) {
                 injectLayersNoiseRouter(chunk, resolved);
                 return;
             }
-            AronaLayersGen.LOGGER.warn("[VanillaNoiseRouter] NoiseConfig unavailable for chunk {},{} — falling back to slope injection",
+            AronaLayersGen.LOGGER.warn("[VanillaNoiseRouter] RandomState unavailable for chunk {},{} — falling back to slope injection",
                 chunk.getPos().x, chunk.getPos().z);
         }
         injectLayersSlope(chunk);
@@ -67,36 +67,36 @@ public class VanillaLayerInjector {
      * synthetic height range. With vanilla density functions changing ~0.001–0.005
      * per block, this creates smooth transitions every ~15–50 blocks.
      */
-    private static void injectLayersNoiseRouter(Chunk chunk, NoiseConfig noiseConfig) {
-        int startX = chunk.getPos().getStartX();
-        int startZ = chunk.getPos().getStartZ();
+    private static void injectLayersNoiseRouter(ChunkAccess chunk, RandomState noiseConfig) {
+        int startX = chunk.getPos().getMinBlockX();
+        int startZ = chunk.getPos().getMinBlockZ();
         int layersPlaced = 0;
 
         resetDebugCounters();
 
         VanillaCellHeightSampler sampler = new VanillaCellHeightSampler(noiseConfig, RandomStateHolder.getWorldSeed());
 
-        Heightmap.Type hmType        = (chunk instanceof WorldChunk) ? Heightmap.Type.OCEAN_FLOOR    : Heightmap.Type.OCEAN_FLOOR_WG;
-        Heightmap.Type surfaceHmType = (chunk instanceof WorldChunk) ? Heightmap.Type.WORLD_SURFACE  : Heightmap.Type.WORLD_SURFACE_WG;
+        Heightmap.Types hmType        = (chunk instanceof LevelChunk) ? Heightmap.Types.OCEAN_FLOOR    : Heightmap.Types.OCEAN_FLOOR_WG;
+        Heightmap.Types surfaceHmType = (chunk instanceof LevelChunk) ? Heightmap.Types.WORLD_SURFACE  : Heightmap.Types.WORLD_SURFACE_WG;
 
-        int worldBottom  = chunk.getBottomY();
-        int worldHeight  = chunk.getTopY() - worldBottom;
+        int worldBottom  = chunk.getMinBuildHeight();
+        int worldHeight  = chunk.getMaxBuildHeight() - worldBottom;
 
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
                 int worldX = startX + localX;
                 int worldZ = startZ + localZ;
 
-                int floorY   = chunk.getHeightmap(hmType).get(localX, localZ);
-                int surfaceY = chunk.getHeightmap(surfaceHmType).get(localX, localZ);
+                int floorY   = chunk.getOrCreateHeightmapUnprimed(hmType).getFirstAvailable(localX, localZ);
+                int surfaceY = chunk.getOrCreateHeightmapUnprimed(surfaceHmType).getFirstAvailable(localX, localZ);
                 boolean isSubmerged = surfaceY > floorY + 1;
                 if (isSubmerged && !LayerConfig.UNDERWATER_LAYERS) continue;
 
                 float cellHeight = sampler.getCellHeight(worldX, worldZ, floorY, worldBottom, worldHeight);
                 boolean isSnowyBiome = false;
                 if (floorY > worldBottom) {
-                    var biome = chunk.getBiomeForNoiseGen(localX >> 2, floorY >> 2, localZ >> 2);
-                    isSnowyBiome = biome.value().isCold(new BlockPos(worldX, floorY, worldZ));
+                    var biome = chunk.getNoiseBiome(localX >> 2, floorY >> 2, localZ >> 2);
+                    isSnowyBiome = biome.value().coldEnoughToSnow(new BlockPos(worldX, floorY, worldZ));
                 }
                 boolean useSnowLayers = isSnowyBiome && LayerConfig.IMPROVE_SNOWY_BIOMES;
 
@@ -122,7 +122,7 @@ public class VanillaLayerInjector {
         }
 
         if (LayerConfig.logVanilla()) {
-            AronaLayersGen.LOGGER.info("[VanillaNoiseRouter] Chunk {},{}: layers={} | skips: snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
+            AronaLayersGen.LOGGER.info("[VanillaNoiseRouter] ChunkAccess {},{}: layers={} | skips: snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
                 chunk.getPos().x, chunk.getPos().z, layersPlaced,
                 LayerPlacementHelper.debugSkipSnowy.get(), LayerPlacementHelper.debugSkipNoSurface.get(),
                 LayerPlacementHelper.debugSkipNoMapping.get(), LayerPlacementHelper.debugSkipLayerZero.get(),
@@ -157,15 +157,15 @@ public class VanillaLayerInjector {
      * Legacy slope-based injection. Places layers near terrain height transitions:
      * bottom of slopes get thick layers, tops get thin, flat terrain gets none.
      */
-    private static void injectLayersSlope(Chunk chunk) {
-        int startX = chunk.getPos().getStartX();
-        int startZ = chunk.getPos().getStartZ();
+    private static void injectLayersSlope(ChunkAccess chunk) {
+        int startX = chunk.getPos().getMinBlockX();
+        int startZ = chunk.getPos().getMinBlockZ();
         int layersPlaced = 0;
 
         resetDebugCounters();
 
-        Heightmap.Type hmType = (chunk instanceof WorldChunk)
-            ? Heightmap.Type.OCEAN_FLOOR : Heightmap.Type.OCEAN_FLOOR_WG;
+        Heightmap.Types hmType = (chunk instanceof LevelChunk)
+            ? Heightmap.Types.OCEAN_FLOOR : Heightmap.Types.OCEAN_FLOOR_WG;
 
         int[][] groundHeights = computeGroundHeights(chunk, hmType);
 
@@ -174,7 +174,7 @@ public class VanillaLayerInjector {
                 int worldX = startX + localX;
                 int worldZ = startZ + localZ;
 
-                int layerCount = calculateLayerCount(groundHeights, localX, localZ, chunk.getBottomY());
+                int layerCount = calculateLayerCount(groundHeights, localX, localZ, chunk.getMinBuildHeight());
 
                 if (LayerPlacementHelper.injectLayerAt(chunk, worldX, worldZ, layerCount, false)) {
                     layersPlaced++;
@@ -183,7 +183,7 @@ public class VanillaLayerInjector {
         }
 
         if (LayerConfig.logVanilla()) {
-            AronaLayersGen.LOGGER.info("[Vanilla] Chunk {},{}: layers={} | skips: snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
+            AronaLayersGen.LOGGER.info("[Vanilla] ChunkAccess {},{}: layers={} | skips: snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
                 chunk.getPos().x, chunk.getPos().z, layersPlaced,
                 LayerPlacementHelper.debugSkipSnowy.get(), LayerPlacementHelper.debugSkipNoSurface.get(),
                 LayerPlacementHelper.debugSkipNoMapping.get(), LayerPlacementHelper.debugSkipLayerZero.get(),
@@ -202,15 +202,15 @@ public class VanillaLayerInjector {
         LayerPlacementHelper.debugSkipEnclosed.set(0);
     }
 
-    private static int[][] computeGroundHeights(Chunk chunk, Heightmap.Type hmType) {
+    private static int[][] computeGroundHeights(ChunkAccess chunk, Heightmap.Types hmType) {
         int[][] heights = new int[16][16];
-        int startX = chunk.getPos().getStartX();
-        int startZ = chunk.getPos().getStartZ();
-        int bottomY = chunk.getBottomY();
+        int startX = chunk.getPos().getMinBlockX();
+        int startZ = chunk.getPos().getMinBlockZ();
+        int bottomY = chunk.getMinBuildHeight();
 
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
-                int hmY = chunk.getHeightmap(hmType).get(localX, localZ);
+                int hmY = chunk.getOrCreateHeightmapUnprimed(hmType).getFirstAvailable(localX, localZ);
 
                 if (hmY <= bottomY) {
                     heights[localX][localZ] = bottomY;

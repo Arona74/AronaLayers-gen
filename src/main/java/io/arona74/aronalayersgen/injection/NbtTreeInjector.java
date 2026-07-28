@@ -4,31 +4,31 @@ import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.NbtTreeRegistry;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.LeavesBlock;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.state.property.Properties;
-import net.minecraft.structure.StructurePlacementData;
-import net.minecraft.structure.StructureTemplate;
-import net.minecraft.util.BlockMirror;
-import net.minecraft.util.BlockRotation;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.StructureWorldAccess;
-import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.WorldGenLevel;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -57,17 +57,17 @@ public class NbtTreeInjector {
 
     // Set by SaplingBlockGrowMixin before vanilla removes the sapling, cleared after.
     // Lets tryPlaceTree know which sapling triggered growth even though the block is gone.
-    private static final ThreadLocal<Identifier> CURRENT_SAPLING_GROW = new ThreadLocal<>();
+    private static final ThreadLocal<ResourceLocation> CURRENT_SAPLING_GROW = new ThreadLocal<>();
 
-    public static void setSaplingGrowContext(Identifier saplingId) { CURRENT_SAPLING_GROW.set(saplingId); }
+    public static void setSaplingGrowContext(ResourceLocation saplingId) { CURRENT_SAPLING_GROW.set(saplingId); }
     public static void clearSaplingGrowContext()                    { CURRENT_SAPLING_GROW.remove(); }
 
-    private static final BlockRotation[] ROTATIONS = BlockRotation.values();
+    private static final Rotation[] ROTATIONS = Rotation.values();
 
     // Worldgen deferred trees: chunk key → list of tree origin positions.
     // Positions are recorded during worldgen (worker threads) when vanilla tree
     // generation is cancelled, then placed on CHUNK_LOAD (server thread) where
-    // the full ServerWorld is available and chunk boundaries are not an issue.
+    // the full ServerLevel is available and chunk boundaries are not an issue.
     private static final ConcurrentHashMap<Long, List<BlockPos>> PENDING_TREES = new ConcurrentHashMap<>();
 
     /**
@@ -76,25 +76,25 @@ public class NbtTreeInjector {
      * When vanilla_fallback=true: only true if the biome is configured in the registry,
      * so that unconfigured biomes let vanilla/RTF tree generation run unimpeded.
      */
-    public static boolean willHandleWorldgenTree(StructureWorldAccess world, BlockPos pos) {
+    public static boolean willHandleWorldgenTree(WorldGenLevel world, BlockPos pos) {
         if (!LayerConfig.CR_NBT_TREES_VANILLA_FALLBACK) return true;
-        Optional<RegistryKey<Biome>> biomeKey = world.getBiome(pos).getKey();
+        Optional<ResourceKey<Biome>> biomeKey = world.getBiome(pos).unwrapKey();
         if (biomeKey.isEmpty()) return false;
-        return NbtTreeRegistry.getInstance().hasBiome(biomeKey.get().getValue());
+        return NbtTreeRegistry.getInstance().hasBiome(biomeKey.get().location());
     }
 
     /** Called from the worldgen mixin to cancel vanilla and queue for deferred placement. */
     public static void queueWorldgenTree(BlockPos origin) {
-        long key = ChunkPos.toLong(origin.getX() >> 4, origin.getZ() >> 4);
+        long key = ChunkPos.asLong(origin.getX() >> 4, origin.getZ() >> 4);
         PENDING_TREES.computeIfAbsent(key, k -> Collections.synchronizedList(new ArrayList<>())).add(origin);
     }
 
     // Chunks whose deferred trees are ready to place, waiting for the next server tick.
     // Populated on CHUNK_LOAD (no heavy work), drained on END_SERVER_TICK (safe world access).
-    private static final ConcurrentHashMap<Long, ServerWorld> READY_CHUNKS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<Long, ServerLevel> READY_CHUNKS = new ConcurrentHashMap<>();
 
     /** Called from CHUNK_LOAD: records that this chunk's deferred trees can be placed soon. */
-    public static void onChunkLoad(ServerWorld world, WorldChunk chunk) {
+    public static void onChunkLoad(ServerLevel world, LevelChunk chunk) {
         if (!LayerConfig.CR_NBT_TREES) return;
         long key = chunk.getPos().toLong();
         if (PENDING_TREES.containsKey(key)) {
@@ -105,18 +105,18 @@ public class NbtTreeInjector {
     /** Called from END_SERVER_TICK: places deferred trees for all ready chunks. */
     public static void flushReadyChunks() {
         if (READY_CHUNKS.isEmpty()) return;
-        List<Map.Entry<Long, ServerWorld>> batch = new ArrayList<>(READY_CHUNKS.entrySet());
-        for (Map.Entry<Long, ServerWorld> e : batch) {
+        List<Map.Entry<Long, ServerLevel>> batch = new ArrayList<>(READY_CHUNKS.entrySet());
+        for (Map.Entry<Long, ServerLevel> e : batch) {
             READY_CHUNKS.remove(e.getKey());
             placeDeferredTrees(e.getValue(), e.getKey());
         }
     }
 
-    private static void placeDeferredTrees(ServerWorld world, long chunkKey) {
+    private static void placeDeferredTrees(ServerLevel world, long chunkKey) {
         List<BlockPos> positions = PENDING_TREES.remove(chunkKey);
         if (positions == null || positions.isEmpty()) return;
 
-        Random rand = Random.create(world.getSeed() ^ chunkKey ^ 0x4E42547265654C47L);
+        RandomSource rand = RandomSource.create(world.getSeed() ^ chunkKey ^ 0x4E42547265654C47L);
         for (BlockPos pos : positions) {
             if (LayerConfig.logNbtTrees())
                 AronaLayersGen.LOGGER.info("[NbtTrees] worldgen-deferred pos={}", pos);
@@ -133,12 +133,12 @@ public class NbtTreeInjector {
      * Called at HEAD of TreeFeature.generate() — vanilla tree hasn't been placed yet.
      * Returns true if a CR tree was placed (caller should cancel vanilla).
      */
-    public static boolean tryPlaceTree(StructureWorldAccess world, BlockPos surfacePos, Random random) {
+    public static boolean tryPlaceTree(WorldGenLevel world, BlockPos surfacePos, RandomSource random) {
         NbtTreeRegistry registry = NbtTreeRegistry.getInstance();
 
         // Sapling-based selection: SaplingBlockGrowMixin sets CURRENT_SAPLING_GROW before vanilla
         // removes the block, so we can still identify the species even though the block is gone.
-        Identifier saplingId = CURRENT_SAPLING_GROW.get();
+        ResourceLocation saplingId = CURRENT_SAPLING_GROW.get();
         Optional<Path> variantOpt = Optional.empty();
 
         if (saplingId != null) {
@@ -157,12 +157,12 @@ public class NbtTreeInjector {
 
         if (variantOpt.isEmpty()) {
             // Biome-based fallback (worldgen deferred, or sapling with fallback disabled)
-            Optional<RegistryKey<Biome>> biomeKeyOpt = world.getBiome(surfacePos).getKey();
+            Optional<ResourceKey<Biome>> biomeKeyOpt = world.getBiome(surfacePos).unwrapKey();
             if (biomeKeyOpt.isEmpty()) {
                 if (LayerConfig.logNbtTrees()) AronaLayersGen.LOGGER.info("[NbtTrees] SKIP no-biome-key pos={}", surfacePos);
                 return false;
             }
-            Identifier biomeId = biomeKeyOpt.get().getValue();
+            ResourceLocation biomeId = biomeKeyOpt.get().location();
 
             if (!registry.hasBiome(biomeId)) {
                 if (LayerConfig.logNbtTrees()) AronaLayersGen.LOGGER.info("[NbtTrees] SKIP biome-not-configured biome={} pos={}", biomeId, surfacePos);
@@ -176,14 +176,14 @@ public class NbtTreeInjector {
             }
 
             // Surface block for species selection: if mod block (e.g. CR layer), look one level deeper.
-            BlockState belowState = world.getBlockState(surfacePos.down());
+            BlockState belowState = world.getBlockState(surfacePos.below());
             if (belowState.isAir() || !belowState.getFluidState().isEmpty()) {
                 if (LayerConfig.logNbtTrees()) AronaLayersGen.LOGGER.info("[NbtTrees] SKIP invalid-surface biome={} pos={}", biomeId, surfacePos);
                 return false;
             }
             Block surfaceBlock = belowState.getBlock();
-            if (!"minecraft".equals(Registries.BLOCK.getId(surfaceBlock).getNamespace())) {
-                BlockState deeper = world.getBlockState(surfacePos.down().down());
+            if (!"minecraft".equals(BuiltInRegistries.BLOCK.getKey(surfaceBlock).getNamespace())) {
+                BlockState deeper = world.getBlockState(surfacePos.below().below());
                 if (!deeper.isAir() && deeper.getFluidState().isEmpty()) {
                     surfaceBlock = deeper.getBlock();
                 }
@@ -192,7 +192,7 @@ public class NbtTreeInjector {
             variantOpt = registry.selectVariant(biomeId, surfaceBlock, random);
             if (variantOpt.isEmpty()) {
                 if (LayerConfig.logNbtTrees()) AronaLayersGen.LOGGER.info("[NbtTrees] SKIP no-variant surface={} biome={} pos={}",
-                        Registries.BLOCK.getId(surfaceBlock), biomeId, surfacePos);
+                        BuiltInRegistries.BLOCK.getKey(surfaceBlock), biomeId, surfacePos);
                 return false;
             }
         }
@@ -206,20 +206,20 @@ public class NbtTreeInjector {
 
         // ArdaTrees-style placement: rotate the trunk anchor around ORIGIN, then subtract
         // from the sapling position so the anchor block lands exactly at surfacePos.
-        BlockPos anchor = ANCHOR_CACHE.getOrDefault(nbtPath, BlockPos.ORIGIN);
-        BlockRotation rotation = ROTATIONS[random.nextInt(ROTATIONS.length)];
+        BlockPos anchor = ANCHOR_CACHE.getOrDefault(nbtPath, BlockPos.ZERO);
+        Rotation rotation = ROTATIONS[random.nextInt(ROTATIONS.length)];
 
-        StructurePlacementData settings = new StructurePlacementData()
+        StructurePlaceSettings settings = new StructurePlaceSettings()
             .setRotation(rotation)
-            .setMirror(BlockMirror.NONE)
+            .setMirror(Mirror.NONE)
             .setIgnoreEntities(true)
-            .setUpdateNeighbors(false);
+            .setKnownShape(false);
 
-        BlockPos rotatedAnchor = StructureTemplate.transformAround(anchor, BlockMirror.NONE, rotation, BlockPos.ORIGIN);
+        BlockPos rotatedAnchor = StructureTemplate.transform(anchor, Mirror.NONE, rotation, BlockPos.ZERO);
         BlockPos placePos = surfacePos.subtract(rotatedAnchor);
 
         try {
-            template.place(world, placePos, placePos, settings, random, Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
+            template.placeInWorld(world, placePos, placePos, settings, random, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
         } catch (RuntimeException e) {
             AronaLayersGen.LOGGER.warn("[NbtTrees] Placement aborted at {} — {}", surfacePos, e.getMessage());
             return false;
@@ -244,15 +244,15 @@ public class NbtTreeInjector {
      * belonging to the "minecraft" namespace — this avoids re-processing CR logs
      * on reload and handles RTF+CR worlds where CR logs lack vanilla block tags.
      */
-    public static void scanAndReplace(ServerWorld world, WorldChunk chunk) {
+    public static void scanAndReplace(ServerLevel world, LevelChunk chunk) {
         NbtTreeRegistry registry = NbtTreeRegistry.getInstance();
         var cp = chunk.getPos();
         // Deterministic per-chunk seed, offset from vanilla worldgen seed
-        Random rand = Random.create(world.getSeed() ^ cp.toLong() ^ 0x4E4254726565L);
+        RandomSource rand = RandomSource.create(world.getSeed() ^ cp.toLong() ^ 0x4E4254726565L);
 
-        int startX = cp.getStartX();
-        int startZ = cp.getStartZ();
-        int bottomY = world.getBottomY();
+        int startX = cp.getMinBlockX();
+        int startZ = cp.getMinBlockZ();
+        int bottomY = world.getMinBuildHeight();
 
         // Track trunk positions already processed to avoid duplicate CR trees
         // (e.g. 2×2 jungle trunks appear in four columns; 2-block radius deduplicates them)
@@ -264,7 +264,7 @@ public class NbtTreeInjector {
                 int wz = startZ + lz;
 
                 // Start scan just below the motion-blocking heightmap
-                int topY = chunk.sampleHeightmap(Heightmap.Type.MOTION_BLOCKING, lx, lz) - 1;
+                int topY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, lx, lz) - 1;
 
                 BlockPos trunk = null;
                 for (int y = topY; y >= bottomY; y--) {
@@ -272,12 +272,12 @@ public class NbtTreeInjector {
                     BlockState st = world.getBlockState(pos);
 
                     // Only match vanilla logs (minecraft namespace + has AXIS property)
-                    if (!st.contains(Properties.AXIS)) continue;
-                    if (!"minecraft".equals(Registries.BLOCK.getId(st.getBlock()).getNamespace())) continue;
+                    if (!st.hasProperty(BlockStateProperties.AXIS)) continue;
+                    if (!"minecraft".equals(BuiltInRegistries.BLOCK.getKey(st.getBlock()).getNamespace())) continue;
 
-                    BlockState below = world.getBlockState(pos.down());
+                    BlockState below = world.getBlockState(pos.below());
                     // Trunk base: log with non-log, non-leaf solid block beneath it
-                    boolean belowIsLog  = below.contains(Properties.AXIS);
+                    boolean belowIsLog  = below.hasProperty(BlockStateProperties.AXIS);
                     boolean belowIsLeaf = below.getBlock() instanceof LeavesBlock;
                     if (below.isAir() || belowIsLog || belowIsLeaf) continue;
 
@@ -295,14 +295,14 @@ public class NbtTreeInjector {
                 if (tooClose) continue;
 
                 // Biome + registry check
-                Optional<RegistryKey<Biome>> biomeOpt = world.getBiome(trunk).getKey();
+                Optional<ResourceKey<Biome>> biomeOpt = world.getBiome(trunk).unwrapKey();
                 if (biomeOpt.isEmpty()) continue;
-                Identifier biomeId = biomeOpt.get().getValue();
+                ResourceLocation biomeId = biomeOpt.get().location();
 
                 if (!registry.hasBiome(biomeId)) continue;
                 if (rand.nextFloat() >= registry.getChance(biomeId)) continue;
 
-                Block surface = world.getBlockState(trunk.down()).getBlock();
+                Block surface = world.getBlockState(trunk.below()).getBlock();
                 Optional<Path> variantOpt = registry.selectVariant(biomeId, surface, rand);
                 if (variantOpt.isEmpty()) continue;
 
@@ -320,19 +320,19 @@ public class NbtTreeInjector {
      * Detects logs via AXIS property and leaves via DISTANCE+PERSISTENT — covers both
      * vanilla and modded variants without relying on block tags.
      */
-    private static void clearVanillaTree(ServerWorld world, BlockPos trunk) {
+    private static void clearVanillaTree(ServerLevel world, BlockPos trunk) {
         int radius = 5, height = 22;
-        BlockPos.Mutable m = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
         for (int dy = -1; dy <= height; dy++) {
             for (int dx = -radius; dx <= radius; dx++) {
                 for (int dz = -radius; dz <= radius; dz++) {
                     m.set(trunk.getX() + dx, trunk.getY() + dy, trunk.getZ() + dz);
                     BlockState s = world.getBlockState(m);
-                    boolean isLog  = s.contains(Properties.AXIS);
+                    boolean isLog  = s.hasProperty(BlockStateProperties.AXIS);
                     boolean isLeaf = s.getBlock() instanceof LeavesBlock;
                     if (isLog || isLeaf) {
-                        world.setBlockState(m, Blocks.AIR.getDefaultState(),
-                            Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
+                        world.setBlock(m, Blocks.AIR.defaultBlockState(),
+                            Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
                     }
                 }
             }
@@ -340,24 +340,24 @@ public class NbtTreeInjector {
     }
 
     /** Load CR NBT template and place it at the trunk-base position (Mode 2, currently unused). */
-    private static void placeCrTree(ServerWorld world, BlockPos trunk, Path nbtPath, Random rand) {
+    private static void placeCrTree(ServerLevel world, BlockPos trunk, Path nbtPath, RandomSource rand) {
         StructureTemplate tpl = getTemplate(nbtPath, world);
         if (tpl == null) return;
 
-        BlockPos anchor = ANCHOR_CACHE.getOrDefault(nbtPath, BlockPos.ORIGIN);
-        BlockRotation rot = ROTATIONS[rand.nextInt(ROTATIONS.length)];
+        BlockPos anchor = ANCHOR_CACHE.getOrDefault(nbtPath, BlockPos.ZERO);
+        Rotation rot = ROTATIONS[rand.nextInt(ROTATIONS.length)];
 
-        StructurePlacementData sd = new StructurePlacementData()
+        StructurePlaceSettings sd = new StructurePlaceSettings()
             .setRotation(rot)
-            .setMirror(BlockMirror.NONE)
+            .setMirror(Mirror.NONE)
             .setIgnoreEntities(true)
-            .setUpdateNeighbors(false);
+            .setKnownShape(false);
 
-        BlockPos rotatedAnchor = StructureTemplate.transformAround(anchor, BlockMirror.NONE, rot, BlockPos.ORIGIN);
+        BlockPos rotatedAnchor = StructureTemplate.transform(anchor, Mirror.NONE, rot, BlockPos.ZERO);
         BlockPos placePos = trunk.subtract(rotatedAnchor);
 
         try {
-            tpl.place(world, placePos, placePos, sd, rand, Block.NOTIFY_LISTENERS | Block.FORCE_STATE);
+            tpl.placeInWorld(world, placePos, placePos, sd, rand, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
         } catch (RuntimeException e) {
             AronaLayersGen.LOGGER.warn("[NbtTrees] CR tree placement error at {}: {}", trunk, e.getMessage());
             return;
@@ -373,16 +373,16 @@ public class NbtTreeInjector {
     // Shared utilities
     // -------------------------------------------------------------------------
 
-    private static StructureTemplate getTemplate(Path path, StructureWorldAccess world) {
+    private static StructureTemplate getTemplate(Path path, WorldGenLevel world) {
         return TEMPLATE_CACHE.computeIfAbsent(path, p -> loadTemplate(p, world));
     }
 
-    private static StructureTemplate loadTemplate(Path path, StructureWorldAccess world) {
+    private static StructureTemplate loadTemplate(Path path, WorldGenLevel world) {
         try (InputStream is = Files.newInputStream(path)) {
-            NbtCompound nbt = Compat.readCompressedNbt(is);
+            CompoundTag nbt = Compat.readCompressedNbt(is);
             ANCHOR_CACHE.put(path, computeAnchor(nbt));
             StructureTemplate template = new StructureTemplate();
-            template.readNbt(world.getRegistryManager().getWrapperOrThrow(RegistryKeys.BLOCK), nbt);
+            template.load(world.registryAccess().lookupOrThrow(Registries.BLOCK), nbt);
             return template;
         } catch (IOException e) {
             AronaLayersGen.LOGGER.error("[NbtTrees] Failed to load '{}': {}", path.getFileName(), e.getMessage());
@@ -392,11 +392,11 @@ public class NbtTreeInjector {
 
     // Finds the lowest log/stem/trunk/hyphae block in the NBT palette — used as the
     // anchor so the trunk base aligns exactly with the sapling position (ArdaTrees approach).
-    private static BlockPos computeAnchor(NbtCompound nbt) {
-        if (!nbt.contains("blocks") || !nbt.contains("palette")) return BlockPos.ORIGIN;
+    private static BlockPos computeAnchor(CompoundTag nbt) {
+        if (!nbt.contains("blocks") || !nbt.contains("palette")) return BlockPos.ZERO;
 
-        NbtList palette = nbt.getList("palette", NbtElement.COMPOUND_TYPE);
-        NbtList blocks  = nbt.getList("blocks",  NbtElement.COMPOUND_TYPE);
+        ListTag palette = nbt.getList("palette", Tag.TAG_COMPOUND);
+        ListTag blocks  = nbt.getList("blocks",  Tag.TAG_COMPOUND);
 
         boolean[] isLog = new boolean[palette.size()];
         for (int i = 0; i < palette.size(); i++) {
@@ -408,15 +408,15 @@ public class NbtTreeInjector {
         BlockPos best = null;
         int bestY = Integer.MAX_VALUE;
         for (int i = 0; i < blocks.size(); i++) {
-            NbtCompound block = blocks.getCompound(i);
+            CompoundTag block = blocks.getCompound(i);
             if (!isLog[block.getInt("state")]) continue;
-            NbtList pos = block.getList("pos", NbtElement.INT_TYPE);
+            ListTag pos = block.getList("pos", Tag.TAG_INT);
             int y = pos.getInt(1);
             if (y < bestY) {
                 bestY = y;
                 best = new BlockPos(pos.getInt(0), y, pos.getInt(2));
             }
         }
-        return best != null ? best : BlockPos.ORIGIN;
+        return best != null ? best : BlockPos.ZERO;
     }
 }

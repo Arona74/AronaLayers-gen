@@ -1,11 +1,11 @@
 package io.arona74.aronalayersgen.block;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.SnowBlock;
-import net.minecraft.state.property.Properties;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.SnowLayerBlock;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
 
 /**
  * A plain layered block (1–8 layers, LAYERS property, height-based collision) that reuses
@@ -18,11 +18,11 @@ import net.minecraft.world.World;
  * LayerPlacementHelper) so this cascading {@code onBlockAdded} conversion never fires during
  * chunk init; it only handles runtime placement (e.g. a player stacking layers to 8).
  */
-public class LayerBlock extends SnowBlock {
+public class LayerBlock extends SnowLayerBlock {
 
     private final Block fullBlock;
 
-    public LayerBlock(Settings settings, Block fullBlock) {
+    public LayerBlock(Properties settings, Block fullBlock) {
         super(settings);
         this.fullBlock = fullBlock;
     }
@@ -33,10 +33,10 @@ public class LayerBlock extends SnowBlock {
     }
 
     @Override
-    public void onBlockAdded(BlockState state, World world, BlockPos pos, BlockState oldState, boolean notify) {
-        super.onBlockAdded(state, world, pos, oldState, notify);
-        if (!world.isClient() && state.get(Properties.LAYERS) == 8) {
-            world.setBlockState(pos, fullBlock.getDefaultState(), Block.NOTIFY_ALL);
+    public void onPlace(BlockState state, Level world, BlockPos pos, BlockState oldState, boolean notify) {
+        super.onPlace(state, world, pos, oldState, notify);
+        if (!world.isClientSide() && state.getValue(BlockStateProperties.LAYERS) == 8) {
+            world.setBlock(pos, fullBlock.defaultBlockState(), Block.UPDATE_ALL);
         }
     }
 }

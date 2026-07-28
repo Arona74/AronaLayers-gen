@@ -2,12 +2,12 @@ package io.arona74.aronalayersgen.injection;
 
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -86,7 +86,7 @@ public class RTFLayerInjector {
      * @param isSubmerged True if terrain is underwater
      * @return true if a layer was placed
      */
-    public static boolean injectLayerAt(Chunk chunk, int worldX, int worldZ, int worldHeight,
+    public static boolean injectLayerAt(ChunkAccess chunk, int worldX, int worldZ, int worldHeight,
                                       float height, boolean isRiver, boolean isSubmerged) {
         if (isRiver && !LayerConfig.UNDERWATER_LAYERS) {
             debugSkipRiver.incrementAndGet();
@@ -100,15 +100,15 @@ public class RTFLayerInjector {
 
         int localX = worldX & 15;
         int localZ = worldZ & 15;
-        Heightmap.Type hmType = (chunk instanceof WorldChunk)
-            ? Heightmap.Type.OCEAN_FLOOR : Heightmap.Type.OCEAN_FLOOR_WG;
-        int surfaceY = chunk.getHeightmap(hmType).get(localX, localZ);
+        Heightmap.Types hmType = (chunk instanceof LevelChunk)
+            ? Heightmap.Types.OCEAN_FLOOR : Heightmap.Types.OCEAN_FLOOR_WG;
+        int surfaceY = chunk.getOrCreateHeightmapUnprimed(hmType).getFirstAvailable(localX, localZ);
 
         boolean isSnowyBiome = false;
-        if (surfaceY > chunk.getBottomY()) {
+        if (surfaceY > chunk.getMinBuildHeight()) {
             BlockPos biomePos = new BlockPos(worldX, surfaceY - 1, worldZ);
-            var biome = chunk.getBiomeForNoiseGen(localX >> 2, surfaceY >> 2, localZ >> 2);
-            isSnowyBiome = biome.value().isCold(biomePos);
+            var biome = chunk.getNoiseBiome(localX >> 2, surfaceY >> 2, localZ >> 2);
+            isSnowyBiome = biome.value().coldEnoughToSnow(biomePos);
         }
 
         boolean useSnowLayers = isSnowyBiome && LayerConfig.IMPROVE_SNOWY_BIOMES;
@@ -124,7 +124,7 @@ public class RTFLayerInjector {
         return LayerPlacementHelper.injectLayerAt(chunk, worldX, worldZ, layerCount, useSnowLayers, rtfExpectedBaseY);
     }
 
-    // ========== RTF-specific: Chunk-level Processing ==========
+    // ========== RTF-specific: ChunkAccess-level Processing ==========
 
     private static final AtomicInteger debugSkipRiver = new AtomicInteger();
     private static final AtomicInteger debugSkipSubmerged = new AtomicInteger();
@@ -137,9 +137,9 @@ public class RTFLayerInjector {
      * @param worldHeight The world height from RTF Levels
      * @param cellAccessor Function to access Cell data for a position
      */
-    public static void injectLayersForChunk(Chunk chunk, int worldHeight, CellAccessor cellAccessor) {
-        int startX = chunk.getPos().getStartX();
-        int startZ = chunk.getPos().getStartZ();
+    public static void injectLayersForChunk(ChunkAccess chunk, int worldHeight, CellAccessor cellAccessor) {
+        int startX = chunk.getPos().getMinBlockX();
+        int startZ = chunk.getPos().getMinBlockZ();
         int layersPlaced = 0;
         int cellsProcessed = 0;
         int cellsNull = 0;
@@ -195,7 +195,7 @@ public class RTFLayerInjector {
         }
 
         if (LayerConfig.logRtf()) {
-            AronaLayersGen.LOGGER.info("[RTF] Chunk {},{}: cells={}, null={}, layers={} | skips: river={}, submerged={}, snowy={}, noSurf={}, conserv={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
+            AronaLayersGen.LOGGER.info("[RTF] ChunkAccess {},{}: cells={}, null={}, layers={} | skips: river={}, submerged={}, snowy={}, noSurf={}, conserv={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
                 chunk.getPos().x, chunk.getPos().z, cellsProcessed, cellsNull, layersPlaced,
                 debugSkipRiver.get(), debugSkipSubmerged.get(),
                 LayerPlacementHelper.debugSkipSnowy.get(), LayerPlacementHelper.debugSkipNoSurface.get(),
@@ -208,15 +208,15 @@ public class RTFLayerInjector {
 
     // ========== Delegated methods ==========
 
-    public static void correctMismatchedLayers(Chunk chunk) {
+    public static void correctMismatchedLayers(ChunkAccess chunk) {
         LayerPlacementHelper.correctMismatchedLayers(chunk);
     }
 
-    public static void removeLayersAtColumns(Chunk chunk, Set<Integer> changedColumns) {
+    public static void removeLayersAtColumns(ChunkAccess chunk, Set<Integer> changedColumns) {
         LayerPlacementHelper.removeLayersAtColumns(chunk, changedColumns);
     }
 
-    public static void prepareStructureBounds(Chunk chunk, net.minecraft.world.ChunkRegion region) {
+    public static void prepareStructureBounds(ChunkAccess chunk, net.minecraft.server.level.WorldGenRegion region) {
         LayerPlacementHelper.prepareStructureBounds(chunk, region);
     }
 

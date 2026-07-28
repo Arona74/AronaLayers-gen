@@ -3,9 +3,9 @@ package io.arona74.aronalayersgen;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import net.minecraft.block.Block;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.*;
 
@@ -50,9 +50,9 @@ public class EnhancedFoliageRegistry {
     }
 
     private static volatile EnhancedFoliageRegistry instance = null;
-    private final Map<Identifier, BiomeEntry> entries;
+    private final Map<ResourceLocation, BiomeEntry> entries;
 
-    private EnhancedFoliageRegistry(Map<Identifier, BiomeEntry> entries) {
+    private EnhancedFoliageRegistry(Map<ResourceLocation, BiomeEntry> entries) {
         this.entries = entries;
     }
 
@@ -69,7 +69,7 @@ public class EnhancedFoliageRegistry {
 
     private static EnhancedFoliageRegistry load() {
         JsonObject root = ConfigLoader.loadJsonObject("cr_enhanced_extra_foliage.json");
-        Map<Identifier, BiomeEntry> entries = new LinkedHashMap<>();
+        Map<ResourceLocation, BiomeEntry> entries = new LinkedHashMap<>();
 
         if (!root.has("biomes")) {
             AronaLayersGen.LOGGER.warn("[EnhancedFoliage] No 'biomes' key in cr_enhanced_extra_foliage.json");
@@ -82,7 +82,7 @@ public class EnhancedFoliageRegistry {
             JsonElement biomeElem = biomes.get(biomeId);
             if (!biomeElem.isJsonObject()) continue;
 
-            Identifier biomeIdent = Identifier.tryParse(biomeId);
+            ResourceLocation biomeIdent = ResourceLocation.tryParse(biomeId);
             if (biomeIdent == null) {
                 AronaLayersGen.LOGGER.warn("[EnhancedFoliage] Invalid biome ID: {}", biomeId);
                 continue;
@@ -94,13 +94,13 @@ public class EnhancedFoliageRegistry {
             Set<Block> surfaceBlocks = new HashSet<>();
             if (biomeObj.has("surface_blocks")) {
                 for (JsonElement elem : biomeObj.getAsJsonArray("surface_blocks")) {
-                    Identifier blockId = Identifier.tryParse(elem.getAsString());
+                    ResourceLocation blockId = ResourceLocation.tryParse(elem.getAsString());
                     if (blockId == null) {
                         AronaLayersGen.LOGGER.warn("[EnhancedFoliage] Invalid surface block ID: {}", elem.getAsString());
                         continue;
                     }
-                    Block block = Registries.BLOCK.get(blockId);
-                    if (block == net.minecraft.block.Blocks.AIR) {
+                    Block block = BuiltInRegistries.BLOCK.get(blockId);
+                    if (block == net.minecraft.world.level.block.Blocks.AIR) {
                         AronaLayersGen.LOGGER.warn("[EnhancedFoliage] Surface block not found: {}", elem.getAsString());
                         continue;
                     }
@@ -119,13 +119,13 @@ public class EnhancedFoliageRegistry {
                     int weight = grassObj.has("weight") ? grassObj.get("weight").getAsInt() : 1;
                     if (weight <= 0) continue;
 
-                    Identifier blockId = Identifier.tryParse(blockIdStr);
+                    ResourceLocation blockId = ResourceLocation.tryParse(blockIdStr);
                     if (blockId == null) {
                         AronaLayersGen.LOGGER.warn("[EnhancedFoliage] Invalid grass block ID: {}", blockIdStr);
                         continue;
                     }
-                    Block block = Registries.BLOCK.get(blockId);
-                    if (block == net.minecraft.block.Blocks.AIR) {
+                    Block block = BuiltInRegistries.BLOCK.get(blockId);
+                    if (block == net.minecraft.world.level.block.Blocks.AIR) {
                         AronaLayersGen.LOGGER.warn("[EnhancedFoliage] Grass block not found: {}", blockIdStr);
                         continue;
                     }
@@ -150,21 +150,21 @@ public class EnhancedFoliageRegistry {
      * Select a grass block for the given biome and surface block using the hash as random source.
      * Returns null if no entry exists for the biome, the surface block is not allowed, or no grasses are defined.
      */
-    public Block selectGrass(Identifier biomeId, Block surfaceBlock, long hash) {
+    public Block selectGrass(ResourceLocation biomeId, Block surfaceBlock, long hash) {
         BiomeEntry entry = entries.get(biomeId);
         if (entry == null) return null;
         if (!entry.allowsSurface(surfaceBlock)) return null;
         return entry.selectGrass(hash);
     }
 
-    public boolean hasBiome(Identifier biomeId) {
+    public boolean hasBiome(ResourceLocation biomeId) {
         return entries.containsKey(biomeId);
     }
 
     /**
      * Returns the biome-specific placement chance, or -1 if not set (caller should use global).
      */
-    public float getChance(Identifier biomeId) {
+    public float getChance(ResourceLocation biomeId) {
         BiomeEntry entry = entries.get(biomeId);
         return entry != null ? entry.chance() : -1f;
     }

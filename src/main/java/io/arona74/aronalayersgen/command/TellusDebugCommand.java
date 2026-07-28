@@ -6,14 +6,14 @@ import com.mojang.brigadier.context.CommandContext;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.injection.TellusCompat;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.gen.chunk.ChunkGenerator;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.network.chat.Component;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.ChunkGenerator;
 
 /**
  * Reports the Tellus layer backend's per-column data so placement decisions can be
@@ -30,15 +30,15 @@ public class TellusDebugCommand {
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
             dispatcher.register(
-                CommandManager.literal("algtellus")
-                    .requires(src -> src.hasPermissionLevel(2))
+                Commands.literal("algtellus")
+                    .requires(src -> src.hasPermission(2))
                     .executes(ctx -> here(ctx))
-                    .then(CommandManager.literal("grid")
+                    .then(Commands.literal("grid")
                         .executes(ctx -> grid(ctx, 8))
-                        .then(CommandManager.argument("radius", IntegerArgumentType.integer(1, 24))
+                        .then(Commands.argument("radius", IntegerArgumentType.integer(1, 24))
                             .executes(ctx -> grid(ctx, IntegerArgumentType.getInteger(ctx, "radius")))))
-                    .then(CommandManager.argument("x", IntegerArgumentType.integer())
-                        .then(CommandManager.argument("z", IntegerArgumentType.integer())
+                    .then(Commands.argument("x", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer())
                             .executes(ctx -> at(ctx,
                                 IntegerArgumentType.getInteger(ctx, "x"),
                                 IntegerArgumentType.getInteger(ctx, "z")))))
@@ -46,21 +46,21 @@ public class TellusDebugCommand {
         );
     }
 
-    private static int here(CommandContext<ServerCommandSource> ctx) {
-        ServerCommandSource src = ctx.getSource();
+    private static int here(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
         if (src.getPlayer() == null) {
             send(src, "[ALG] Must be run by a player (or use /algtellus <x> <z>).");
             return 0;
         }
-        BlockPos pos = src.getPlayer().getBlockPos();
+        BlockPos pos = src.getPlayer().blockPosition();
         return at(ctx, pos.getX(), pos.getZ());
     }
 
-    private static int at(CommandContext<ServerCommandSource> ctx, int x, int z) {
-        ServerCommandSource src = ctx.getSource();
-        ServerWorld world = src.getWorld();
-        ChunkGenerator generator = world.getChunkManager().getChunkGenerator();
-        WorldChunk chunk = world.getChunk(new ChunkPos(new BlockPos(x, 0, z)).x,
+    private static int at(CommandContext<CommandSourceStack> ctx, int x, int z) {
+        CommandSourceStack src = ctx.getSource();
+        ServerLevel world = src.getLevel();
+        ChunkGenerator generator = world.getChunkSource().getGenerator();
+        LevelChunk chunk = world.getChunk(new ChunkPos(new BlockPos(x, 0, z)).x,
                                           new ChunkPos(new BlockPos(x, 0, z)).z);
 
         TellusCompat.Probe p = TellusCompat.probe(generator, chunk, x, z);
@@ -145,15 +145,15 @@ public class TellusDebugCommand {
      * decision for that column; '#' marks a column whose DEM sample disagrees with the
      * terrain actually built there.
      */
-    private static int grid(CommandContext<ServerCommandSource> ctx, int radius) {
-        ServerCommandSource src = ctx.getSource();
+    private static int grid(CommandContext<CommandSourceStack> ctx, int radius) {
+        CommandSourceStack src = ctx.getSource();
         if (src.getPlayer() == null) {
             send(src, "[ALG] grid must be run by a player.");
             return 0;
         }
-        ServerWorld world = src.getWorld();
-        ChunkGenerator generator = world.getChunkManager().getChunkGenerator();
-        BlockPos centre = src.getPlayer().getBlockPos();
+        ServerLevel world = src.getLevel();
+        ChunkGenerator generator = world.getChunkSource().getGenerator();
+        BlockPos centre = src.getPlayer().blockPosition();
         int cx = centre.getX(), cz = centre.getZ();
 
         send(src, "--- ALG Tellus Grid  centre=(" + cx + ", " + cz + ")  radius=" + radius + " ---");
@@ -165,7 +165,7 @@ public class TellusDebugCommand {
             StringBuilder row = new StringBuilder();
             row.append(z == cz ? ">" : " ");
             for (int x = cx - radius; x <= cx + radius; x++) {
-                WorldChunk chunk = world.getChunk(new ChunkPos(new BlockPos(x, 0, z)).x,
+                LevelChunk chunk = world.getChunk(new ChunkPos(new BlockPos(x, 0, z)).x,
                                                   new ChunkPos(new BlockPos(x, 0, z)).z);
                 TellusCompat.Probe p = TellusCompat.probe(generator, chunk, x, z);
                 total++;
@@ -192,7 +192,7 @@ public class TellusDebugCommand {
         return String.format("%.3f", v);
     }
 
-    private static void send(ServerCommandSource source, String msg) {
-        source.sendFeedback(() -> Text.literal(msg), false);
+    private static void send(CommandSourceStack source, String msg) {
+        source.sendSuccess(() -> Component.literal(msg), false);
     }
 }

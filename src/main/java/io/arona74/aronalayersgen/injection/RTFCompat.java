@@ -3,7 +3,7 @@ package io.arona74.aronalayersgen.injection;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.level.chunk.ChunkAccess;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -153,7 +153,7 @@ public class RTFCompat {
      * @param randomState The RandomState (may be RTFRandomState)
      * @return true if RTF injection was performed
      */
-    public static boolean injectLayersWithRTF(Chunk chunk, Object randomState) {
+    public static boolean injectLayersWithRTF(ChunkAccess chunk, Object randomState) {
         if (!isRTFAvailable() || randomState == null) {
             if (LayerConfig.logRtf()) {
                 AronaLayersGen.LOGGER.info("[RTF] Injection skipped: available={}, randomState={}", isRTFAvailable(), randomState != null);

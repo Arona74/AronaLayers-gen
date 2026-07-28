@@ -10,12 +10,12 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.object.builder.v1.block.FabricBlockSettings;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.Item;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,17 +36,17 @@ public class AronaLayersGen implements ModInitializer {
     public void onInitialize() {
         LOGGER.info("Initializing Arona Layers Generator");
 
-        Registry.register(Registries.BLOCK, Compat.id(MOD_ID, "powder_snow_layer"), POWDER_SNOW_LAYER);
-        Registry.register(Registries.ITEM, Compat.id(MOD_ID, "powder_snow_layer"),
-                new BlockItem(POWDER_SNOW_LAYER, new Item.Settings()));
+        Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "powder_snow_layer"), POWDER_SNOW_LAYER);
+        Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "powder_snow_layer"),
+                new BlockItem(POWDER_SNOW_LAYER, new Item.Properties()));
 
-        Registry.register(Registries.BLOCK, Compat.id(MOD_ID, "deepslate_layer"), DEEPSLATE_LAYER);
-        Registry.register(Registries.ITEM, Compat.id(MOD_ID, "deepslate_layer"),
-                new BlockItem(DEEPSLATE_LAYER, new Item.Settings()));
+        Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "deepslate_layer"), DEEPSLATE_LAYER);
+        Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "deepslate_layer"),
+                new BlockItem(DEEPSLATE_LAYER, new Item.Properties()));
 
-        Registry.register(Registries.BLOCK, Compat.id(MOD_ID, "moss_layer"), MOSS_LAYER);
-        Registry.register(Registries.ITEM, Compat.id(MOD_ID, "moss_layer"),
-                new BlockItem(MOSS_LAYER, new Item.Settings()));
+        Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "moss_layer"), MOSS_LAYER);
+        Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "moss_layer"),
+                new BlockItem(MOSS_LAYER, new Item.Properties()));
 
         ChunkDebugCommand.register();
         TellusDebugCommand.register();

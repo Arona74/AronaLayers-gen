@@ -1,6 +1,6 @@
 package io.arona74.aronalayersgen.mixin;
 
-import net.minecraft.entity.Entity;
+import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -12,6 +12,6 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 @Mixin(Entity.class)
 public interface EntityTouchingPowderSnowAccessor {
 
-    @Accessor("inPowderSnow")
+    @Accessor("isInPowderSnow")
     void aronalayersgen$setInPowderSnow(boolean value);
 }

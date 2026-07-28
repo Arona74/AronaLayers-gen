@@ -3,7 +3,7 @@ package io.arona74.aronalayersgen.mixin;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.injection.NbtTreeInjector;
-import net.minecraft.world.gen.feature.util.FeatureContext;
+import net.minecraft.world.level.levelgen.feature.FeaturePlaceContext;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
@@ -38,15 +38,15 @@ public class NbtTreeTemplateFeatureMixin {
         cancellable = true,
         remap = false
     )
-    private void onGenerate(FeatureContext<?> context, CallbackInfoReturnable<Boolean> cir) {
+    private void onGenerate(FeaturePlaceContext<?> context, CallbackInfoReturnable<Boolean> cir) {
         if (!LayerConfig.CR_NBT_TREES) return;
         if (LayerConfig.logNbtTrees())
-            AronaLayersGen.LOGGER.info("[NbtTrees] rtf-mixin fired pos={}", context.getOrigin());
+            AronaLayersGen.LOGGER.info("[NbtTrees] rtf-mixin fired pos={}", context.origin());
 
         // RTF's TemplateFeature is only called during worldgen, never for sapling growing.
         // Cancel and defer, but only if this biome is configured (or vanilla_fallback=false).
-        if (NbtTreeInjector.willHandleWorldgenTree(context.getWorld(), context.getOrigin())) {
-            NbtTreeInjector.queueWorldgenTree(context.getOrigin());
+        if (NbtTreeInjector.willHandleWorldgenTree(context.level(), context.origin())) {
+            NbtTreeInjector.queueWorldgenTree(context.origin());
             cir.setReturnValue(true);
         }
         // else: biome not configured + fallback enabled → RTF places its own tree normally

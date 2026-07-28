@@ -3,28 +3,28 @@ package io.arona74.aronalayersgen.mixin;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.injection.RTFCompat;
 import io.arona74.aronalayersgen.injection.RandomStateHolder;
-import net.minecraft.server.world.ThreadedAnvilChunkStorage;
+import net.minecraft.server.level.ChunkMap;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(ThreadedAnvilChunkStorage.class)
+@Mixin(ChunkMap.class)
 public class ThreadedAnvilChunkStorageMixin {
 
     @Shadow
-    private net.minecraft.world.gen.noise.NoiseConfig noiseConfig;
+    private net.minecraft.world.level.levelgen.RandomState randomState;
 
     @Inject(
         method = "<init>",
         at = @At("TAIL")
     )
     private void onInit(CallbackInfo ci) {
-        if (noiseConfig != null) {
-            AronaLayersGen.LOGGER.info("[TACS Mixin] Capturing NoiseConfig/RandomState: {}", noiseConfig.getClass().getName());
-            RandomStateHolder.setNoiseConfig(noiseConfig);
-            RandomStateHolder.setRandomState(noiseConfig);
+        if (randomState != null) {
+            AronaLayersGen.LOGGER.info("[TACS Mixin] Capturing NoiseConfig/RandomState: {}", randomState.getClass().getName());
+            RandomStateHolder.setNoiseConfig(randomState);
+            RandomStateHolder.setRandomState(randomState);
         }
     }
 

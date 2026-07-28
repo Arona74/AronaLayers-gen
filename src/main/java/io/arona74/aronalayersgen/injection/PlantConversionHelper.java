@@ -3,14 +3,14 @@ package io.arona74.aronalayersgen.injection;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.PlantMappingRegistry;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.enums.DoubleBlockHalf;
-import net.minecraft.state.property.Properties;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.chunk.ChunkAccess;
 
 /**
  * Converts vanilla plants above layer blocks to their Conquest Reforged equivalents.
@@ -36,7 +36,7 @@ public class PlantConversionHelper {
      * Scan a chunk for vanilla plants above layer blocks and convert them
      * to conquest equivalents.
      */
-    public static void convertPlantsAboveLayers(Chunk chunk) {
+    public static void convertPlantsAboveLayers(ChunkAccess chunk) {
         // Plant conversion requires Conquest Reforged backend
         if (!LayerPlacementHelper.isConquestReforged()) {
             return;
@@ -44,17 +44,17 @@ public class PlantConversionHelper {
 
         PlantMappingRegistry registry = getPlantRegistry();
         int converted = 0;
-        int startX = chunk.getPos().getStartX();
-        int startZ = chunk.getPos().getStartZ();
+        int startX = chunk.getPos().getMinBlockX();
+        int startZ = chunk.getPos().getMinBlockZ();
 
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
                 int worldX = startX + localX;
                 int worldZ = startZ + localZ;
 
-                int topY = chunk.getHeightmap(Heightmap.Type.WORLD_SURFACE).get(localX, localZ);
+                int topY = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE).getFirstAvailable(localX, localZ);
 
-                if (topY <= chunk.getBottomY() + 2) continue;
+                if (topY <= chunk.getMinBuildHeight() + 2) continue;
 
                 BlockPos plantPos = new BlockPos(worldX, topY - 1, worldZ);
                 BlockState plantState = chunk.getBlockState(plantPos);
@@ -65,19 +65,19 @@ public class PlantConversionHelper {
 
                 if (LayerConfig.logPlants()) {
                     AronaLayersGen.LOGGER.info("[Plant Debug] Found plant {} at {}",
-                        net.minecraft.registry.Registries.BLOCK.getId(plantBlock), plantPos);
+                        net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(plantBlock), plantPos);
                 }
 
                 BlockPos upperPos = null;
-                if (plantState.contains(Properties.DOUBLE_BLOCK_HALF)
-                        && plantState.get(Properties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER) {
+                if (plantState.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                        && plantState.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER) {
                     upperPos = plantPos;
-                    plantPos = plantPos.down();
+                    plantPos = plantPos.below();
                     plantState = chunk.getBlockState(plantPos);
                     plantBlock = plantState.getBlock();
                 }
 
-                BlockPos belowPlant = plantPos.down();
+                BlockPos belowPlant = plantPos.below();
                 BlockState belowState = chunk.getBlockState(belowPlant);
 
                 if (!RTFLayerInjector.hasLayerProperty(belowState)) continue;
@@ -87,9 +87,9 @@ public class PlantConversionHelper {
                     // Orphaned vanilla plant above a CR foliage/decorator — clear it.
                     // This happens when carvers or RTF terrain adjustments removed the solid block
                     // that originally supported the vanilla feature-placed plant.
-                    chunk.setBlockState(plantPos, Blocks.AIR.getDefaultState(), false);
+                    chunk.setBlockState(plantPos, Blocks.AIR.defaultBlockState(), false);
                     if (upperPos != null) {
-                        chunk.setBlockState(upperPos, Blocks.AIR.getDefaultState(), false);
+                        chunk.setBlockState(upperPos, Blocks.AIR.defaultBlockState(), false);
                     }
                     converted++;
                     continue;
@@ -99,40 +99,40 @@ public class PlantConversionHelper {
                 if (conquestPlant == null) {
                     if (LayerConfig.logPlants()) {
                         AronaLayersGen.LOGGER.warn("[Plant Debug] No conquest mapping found for {}",
-                            net.minecraft.registry.Registries.BLOCK.getId(plantBlock));
+                            net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(plantBlock));
                     }
                     continue;
                 }
 
                 if (LayerConfig.logPlants()) {
                     AronaLayersGen.LOGGER.info("[Plant Debug] Converting {} to {}, upperPos={}",
-                        net.minecraft.registry.Registries.BLOCK.getId(plantBlock),
-                        net.minecraft.registry.Registries.BLOCK.getId(conquestPlant),
+                        net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(plantBlock),
+                        net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(conquestPlant),
                         upperPos);
                 }
 
                 int layerCount = RTFLayerInjector.readLayerCount(belowState);
 
                 if (upperPos != null) {
-                    BlockState conquestLower = conquestPlant.getDefaultState();
+                    BlockState conquestLower = conquestPlant.defaultBlockState();
                     conquestLower = RTFLayerInjector.applyLayerCount(conquestLower, conquestPlant, layerCount);
-                    if (conquestLower.contains(Properties.DOUBLE_BLOCK_HALF)) {
-                        conquestLower = conquestLower.with(Properties.DOUBLE_BLOCK_HALF, DoubleBlockHalf.LOWER);
+                    if (conquestLower.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)) {
+                        conquestLower = conquestLower.setValue(BlockStateProperties.DOUBLE_BLOCK_HALF, DoubleBlockHalf.LOWER);
                     }
                     chunk.setBlockState(plantPos, conquestLower, false);
 
-                    if (conquestPlant.getDefaultState().contains(Properties.DOUBLE_BLOCK_HALF)) {
+                    if (conquestPlant.defaultBlockState().hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)) {
                         // CR equivalent is also tall — place upper half
-                        BlockState conquestUpper = conquestPlant.getDefaultState();
+                        BlockState conquestUpper = conquestPlant.defaultBlockState();
                         conquestUpper = RTFLayerInjector.applyLayerCount(conquestUpper, conquestPlant, layerCount);
-                        conquestUpper = conquestUpper.with(Properties.DOUBLE_BLOCK_HALF, DoubleBlockHalf.UPPER);
+                        conquestUpper = conquestUpper.setValue(BlockStateProperties.DOUBLE_BLOCK_HALF, DoubleBlockHalf.UPPER);
                         chunk.setBlockState(upperPos, conquestUpper, false);
                     } else {
                         // CR equivalent is a single-block plant — clear the orphaned vanilla upper half
-                        chunk.setBlockState(upperPos, Blocks.AIR.getDefaultState(), false);
+                        chunk.setBlockState(upperPos, Blocks.AIR.defaultBlockState(), false);
                     }
                 } else {
-                    BlockState conquestState = conquestPlant.getDefaultState();
+                    BlockState conquestState = conquestPlant.defaultBlockState();
                     conquestState = RTFLayerInjector.applyLayerCount(conquestState, conquestPlant, layerCount);
                     chunk.setBlockState(plantPos, conquestState, false);
                 }
@@ -142,7 +142,7 @@ public class PlantConversionHelper {
         }
 
         if (converted > 0 && LayerConfig.logPlants()) {
-            AronaLayersGen.LOGGER.info("[Plant Conversion] Chunk {},{}: converted {} plants",
+            AronaLayersGen.LOGGER.info("[Plant Conversion] ChunkAccess {},{}: converted {} plants",
                 chunk.getPos().x, chunk.getPos().z, converted);
         }
     }

@@ -1,7 +1,7 @@
 package io.arona74.aronalayersgen.injection;
 
 import io.arona74.aronalayersgen.AronaLayersGen;
-import net.minecraft.world.gen.noise.NoiseConfig;
+import net.minecraft.world.level.levelgen.RandomState;
 
 /**
  * Holds world-generation state for use during chunk generation.
@@ -10,10 +10,10 @@ import net.minecraft.world.gen.noise.NoiseConfig;
 public class RandomStateHolder {
 
     private static Object rtfRandomState = null;
-    private static NoiseConfig vanillaNoiseConfig = null;
+    private static RandomState vanillaNoiseConfig = null;
     private static long worldSeed = Long.MIN_VALUE;
 
-    public static void setNoiseConfig(NoiseConfig noiseConfig) {
+    public static void setNoiseConfig(RandomState noiseConfig) {
         vanillaNoiseConfig = noiseConfig;
     }
 
@@ -26,7 +26,7 @@ public class RandomStateHolder {
         return worldSeed;
     }
 
-    public static NoiseConfig getNoiseConfig() {
+    public static RandomState getNoiseConfig() {
         return vanillaNoiseConfig;
     }
 

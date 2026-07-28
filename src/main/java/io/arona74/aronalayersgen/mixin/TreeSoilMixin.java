@@ -3,13 +3,13 @@ package io.arona74.aronalayersgen.mixin;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.injection.RTFLayerInjector;
-import net.minecraft.block.BlockState;
-import net.minecraft.registry.tag.BlockTags;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.StructureWorldAccess;
-import net.minecraft.world.gen.feature.TreeFeature;
-import net.minecraft.world.gen.feature.TreeFeatureConfig;
-import net.minecraft.world.gen.feature.util.FeatureContext;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.WorldGenLevel;
+import net.minecraft.world.level.levelgen.feature.TreeFeature;
+import net.minecraft.world.level.levelgen.feature.configurations.TreeConfiguration;
+import net.minecraft.world.level.levelgen.feature.FeaturePlaceContext;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -27,43 +27,43 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class TreeSoilMixin {
 
     @Inject(
-        method = "generate(Lnet/minecraft/world/gen/feature/util/FeatureContext;)Z",
+        method = "place(Lnet/minecraft/world/level/levelgen/feature/FeaturePlaceContext;)Z",
         at = @At("HEAD")
     )
-    private void onGenerateHead(FeatureContext<TreeFeatureConfig> context,
+    private void onGenerateHead(FeaturePlaceContext<TreeConfiguration> context,
                                  CallbackInfoReturnable<Boolean> cir) {
         if (!LayerConfig.TREE_INJECTION) {
             return;
         }
 
-        StructureWorldAccess world = context.getWorld();
-        BlockPos origin = context.getOrigin();
+        WorldGenLevel world = context.level();
+        BlockPos origin = context.origin();
 
         if (LayerConfig.logTreeSoil()) {
             BlockState atOrigin = world.getBlockState(origin);
-            BlockState below = world.getBlockState(origin.down());
-            BlockState below2 = world.getBlockState(origin.down().down());
+            BlockState below = world.getBlockState(origin.below());
+            BlockState below2 = world.getBlockState(origin.below().below());
             AronaLayersGen.LOGGER.info("[TreeSoil] Tree attempt at {}: origin={}, below={}, below2={}",
                 origin,
-                net.minecraft.registry.Registries.BLOCK.getId(atOrigin.getBlock()),
-                net.minecraft.registry.Registries.BLOCK.getId(below.getBlock()),
-                net.minecraft.registry.Registries.BLOCK.getId(below2.getBlock()));
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(atOrigin.getBlock()),
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(below.getBlock()),
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(below2.getBlock()));
         }
 
         int layersCleared = 0;
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
-                BlockPos checkOrigin = origin.add(dx, 0, dz);
+                BlockPos checkOrigin = origin.offset(dx, 0, dz);
 
-                BlockPos soilPos = checkOrigin.down();
+                BlockPos soilPos = checkOrigin.below();
                 BlockState soilState = world.getBlockState(soilPos);
 
                 if (RTFLayerInjector.hasLayerProperty(soilState)) {
-                    BlockPos actualSoilPos = soilPos.down();
+                    BlockPos actualSoilPos = soilPos.below();
                     BlockState actualSoilState = world.getBlockState(actualSoilPos);
 
-                    if (actualSoilState.isIn(BlockTags.DIRT)) {
-                        world.setBlockState(soilPos, actualSoilState, 0);
+                    if (actualSoilState.is(BlockTags.DIRT)) {
+                        world.setBlock(soilPos, actualSoilState, 0);
                         layersCleared++;
                     }
                 }

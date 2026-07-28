@@ -1,9 +1,9 @@
 package io.arona74.aronalayersgen;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,13 +26,13 @@ public class PlantMappingRegistry {
         Map<String, String> configMappings = ConfigLoader.loadMappings("plant_mappings.json");
 
         for (Map.Entry<String, String> entry : configMappings.entrySet()) {
-            Identifier vanillaId = Identifier.tryParse(entry.getKey());
+            ResourceLocation vanillaId = ResourceLocation.tryParse(entry.getKey());
             if (vanillaId == null) {
                 AronaLayersGen.LOGGER.warn("Invalid vanilla plant ID in config: {}", entry.getKey());
                 continue;
             }
 
-            Block vanillaBlock = Registries.BLOCK.get(vanillaId);
+            Block vanillaBlock = BuiltInRegistries.BLOCK.get(vanillaId);
             if (vanillaBlock == Blocks.AIR) {
                 AronaLayersGen.LOGGER.warn("Vanilla plant not found: {}", entry.getKey());
                 continue;
@@ -46,9 +46,9 @@ public class PlantMappingRegistry {
         // auto-alias it to the same conquest mapping. No-op on 1.20.1 where short_grass is AIR.
         String grassMapping = configMappings.get("minecraft:grass");
         if (grassMapping != null) {
-            Identifier shortGrassId = Identifier.tryParse("minecraft:short_grass");
+            ResourceLocation shortGrassId = ResourceLocation.tryParse("minecraft:short_grass");
             if (shortGrassId != null) {
-                Block shortGrass = Registries.BLOCK.get(shortGrassId);
+                Block shortGrass = BuiltInRegistries.BLOCK.get(shortGrassId);
                 if (shortGrass != Blocks.AIR && !vanillaToConquestPlant.containsKey(shortGrass)) {
                     registerPlantMapping(shortGrass, grassMapping);
                     AronaLayersGen.LOGGER.info("Auto-aliased minecraft:short_grass -> {} (renamed from minecraft:grass in 1.21.1)", grassMapping);
@@ -72,13 +72,13 @@ public class PlantMappingRegistry {
             return null;
         }
 
-        Identifier identifier = Identifier.tryParse(conquestId);
+        ResourceLocation identifier = ResourceLocation.tryParse(conquestId);
         if (identifier == null) {
             AronaLayersGen.LOGGER.warn("Invalid conquest plant identifier: {}", conquestId);
             return null;
         }
 
-        Block conquestPlant = Registries.BLOCK.get(identifier);
+        Block conquestPlant = BuiltInRegistries.BLOCK.get(identifier);
         if (conquestPlant == Blocks.AIR) {
             AronaLayersGen.LOGGER.warn("Conquest plant not found: {}. Is Conquest Reforged installed?", conquestId);
             return null;
@@ -92,7 +92,7 @@ public class PlantMappingRegistry {
     }
 
     public Block getVanillaPlant(Block conquestPlant) {
-        String conquestId = Registries.BLOCK.getId(conquestPlant).toString();
+        String conquestId = BuiltInRegistries.BLOCK.getKey(conquestPlant).toString();
         return conquestToVanillaPlant.get(conquestId);
     }
 
@@ -101,7 +101,7 @@ public class PlantMappingRegistry {
     }
 
     public boolean isConquestPlant(Block block) {
-        String blockId = Registries.BLOCK.getId(block).toString();
+        String blockId = BuiltInRegistries.BLOCK.getKey(block).toString();
         return conquestToVanillaPlant.containsKey(blockId);
     }
 }

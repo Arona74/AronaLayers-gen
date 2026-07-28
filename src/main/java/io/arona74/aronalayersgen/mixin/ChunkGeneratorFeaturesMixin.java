@@ -10,12 +10,12 @@ import io.arona74.aronalayersgen.injection.RTFLayerInjector;
 import io.arona74.aronalayersgen.injection.RandomStateHolder;
 import io.arona74.aronalayersgen.injection.TellusCompat;
 import io.arona74.aronalayersgen.injection.VanillaLayerInjector;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.ChunkRegion;
-import net.minecraft.world.StructureWorldAccess;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.gen.StructureAccessor;
-import net.minecraft.world.gen.chunk.ChunkGenerator;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.world.level.WorldGenLevel;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.chunk.ChunkGenerator;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -42,10 +42,10 @@ public class ChunkGeneratorFeaturesMixin {
     private static boolean warnedTellusFallback = false;
 
     @Inject(
-        method = "generateFeatures",
+        method = "applyBiomeDecoration",
         at = @At("RETURN")
     )
-    private void onGenerateFeaturesComplete(StructureWorldAccess world, Chunk chunk, StructureAccessor structureAccessor, CallbackInfo ci) {
+    private void onGenerateFeaturesComplete(WorldGenLevel world, ChunkAccess chunk, StructureManager structureAccessor, CallbackInfo ci) {
         if (!LayerConfig.LAYER_INJECTION && !LayerConfig.RTF_LAYER_INJECTION && !LayerConfig.TELLUS_LAYER_INJECTION) {
             return;
         }
@@ -54,14 +54,14 @@ public class ChunkGeneratorFeaturesMixin {
         }
 
         try {
-            ChunkRegion chunkRegion = null;
-            ServerWorld serverWorld = null;
-            if (world instanceof ChunkRegion region) {
+            WorldGenRegion chunkRegion = null;
+            ServerLevel serverWorld = null;
+            if (world instanceof WorldGenRegion region) {
                 chunkRegion = region;
                 @SuppressWarnings("deprecation")
-                ServerWorld regionWorld = region.toServerWorld();
+                ServerLevel regionWorld = region.getLevel();
                 serverWorld = regionWorld;
-            } else if (world instanceof ServerWorld sw) {
+            } else if (world instanceof ServerLevel sw) {
                 serverWorld = sw;
             }
 
@@ -70,11 +70,11 @@ public class ChunkGeneratorFeaturesMixin {
             }
 
             if (LayerConfig.STRUCTURE_INJECTION) {
-                // During normal generation world is a ChunkRegion.
+                // During normal generation world is a WorldGenRegion.
                 // region.getChunk() works for ProtoChunks (neighbouring chunks are not yet
                 // WorldChunks at FEATURES time), so cross-chunk structure starts and footprints
-                // are resolved correctly. Fall back to the ServerWorld path only for reset
-                // chunks where world arrives as a plain ServerWorld.
+                // are resolved correctly. Fall back to the ServerLevel path only for reset
+                // chunks where world arrives as a plain ServerLevel.
                 if (chunkRegion != null) {
                     LayerPlacementHelper.prepareStructureBounds(chunk, chunkRegion);
                 } else {

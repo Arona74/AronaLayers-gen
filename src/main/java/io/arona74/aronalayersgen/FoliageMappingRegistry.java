@@ -1,9 +1,9 @@
 package io.arona74.aronalayersgen;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,13 +25,13 @@ public class FoliageMappingRegistry {
         Map<String, String> configMappings = ConfigLoader.loadMappings("cr_extra_foliage_mappings.json");
 
         for (Map.Entry<String, String> entry : configMappings.entrySet()) {
-            Identifier vanillaId = Identifier.tryParse(entry.getKey());
+            ResourceLocation vanillaId = ResourceLocation.tryParse(entry.getKey());
             if (vanillaId == null) {
                 AronaLayersGen.LOGGER.warn("Invalid surface block ID in foliage config: {}", entry.getKey());
                 continue;
             }
 
-            Block vanillaBlock = Registries.BLOCK.get(vanillaId);
+            Block vanillaBlock = BuiltInRegistries.BLOCK.get(vanillaId);
             if (vanillaBlock == Blocks.AIR) {
                 AronaLayersGen.LOGGER.warn("Surface block not found for foliage mapping: {}", entry.getKey());
                 continue;
@@ -53,13 +53,13 @@ public class FoliageMappingRegistry {
             return null;
         }
 
-        Identifier identifier = Identifier.tryParse(foliageBlockId);
+        ResourceLocation identifier = ResourceLocation.tryParse(foliageBlockId);
         if (identifier == null) {
             AronaLayersGen.LOGGER.warn("Invalid foliage block identifier: {}", foliageBlockId);
             return null;
         }
 
-        Block foliageBlock = Registries.BLOCK.get(identifier);
+        Block foliageBlock = BuiltInRegistries.BLOCK.get(identifier);
         if (foliageBlock == Blocks.AIR) {
             AronaLayersGen.LOGGER.warn("Foliage block not found: {}. Is Conquest Reforged installed?", foliageBlockId);
             return null;

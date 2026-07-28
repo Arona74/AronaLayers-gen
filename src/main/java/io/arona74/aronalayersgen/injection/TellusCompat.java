@@ -3,12 +3,12 @@ package io.arona74.aronalayersgen.injection;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.block.BlockState;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.gen.chunk.ChunkGenerator;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.ChunkGenerator;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -67,10 +67,10 @@ public class TellusCompat {
 
     /**
      * Chunks whose WG heightmap was still empty during the generateFeatures() pass, so nothing
-     * could be placed. They are retried at WorldChunk.&lt;init&gt; once heightmaps are rebuilt.
+     * could be placed. They are retried at LevelChunk.&lt;init&gt; once heightmaps are rebuilt.
      *
      * <p>Tracks failures rather than successes deliberately: failures are rare, so the set stays
-     * small, and any entry that is never claimed (a chunk that never constructs a WorldChunk —
+     * small, and any entry that is never claimed (a chunk that never constructs a LevelChunk —
      * e.g. ResetChunksCommand reuses the existing one) costs almost nothing. Tracking successes
      * would instead grow with every chunk generated in the session.
      */
@@ -80,7 +80,7 @@ public class TellusCompat {
      * True when the features pass could not resolve a surface for this chunk, so the caller
      * should run injection again. Consumes the record.
      */
-    public static boolean needsRerun(Chunk chunk) {
+    public static boolean needsRerun(ChunkAccess chunk) {
         return chunksNeedingRerun.remove(chunk.getPos().toLong());
     }
 
@@ -186,7 +186,7 @@ public class TellusCompat {
      * @return true if Tellus handled this chunk (whether or not any layer was placed);
      *         false means the caller should fall through to another backend.
      */
-    public static boolean injectLayersWithTellus(Chunk chunk, ChunkGenerator generator) {
+    public static boolean injectLayersWithTellus(ChunkAccess chunk, ChunkGenerator generator) {
         if (!isAvailable() || generator == null) {
             return false;
         }
@@ -220,11 +220,11 @@ public class TellusCompat {
             LayerPlacementHelper.debugSkipNotAir.set(0);
             LayerPlacementHelper.debugSkipEnclosed.set(0);
 
-            int startX = chunk.getPos().getStartX();
-            int startZ = chunk.getPos().getStartZ();
+            int startX = chunk.getPos().getMinBlockX();
+            int startZ = chunk.getPos().getMinBlockZ();
 
-            Heightmap.Type floorType = (chunk instanceof WorldChunk)
-                ? Heightmap.Type.OCEAN_FLOOR : Heightmap.Type.OCEAN_FLOOR_WG;
+            Heightmap.Types floorType = (chunk instanceof LevelChunk)
+                ? Heightmap.Types.OCEAN_FLOOR : Heightmap.Types.OCEAN_FLOOR_WG;
             int layersPlaced = 0;
 
             // Concurrency-safe local diagnostics (the shared debugSkip* statics are
@@ -242,7 +242,7 @@ public class TellusCompat {
                     int worldX = startX + localX;
                     int worldZ = startZ + localZ;
 
-                    int floorY = chunk.getHeightmap(floorType).get(localX, localZ);
+                    int floorY = chunk.getOrCreateHeightmapUnprimed(floorType).getFirstAvailable(localX, localZ);
 
                     // Test for an actual fluid directly above the solid floor. The heightmap
                     // heuristic (WORLD_SURFACE > OCEAN_FLOOR + 1) counts ANY non-air block, so a
@@ -322,15 +322,15 @@ public class TellusCompat {
                         landCoverSource, (double) worldX, (double) worldZ, worldScale, worldScale);
 
                     boolean isSnowyBiome = false;
-                    if (floorY > chunk.getBottomY()) {
-                        var biome = chunk.getBiomeForNoiseGen(localX >> 2, floorY >> 2, localZ >> 2);
+                    if (floorY > chunk.getMinBuildHeight()) {
+                        var biome = chunk.getNoiseBiome(localX >> 2, floorY >> 2, localZ >> 2);
                         // Check the biome's INHERENT coldness, not block-Y altitude. Vanilla isCold
                         // subtracts a temperature penalty above ~Y 80, so at low world scales (1:1)
                         // terrain sitting at a huge block Y reads as cold for every biome, painting
                         // snow onto temperate plains/meadows. Tellus already assigns biomes from
                         // real Köppen climate, so trust that: cap the Y below the altitude penalty.
                         int coldCheckY = Math.min(floorY, 80);
-                        isSnowyBiome = biome.value().isCold(new BlockPos(worldX, coldCheckY, worldZ));
+                        isSnowyBiome = biome.value().coldEnoughToSnow(new BlockPos(worldX, coldCheckY, worldZ));
                     }
                     boolean useSnowLayers = (isSnowyBiome || coverClass == 70) && LayerConfig.IMPROVE_SNOWY_BIOMES;
 
@@ -344,16 +344,16 @@ public class TellusCompat {
 
                     // Pre-inspect this column the way injectLayerAt will, so we can attribute
                     // a non-placement to a concrete cause (surface Y from OCEAN_FLOOR heightmap,
-                    // i.e. our floorY, matches what injectLayerAt reads for a WorldChunk).
+                    // i.e. our floorY, matches what injectLayerAt reads for a LevelChunk).
                     String surfaceId = "?", aboveId = "?";
                     boolean surfaceMapped = false;
-                    boolean hasSurface = floorY > chunk.getBottomY();
+                    boolean hasSurface = floorY > chunk.getMinBuildHeight();
                     if (hasSurface) locHasSurface++;
                     if (hasSurface) {
                         var surfaceState = chunk.getBlockState(new BlockPos(worldX, floorY - 1, worldZ));
                         var aboveState = chunk.getBlockState(new BlockPos(worldX, floorY, worldZ));
-                        surfaceId = String.valueOf(net.minecraft.registry.Registries.BLOCK.getId(surfaceState.getBlock()));
-                        aboveId = String.valueOf(net.minecraft.registry.Registries.BLOCK.getId(aboveState.getBlock()));
+                        surfaceId = String.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(surfaceState.getBlock()));
+                        aboveId = String.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(aboveState.getBlock()));
                         surfaceMapped = LayerPlacementHelper.hasMappingFor(surfaceState.getBlock());
                         // Tellus's own scaleElevationToHeight() is ceil(scaled)+offset, so for a
                         // column we sampled identically this must equal the real top solid block.
@@ -368,7 +368,7 @@ public class TellusCompat {
                                 locNoMapping++;
                             } else if (aboveState.isAir()) {
                                 locAboveAir++;
-                            } else if (aboveState.isReplaceable()) {
+                            } else if (aboveState.canBeReplaced()) {
                                 locAbovePlant++;
                             } else {
                                 locAboveBlocked++;
@@ -404,14 +404,14 @@ public class TellusCompat {
             }
 
             // No column resolved a surface: the heightmap was still empty at this point, so
-            // nothing could be placed. Flag the chunk for a retry at WorldChunk.<init>, once
+            // nothing could be placed. Flag the chunk for a retry at LevelChunk.<init>, once
             // heightmaps have been rebuilt.
             if (locHasSurface == 0) {
                 chunksNeedingRerun.add(chunk.getPos().toLong());
             }
 
             if (LayerConfig.logTellus()) {
-                AronaLayersGen.LOGGER.info("[Tellus] Chunk {},{}: placed={} | cols layer>=1={} layer0={} | fail breakdown: noSurface={}, noMapping={}, aboveAir(should place)={}, abovePlant={}, aboveBlocked={} | submergedSkip={}, noBedData={}, noElev={}, demMismatch={}",
+                AronaLayersGen.LOGGER.info("[Tellus] ChunkAccess {},{}: placed={} | cols layer>=1={} layer0={} | fail breakdown: noSurface={}, noMapping={}, aboveAir(should place)={}, abovePlant={}, aboveBlocked={} | submergedSkip={}, noBedData={}, noElev={}, demMismatch={}",
                     chunk.getPos().x, chunk.getPos().z, layersPlaced,
                     locLayerGe1, locLayer0,
                     locNoSurface, locNoMapping, locAboveAir, locAbovePlant, locAboveBlocked,
@@ -520,7 +520,7 @@ public class TellusCompat {
      * Sample one column exactly the way {@link #injectLayersWithTellus} does, without
      * modifying anything. Safe to call post-generation from a command.
      */
-    public static Probe probe(ChunkGenerator generator, Chunk chunk, int worldX, int worldZ) {
+    public static Probe probe(ChunkGenerator generator, ChunkAccess chunk, int worldX, int worldZ) {
         Probe p = new Probe();
         p.worldX = worldX;
         p.worldZ = worldZ;
@@ -538,9 +538,9 @@ public class TellusCompat {
             Object demSelection = demSelectionMethod.invoke(settings);
 
             int localX = worldX & 15, localZ = worldZ & 15;
-            Heightmap.Type floorType = (chunk instanceof WorldChunk)
-                ? Heightmap.Type.OCEAN_FLOOR : Heightmap.Type.OCEAN_FLOOR_WG;
-            int floorY = chunk.getHeightmap(floorType).get(localX, localZ);
+            Heightmap.Types floorType = (chunk instanceof LevelChunk)
+                ? Heightmap.Types.OCEAN_FLOOR : Heightmap.Types.OCEAN_FLOOR_WG;
+            int floorY = chunk.getOrCreateHeightmapUnprimed(floorType).getFirstAvailable(localX, localZ);
             p.heightmapY = floorY;
             p.rawTopSolidY = floorY - 1;
 
@@ -550,7 +550,7 @@ public class TellusCompat {
             // otherwise MISMATCH reports our own output as a DEM disagreement.
             int natural = floorY - 1;
             int guard = 0;
-            while (natural > chunk.getBottomY() && guard++ < 8
+            while (natural > chunk.getMinBuildHeight() && guard++ < 8
                    && LayerPlacementHelper.hasLayerProperty(chunk.getBlockState(new BlockPos(worldX, natural, worldZ)))) {
                 natural--;
             }
@@ -591,41 +591,41 @@ public class TellusCompat {
                 landCoverSource, (double) worldX, (double) worldZ, worldScale, worldScale);
 
             // Biome + cold checks, so we can tell biome-driven snow from stale-chunk snow.
-            if (floorY > chunk.getBottomY()) {
-                var biome = chunk.getBiomeForNoiseGen((worldX & 15) >> 2, floorY >> 2, (worldZ & 15) >> 2);
-                p.biome = biome.getKey().map(k -> k.getValue().toString()).orElse("unknown");
-                p.coldAtSurface = biome.value().isCold(new BlockPos(worldX, floorY, worldZ));
-                p.coldAtBase = biome.value().isCold(new BlockPos(worldX, Math.min(floorY, 80), worldZ));
+            if (floorY > chunk.getMinBuildHeight()) {
+                var biome = chunk.getNoiseBiome((worldX & 15) >> 2, floorY >> 2, (worldZ & 15) >> 2);
+                p.biome = biome.unwrapKey().map(k -> k.location().toString()).orElse("unknown");
+                p.coldAtSurface = biome.value().coldEnoughToSnow(new BlockPos(worldX, floorY, worldZ));
+                p.coldAtBase = biome.value().coldEnoughToSnow(new BlockPos(worldX, Math.min(floorY, 80), worldZ));
             }
 
-            if (floorY > chunk.getBottomY()) {
+            if (floorY > chunk.getMinBuildHeight()) {
                 BlockState surfaceState = chunk.getBlockState(new BlockPos(worldX, floorY - 1, worldZ));
                 BlockState aboveState = chunk.getBlockState(new BlockPos(worldX, floorY, worldZ));
-                p.surfaceBlock = String.valueOf(net.minecraft.registry.Registries.BLOCK.getId(surfaceState.getBlock()));
-                p.aboveBlock = String.valueOf(net.minecraft.registry.Registries.BLOCK.getId(aboveState.getBlock()));
+                p.surfaceBlock = String.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(surfaceState.getBlock()));
+                p.aboveBlock = String.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(aboveState.getBlock()));
                 p.surfaceMapped = LayerPlacementHelper.hasMappingFor(surfaceState.getBlock());
 
                 // Tellus snow: a snow_block (or, after we run, a snow[8]) covers the terrain, with
                 // our snow-layer terrace stacked above it. Use WORLD_SURFACE (highest non-air) to
                 // find the real top, mirroring the injector, and read the whole snow stack top-down.
-                net.minecraft.world.Heightmap.Type wsType = (chunk instanceof WorldChunk)
-                    ? net.minecraft.world.Heightmap.Type.WORLD_SURFACE
-                    : net.minecraft.world.Heightmap.Type.WORLD_SURFACE_WG;
-                int wsY = chunk.getHeightmap(wsType).get(worldX & 15, worldZ & 15);
-                net.minecraft.block.Block topBlock = wsY > chunk.getBottomY()
+                net.minecraft.world.level.levelgen.Heightmap.Types wsType = (chunk instanceof LevelChunk)
+                    ? net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE
+                    : net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG;
+                int wsY = chunk.getOrCreateHeightmapUnprimed(wsType).getFirstAvailable(worldX & 15, worldZ & 15);
+                net.minecraft.world.level.block.Block topBlock = wsY > chunk.getMinBuildHeight()
                     ? chunk.getBlockState(new BlockPos(worldX, wsY - 1, worldZ)).getBlock()
-                    : net.minecraft.block.Blocks.AIR;
-                if (topBlock == net.minecraft.block.Blocks.SNOW_BLOCK || topBlock == net.minecraft.block.Blocks.SNOW) {
+                    : net.minecraft.world.level.block.Blocks.AIR;
+                if (topBlock == net.minecraft.world.level.block.Blocks.SNOW_BLOCK || topBlock == net.minecraft.world.level.block.Blocks.SNOW) {
                     p.snowColumn = true;
                     p.snowStackTopY = wsY - 1;
                     StringBuilder stack = new StringBuilder();
-                    for (int y = wsY - 1; y > chunk.getBottomY(); y--) {
+                    for (int y = wsY - 1; y > chunk.getMinBuildHeight(); y--) {
                         BlockState s = chunk.getBlockState(new BlockPos(worldX, y, worldZ));
-                        if (s.getBlock() == net.minecraft.block.Blocks.SNOW) {
+                        if (s.getBlock() == net.minecraft.world.level.block.Blocks.SNOW) {
                             int v = LayerPlacementHelper.readLayerCount(s);
                             if (stack.length() > 0) stack.append(", ");
                             stack.append("snow[").append(v).append("]@").append(y);
-                        } else if (s.getBlock() == net.minecraft.block.Blocks.SNOW_BLOCK) {
+                        } else if (s.getBlock() == net.minecraft.world.level.block.Blocks.SNOW_BLOCK) {
                             if (stack.length() > 0) stack.append(", ");
                             stack.append("snow_block@").append(y);
                         } else {
@@ -636,7 +636,7 @@ public class TellusCompat {
                     // Our terrace, once placed, is the topmost snow layer whose value is < 8 sitting
                     // above a full snow base. Report it as the found layer.
                     BlockState top = chunk.getBlockState(new BlockPos(worldX, wsY - 1, worldZ));
-                    if (top.getBlock() == net.minecraft.block.Blocks.SNOW
+                    if (top.getBlock() == net.minecraft.world.level.block.Blocks.SNOW
                         && LayerPlacementHelper.readLayerCount(top) < 8) {
                         p.existingLayer = "minecraft:snow";
                         p.existingLayerValue = LayerPlacementHelper.readLayerCount(top);
@@ -644,10 +644,10 @@ public class TellusCompat {
                     }
                 } else {
                     // Find where a layer actually landed (stacking writes one above the surface).
-                    for (int y = p.rawTopSolidY + 1; y >= p.rawTopSolidY - 2 && y > chunk.getBottomY(); y--) {
+                    for (int y = p.rawTopSolidY + 1; y >= p.rawTopSolidY - 2 && y > chunk.getMinBuildHeight(); y--) {
                         BlockState s = chunk.getBlockState(new BlockPos(worldX, y, worldZ));
                         if (LayerPlacementHelper.hasLayerProperty(s)) {
-                            p.existingLayer = String.valueOf(net.minecraft.registry.Registries.BLOCK.getId(s.getBlock()));
+                            p.existingLayer = String.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(s.getBlock()));
                             p.existingLayerValue = LayerPlacementHelper.readLayerCount(s);
                             p.foundLayerY = y;
                             break;

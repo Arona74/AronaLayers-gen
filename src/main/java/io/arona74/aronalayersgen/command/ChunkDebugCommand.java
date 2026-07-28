@@ -5,21 +5,21 @@ import com.mojang.brigadier.context.CommandContext;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Properties;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Holder;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.network.chat.Component;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -36,30 +36,30 @@ public class ChunkDebugCommand {
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
             dispatcher.register(
-                CommandManager.literal("algdebug")
-                    .requires(src -> src.hasPermissionLevel(2))
+                Commands.literal("algdebug")
+                    .requires(src -> src.hasPermission(2))
                     .executes(ChunkDebugCommand::execute)
             )
         );
     }
 
-    private static int execute(CommandContext<ServerCommandSource> ctx) {
-        ServerCommandSource source = ctx.getSource();
+    private static int execute(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
         if (source.getPlayer() == null) {
             send(source, "[ALG] Must be run by a player.");
             return 0;
         }
 
-        ServerWorld world    = source.getWorld();
-        BlockPos   playerPos = source.getPlayer().getBlockPos();
+        ServerLevel world    = source.getLevel();
+        BlockPos   playerPos = source.getPlayer().blockPosition();
         ChunkPos   cp        = new ChunkPos(playerPos);
-        WorldChunk chunk     = world.getChunk(cp.x, cp.z);
+        LevelChunk chunk     = world.getChunk(cp.x, cp.z);
 
-        int startX = cp.getStartX();
-        int startZ = cp.getStartZ();
+        int startX = cp.getMinBlockX();
+        int startZ = cp.getMinBlockZ();
         int plx    = playerPos.getX() - startX;   // 0..15
         int plz    = playerPos.getZ() - startZ;   // 0..15
-        int bottomY = chunk.getBottomY();
+        int bottomY = chunk.getMinBuildHeight();
 
         // ---- compute ground heights (mirrors VanillaLayerInjector) ----
         int[][] groundHeights = computeGroundHeights(chunk, startX, startZ, bottomY);
@@ -80,7 +80,7 @@ public class ChunkDebugCommand {
                 int wz = startZ + lz;
 
                 // top block = block just below OCEAN_FLOOR height
-                int hmY = chunk.getHeightmap(Heightmap.Type.OCEAN_FLOOR).get(lx, lz);
+                int hmY = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR).getFirstAvailable(lx, lz);
                 Block topBlock = hmY > bottomY
                         ? chunk.getBlockState(new BlockPos(wx, hmY - 1, wz)).getBlock()
                         : Blocks.AIR;
@@ -92,9 +92,9 @@ public class ChunkDebugCommand {
                 else if (topBlock == Blocks.SNOW_BLOCK)                             { tc = 'S'; tn = "snow_block"; }
                 else if (topBlock == Blocks.SNOW)                                   { tc = 'N'; tn = "snow(layer)"; }
                 else if (LayerPlacementHelper.hasMappingFor(topBlock)) {
-                    tc = '.'; tn = Registries.BLOCK.getId(topBlock).getPath();
+                    tc = '.'; tn = BuiltInRegistries.BLOCK.getKey(topBlock).getPath();
                 } else {
-                    tc = '?'; tn = "?" + Registries.BLOCK.getId(topBlock).getPath();
+                    tc = '?'; tn = "?" + BuiltInRegistries.BLOCK.getKey(topBlock).getPath();
                 }
                 topGrid[lx][lz] = tc;
                 topBlockCounts.merge(tn, 1, Integer::sum);
@@ -127,11 +127,11 @@ public class ChunkDebugCommand {
         }
 
         // ---- biome at player position ----
-        RegistryEntry<Biome> biomeEntry = chunk.getBiomeForNoiseGen(plx >> 2, playerPos.getY() >> 2, plz >> 2);
-        String biomeName = biomeEntry.getKey().isPresent()
-                ? biomeEntry.getKey().get().getValue().toString()
+        Holder<Biome> biomeEntry = chunk.getNoiseBiome(plx >> 2, playerPos.getY() >> 2, plz >> 2);
+        String biomeName = biomeEntry.unwrapKey().isPresent()
+                ? biomeEntry.unwrapKey().get().location().toString()
                 : "unknown";
-        boolean isSnowyBiome = biomeEntry.value().isCold(playerPos);
+        boolean isSnowyBiome = biomeEntry.value().coldEnoughToSnow(playerPos);
 
         // ======== output ========
         String colMarker = buildColMarker(plx);
@@ -200,8 +200,8 @@ public class ChunkDebugCommand {
                 .forEach(e -> send(source, "  " + e.getKey() + " x" + e.getValue()));
 
         // ---- player column detail ----
-        int hmY = chunk.getHeightmap(Heightmap.Type.OCEAN_FLOOR).get(plx, plz);
-        int wsY = chunk.getHeightmap(Heightmap.Type.WORLD_SURFACE).get(plx, plz);
+        int hmY = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR).getFirstAvailable(plx, plz);
+        int wsY = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE).getFirstAvailable(plx, plz);
         Block topB   = hmY > bottomY ? chunk.getBlockState(new BlockPos(playerPos.getX(), hmY - 1, playerPos.getZ())).getBlock() : Blocks.AIR;
         int   gh     = groundHeights[plx][plz];
         int   lc     = layerCounts[plx][plz];
@@ -216,9 +216,9 @@ public class ChunkDebugCommand {
         send(source, "");
         send(source, "--- Your Column (lx=" + plx + " lz=" + plz + ") ---");
         send(source, "  OCEAN_FLOOR=" + hmY + "  WORLD_SURFACE=" + wsY);
-        send(source, "  topBlock (OCEAN_FLOOR-1): " + Registries.BLOCK.getId(topB) + " @Y=" + (hmY - 1));
-        send(source, "  groundBlock (after mapping scan): " + Registries.BLOCK.getId(groundB) + " @Y=" + (gh - 1));
-        send(source, "  aboveGround (layer placement pos): " + Registries.BLOCK.getId(aboveB) + " @Y=" + gh);
+        send(source, "  topBlock (OCEAN_FLOOR-1): " + BuiltInRegistries.BLOCK.getKey(topB) + " @Y=" + (hmY - 1));
+        send(source, "  groundBlock (after mapping scan): " + BuiltInRegistries.BLOCK.getKey(groundB) + " @Y=" + (gh - 1));
+        send(source, "  aboveGround (layer placement pos): " + BuiltInRegistries.BLOCK.getKey(aboveB) + " @Y=" + gh);
         send(source, "  groundHeight=" + gh + "  simLayerCount=" + lc
                 + (LayerConfig.RTF_LAYER_INJECTION ? " (RTF actual count may differ)" : ""));
         send(source, "  surfIceOrWater=" + surfIceOrWater + "  surfPowderSnow=" + surfPowderSnow);
@@ -228,16 +228,16 @@ public class ChunkDebugCommand {
         boolean aboveIsWater = aboveB == Blocks.WATER || aboveB == Blocks.ICE || aboveB == Blocks.FROSTED_ICE;
         Block mappedBlock = LayerPlacementHelper.getMappedLayerBlock(groundB, Math.max(lc, 1));
         if (mappedBlock != null) {
-            BlockState mappedState = mappedBlock.getDefaultState();
-            boolean supportsWaterlogged = mappedState.contains(Properties.WATERLOGGED);
+            BlockState mappedState = mappedBlock.defaultBlockState();
+            boolean supportsWaterlogged = mappedState.hasProperty(BlockStateProperties.WATERLOGGED);
             boolean hasCRLayer = LayerPlacementHelper.getCRLayerProperty(mappedBlock) != null;
-            send(source, "  mappedLayerBlock: " + Registries.BLOCK.getId(mappedBlock)
+            send(source, "  mappedLayerBlock: " + BuiltInRegistries.BLOCK.getKey(mappedBlock)
                     + " (WATERLOGGED=" + supportsWaterlogged + " CRlayer=" + hasCRLayer + ")");
             if (aboveIsWater && !supportsWaterlogged) {
                 send(source, "  !! FAIL: above pos has water/ice but mapped block has no WATERLOGGED -> injectLayerAt will skip");
             }
         } else {
-            send(source, "  mappedLayerBlock: null (no mapping for " + Registries.BLOCK.getId(groundB) + ")");
+            send(source, "  mappedLayerBlock: null (no mapping for " + BuiltInRegistries.BLOCK.getKey(groundB) + ")");
         }
 
         if (lc == 0) {
@@ -280,7 +280,7 @@ public class ChunkDebugCommand {
                 if (elevDelta > 0) {
                     send(source, "  -> Surface appears elevated by " + elevDelta + " block(s) above min neighbor");
                     boolean spaceAboveIsAir = aboveB == Blocks.AIR;
-                    send(source, "  -> Block at layer pos Y=" + gh + ": " + Registries.BLOCK.getId(aboveB)
+                    send(source, "  -> Block at layer pos Y=" + gh + ": " + BuiltInRegistries.BLOCK.getKey(aboveB)
                             + " (isAir=" + spaceAboveIsAir + ")");
 
                     if (LayerConfig.STRUCTURE_SKIP_ELEVATED) {
@@ -343,11 +343,11 @@ public class ChunkDebugCommand {
         return sb.toString();
     }
 
-    private static int[][] computeGroundHeights(WorldChunk chunk, int startX, int startZ, int bottomY) {
+    private static int[][] computeGroundHeights(LevelChunk chunk, int startX, int startZ, int bottomY) {
         int[][] heights = new int[16][16];
         for (int lx = 0; lx < 16; lx++) {
             for (int lz = 0; lz < 16; lz++) {
-                int hmY = chunk.getHeightmap(Heightmap.Type.OCEAN_FLOOR).get(lx, lz);
+                int hmY = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR).getFirstAvailable(lx, lz);
                 if (hmY <= bottomY) { heights[lx][lz] = bottomY; continue; }
 
                 int wx = startX + lx, wz = startZ + lz;
@@ -413,11 +413,11 @@ public class ChunkDebugCommand {
     }
 
     private static boolean hasLayerProperty(BlockState state) {
-        if (state.contains(Properties.LAYERS)) return true;
+        if (state.hasProperty(BlockStateProperties.LAYERS)) return true;
         return LayerPlacementHelper.getCRLayerProperty(state.getBlock()) != null;
     }
 
-    private static void send(ServerCommandSource source, String msg) {
-        source.sendFeedback(() -> Text.literal(msg), false);
+    private static void send(CommandSourceStack source, String msg) {
+        source.sendSuccess(() -> Component.literal(msg), false);
     }
 }

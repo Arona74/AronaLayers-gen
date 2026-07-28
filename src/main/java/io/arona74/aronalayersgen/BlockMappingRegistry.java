@@ -1,9 +1,9 @@
 package io.arona74.aronalayersgen;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -29,13 +29,13 @@ public class BlockMappingRegistry {
         Map<String, String> configMappings = ConfigLoader.loadMappings(configFileName);
 
         for (Map.Entry<String, String> entry : configMappings.entrySet()) {
-            Identifier vanillaId = Identifier.tryParse(entry.getKey());
+            ResourceLocation vanillaId = ResourceLocation.tryParse(entry.getKey());
             if (vanillaId == null) {
                 AronaLayersGen.LOGGER.warn("Invalid vanilla block ID in config: {}", entry.getKey());
                 continue;
             }
 
-            Block vanillaBlock = Registries.BLOCK.get(vanillaId);
+            Block vanillaBlock = BuiltInRegistries.BLOCK.get(vanillaId);
             if (vanillaBlock == Blocks.AIR) {
                 AronaLayersGen.LOGGER.warn("Vanilla block not found: {}", entry.getKey());
                 continue;
@@ -45,9 +45,9 @@ public class BlockMappingRegistry {
 
             // Track the resolved layer block so we can distinguish actual layer blocks
             // from foliage/rock blocks that also happen to have a "layer" property.
-            Identifier layerId = Identifier.tryParse(entry.getValue());
+            ResourceLocation layerId = ResourceLocation.tryParse(entry.getValue());
             if (layerId != null) {
-                Block layerBlock = Registries.BLOCK.get(layerId);
+                Block layerBlock = BuiltInRegistries.BLOCK.get(layerId);
                 if (layerBlock != Blocks.AIR) {
                     knownLayerBlocks.add(layerBlock);
                 }
@@ -70,13 +70,13 @@ public class BlockMappingRegistry {
             return null;
         }
 
-        Identifier identifier = Identifier.tryParse(layerBlockId);
+        ResourceLocation identifier = ResourceLocation.tryParse(layerBlockId);
         if (identifier == null) {
             AronaLayersGen.LOGGER.warn("Invalid block identifier: {}", layerBlockId);
             return null;
         }
 
-        Block layerBlock = Registries.BLOCK.get(identifier);
+        Block layerBlock = BuiltInRegistries.BLOCK.get(identifier);
 
         if (layerBlock == Blocks.AIR) {
             AronaLayersGen.LOGGER.warn("Layer block not found in registry: {}. Is the required mod installed?", layerBlockId);

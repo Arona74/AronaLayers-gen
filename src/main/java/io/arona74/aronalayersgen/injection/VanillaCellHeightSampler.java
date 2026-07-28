@@ -1,6 +1,6 @@
 package io.arona74.aronalayersgen.injection;
 
-import net.minecraft.world.gen.noise.NoiseConfig;
+import net.minecraft.world.level.levelgen.RandomState;
 
 /**
  * Produces a synthetic cell height in [0..1] for each XZ position, analogous to
@@ -25,7 +25,7 @@ public class VanillaCellHeightSampler {
     // World seed mixed into every hash so each world has a unique pattern.
     private final long seed;
 
-    public VanillaCellHeightSampler(NoiseConfig noiseConfig, long worldSeed) {
+    public VanillaCellHeightSampler(RandomState noiseConfig, long worldSeed) {
         this.seed = worldSeed;
     }
 

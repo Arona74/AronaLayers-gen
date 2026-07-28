@@ -1,9 +1,9 @@
 package io.arona74.aronalayersgen;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,13 +25,13 @@ public class RockMappingRegistry {
         Map<String, String> configMappings = ConfigLoader.loadMappings("cr_rock_mappings.json");
 
         for (Map.Entry<String, String> entry : configMappings.entrySet()) {
-            Identifier vanillaId = Identifier.tryParse(entry.getKey());
+            ResourceLocation vanillaId = ResourceLocation.tryParse(entry.getKey());
             if (vanillaId == null) {
                 AronaLayersGen.LOGGER.warn("Invalid surface block ID in rock config: {}", entry.getKey());
                 continue;
             }
 
-            Block vanillaBlock = Registries.BLOCK.get(vanillaId);
+            Block vanillaBlock = BuiltInRegistries.BLOCK.get(vanillaId);
             if (vanillaBlock == Blocks.AIR) {
                 AronaLayersGen.LOGGER.warn("Surface block not found for rock mapping: {}", entry.getKey());
                 continue;
@@ -53,13 +53,13 @@ public class RockMappingRegistry {
             return null;
         }
 
-        Identifier identifier = Identifier.tryParse(rockBlockId);
+        ResourceLocation identifier = ResourceLocation.tryParse(rockBlockId);
         if (identifier == null) {
             AronaLayersGen.LOGGER.warn("Invalid rock block identifier: {}", rockBlockId);
             return null;
         }
 
-        Block rockBlock = Registries.BLOCK.get(identifier);
+        Block rockBlock = BuiltInRegistries.BLOCK.get(identifier);
         if (rockBlock == Blocks.AIR) {
             AronaLayersGen.LOGGER.warn("Rock block not found: {}. Is Conquest Reforged installed?", rockBlockId);
             return null;

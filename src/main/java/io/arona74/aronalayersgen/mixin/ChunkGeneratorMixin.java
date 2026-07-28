@@ -6,13 +6,13 @@ import io.arona74.aronalayersgen.injection.PreStructureHeightmapStorage;
 import io.arona74.aronalayersgen.injection.RTFCompat;
 import io.arona74.aronalayersgen.injection.RTFLayerInjector;
 import io.arona74.aronalayersgen.injection.RandomStateHolder;
-import net.minecraft.world.ChunkRegion;
-import net.minecraft.world.biome.source.BiomeAccess;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.gen.GenerationStep;
-import net.minecraft.world.gen.StructureAccessor;
-import net.minecraft.world.gen.chunk.NoiseChunkGenerator;
-import net.minecraft.world.gen.noise.NoiseConfig;
+import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.world.level.biome.BiomeManager;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.levelgen.GenerationStep;
+import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
+import net.minecraft.world.level.levelgen.RandomState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -36,7 +36,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *   under C2ME for structures that span chunk boundaries, but still usefully
  *   detects most structure-placed block patterns (threshold >= 2 blocks).
  */
-@Mixin(NoiseChunkGenerator.class)
+@Mixin(NoiseBasedChunkGenerator.class)
 public class ChunkGeneratorMixin {
 
     /**
@@ -48,10 +48,10 @@ public class ChunkGeneratorMixin {
         method = "buildSurface",
         at = @At("RETURN")
     )
-    private void onBuildSurfaceComplete(ChunkRegion chunkRegion,
-                                         StructureAccessor structureAccessor,
-                                         NoiseConfig noiseConfig,
-                                         Chunk chunk,
+    private void onBuildSurfaceComplete(WorldGenRegion chunkRegion,
+                                         StructureManager structureAccessor,
+                                         RandomState noiseConfig,
+                                         ChunkAccess chunk,
                                          CallbackInfo ci) {
         if (LayerConfig.STRUCTURE_SKIP_ELEVATED) {
             PreStructureHeightmapStorage.captureSurfaceHeightmap(chunk);
@@ -59,16 +59,16 @@ public class ChunkGeneratorMixin {
     }
 
     @Inject(
-        method = "carve",
+        method = "applyCarvers",
         at = @At("RETURN")
     )
-    private void onCarveComplete(ChunkRegion chunkRegion,
+    private void onCarveComplete(WorldGenRegion chunkRegion,
                                   long seed,
-                                  NoiseConfig noiseConfig,
-                                  BiomeAccess biomeAccess,
-                                  StructureAccessor structureAccessor,
-                                  Chunk chunk,
-                                  GenerationStep.Carver carverStep,
+                                  RandomState noiseConfig,
+                                  BiomeManager biomeAccess,
+                                  StructureManager structureAccessor,
+                                  ChunkAccess chunk,
+                                  GenerationStep.Carving carverStep,
                                   CallbackInfo ci) {
         if (!LayerConfig.RTF_LAYER_INJECTION) {
             return;
