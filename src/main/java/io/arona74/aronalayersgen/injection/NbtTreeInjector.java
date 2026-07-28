@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.injection;
 
+import io.arona74.aronalayersgen.Ids;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.LayerConfig;
@@ -22,7 +23,6 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlac
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -57,9 +57,9 @@ public class NbtTreeInjector {
 
     // Set by SaplingBlockGrowMixin before vanilla removes the sapling, cleared after.
     // Lets tryPlaceTree know which sapling triggered growth even though the block is gone.
-    private static final ThreadLocal<ResourceLocation> CURRENT_SAPLING_GROW = new ThreadLocal<>();
+    private static final ThreadLocal<String> CURRENT_SAPLING_GROW = new ThreadLocal<>();
 
-    public static void setSaplingGrowContext(ResourceLocation saplingId) { CURRENT_SAPLING_GROW.set(saplingId); }
+    public static void setSaplingGrowContext(String saplingId) { CURRENT_SAPLING_GROW.set(saplingId); }
     public static void clearSaplingGrowContext()                    { CURRENT_SAPLING_GROW.remove(); }
 
     private static final Rotation[] ROTATIONS = Rotation.values();
@@ -80,7 +80,7 @@ public class NbtTreeInjector {
         if (!LayerConfig.CR_NBT_TREES_VANILLA_FALLBACK) return true;
         Optional<ResourceKey<Biome>> biomeKey = world.getBiome(pos).unwrapKey();
         if (biomeKey.isEmpty()) return false;
-        return NbtTreeRegistry.getInstance().hasBiome(biomeKey.get().location());
+        return NbtTreeRegistry.getInstance().hasBiome(Compat.keyId(biomeKey.get()));
     }
 
     /** Called from the worldgen mixin to cancel vanilla and queue for deferred placement. */
@@ -138,7 +138,7 @@ public class NbtTreeInjector {
 
         // Sapling-based selection: SaplingBlockGrowMixin sets CURRENT_SAPLING_GROW before vanilla
         // removes the block, so we can still identify the species even though the block is gone.
-        ResourceLocation saplingId = CURRENT_SAPLING_GROW.get();
+        String saplingId = CURRENT_SAPLING_GROW.get();
         Optional<Path> variantOpt = Optional.empty();
 
         if (saplingId != null) {
@@ -162,7 +162,7 @@ public class NbtTreeInjector {
                 if (LayerConfig.logNbtTrees()) AronaLayersGen.LOGGER.info("[NbtTrees] SKIP no-biome-key pos={}", surfacePos);
                 return false;
             }
-            ResourceLocation biomeId = biomeKeyOpt.get().location();
+            String biomeId = Compat.keyId(biomeKeyOpt.get());
 
             if (!registry.hasBiome(biomeId)) {
                 if (LayerConfig.logNbtTrees()) AronaLayersGen.LOGGER.info("[NbtTrees] SKIP biome-not-configured biome={} pos={}", biomeId, surfacePos);
@@ -182,7 +182,7 @@ public class NbtTreeInjector {
                 return false;
             }
             Block surfaceBlock = belowState.getBlock();
-            if (!"minecraft".equals(BuiltInRegistries.BLOCK.getKey(surfaceBlock).getNamespace())) {
+            if (!"minecraft".equals(Ids.namespace(Compat.blockId(surfaceBlock)))) {
                 BlockState deeper = world.getBlockState(surfacePos.below().below());
                 if (!deeper.isAir() && deeper.getFluidState().isEmpty()) {
                     surfaceBlock = deeper.getBlock();
@@ -192,7 +192,7 @@ public class NbtTreeInjector {
             variantOpt = registry.selectVariant(biomeId, surfaceBlock, random);
             if (variantOpt.isEmpty()) {
                 if (LayerConfig.logNbtTrees()) AronaLayersGen.LOGGER.info("[NbtTrees] SKIP no-variant surface={} biome={} pos={}",
-                        BuiltInRegistries.BLOCK.getKey(surfaceBlock), biomeId, surfacePos);
+                        Compat.blockId(surfaceBlock), biomeId, surfacePos);
                 return false;
             }
         }
@@ -273,7 +273,7 @@ public class NbtTreeInjector {
 
                     // Only match vanilla logs (minecraft namespace + has AXIS property)
                     if (!st.hasProperty(BlockStateProperties.AXIS)) continue;
-                    if (!"minecraft".equals(BuiltInRegistries.BLOCK.getKey(st.getBlock()).getNamespace())) continue;
+                    if (!"minecraft".equals(Ids.namespace(Compat.blockId(st.getBlock())))) continue;
 
                     BlockState below = world.getBlockState(pos.below());
                     // Trunk base: log with non-log, non-leaf solid block beneath it
@@ -297,7 +297,7 @@ public class NbtTreeInjector {
                 // Biome + registry check
                 Optional<ResourceKey<Biome>> biomeOpt = world.getBiome(trunk).unwrapKey();
                 if (biomeOpt.isEmpty()) continue;
-                ResourceLocation biomeId = biomeOpt.get().location();
+                String biomeId = Compat.keyId(biomeOpt.get());
 
                 if (!registry.hasBiome(biomeId)) continue;
                 if (rand.nextFloat() >= registry.getChance(biomeId)) continue;

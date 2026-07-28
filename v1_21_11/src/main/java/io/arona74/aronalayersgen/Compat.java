@@ -3,7 +3,8 @@ package io.arona74.aronalayersgen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -15,33 +16,38 @@ import java.io.InputStream;
  * Version seam. Everything whose Minecraft API differs across the supported
  * versions goes through here so the shared sources stay identical.
  *
- * <p>1.21.11 renames this version's {@code ResourceLocation} to {@code Identifier}.
- * Java has no type aliases, so shared code cannot name either type: it passes ids
- * around as canonical {@code "namespace:path"} strings and calls the helpers below
- * at the Minecraft boundary.
+ * <p>1.21.11 renamed {@code ResourceLocation} to {@code Identifier}. Java has no
+ * type aliases, so shared code cannot name either type: it passes ids around as
+ * canonical {@code "namespace:path"} strings and calls the helpers below at the
+ * Minecraft boundary.
+ *
+ * <p>Note also that {@code Registry.get(Identifier)} still exists here but now
+ * returns {@code Optional<Holder.Reference<T>>} — the value lookup is
+ * {@code getValue}. Routing through this class is what keeps that from silently
+ * changing meaning between versions.
  */
 public final class Compat {
     private Compat() {}
 
-    public static ResourceLocation id(String namespace, String path) {
-        return new ResourceLocation(namespace, path);
+    public static Identifier id(String namespace, String path) {
+        return Identifier.fromNamespaceAndPath(namespace, path);
     }
 
     public static CompoundTag readCompressedNbt(InputStream is) throws IOException {
-        return NbtIo.readCompressed(is);
+        return NbtIo.readCompressed(is, NbtAccounter.create(Long.MAX_VALUE));
     }
 
     /** Canonical {@code "namespace:path"} form, or null if the id is malformed. */
     public static String normalizeId(String id) {
-        ResourceLocation parsed = ResourceLocation.tryParse(id);
+        Identifier parsed = Identifier.tryParse(id);
         return parsed == null ? null : parsed.toString();
     }
 
     /** Block for an id string, or null if the id is malformed or not registered. */
     public static Block blockFromId(String id) {
-        ResourceLocation parsed = ResourceLocation.tryParse(id);
+        Identifier parsed = Identifier.tryParse(id);
         if (parsed == null) return null;
-        Block block = BuiltInRegistries.BLOCK.get(parsed);
+        Block block = BuiltInRegistries.BLOCK.getValue(parsed);
         return block == Blocks.AIR ? null : block;
     }
 
@@ -53,6 +59,6 @@ public final class Compat {
 
     /** Canonical string form of a registry key (biome keys and the like). */
     public static String keyId(ResourceKey<?> key) {
-        return key.location().toString();
+        return key.identifier().toString();
     }
 }

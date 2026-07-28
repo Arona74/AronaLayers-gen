@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.mixin;
 
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.injection.RTFLayerInjector;
@@ -74,7 +75,7 @@ public class SnowBlockMixin {
         if (LayerConfig.logSnow()) {
             AronaLayersGen.LOGGER.info("[SnowBreak] Replaced snow (layers={}) with {} (layers={}) at {}",
                 snowLayers,
-                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(layerBlock),
+                Compat.blockId(layerBlock),
                 newLayerCount, pos);
         }
     }

@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.mixin;
 
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.injection.NbtTreeInjector;
 import net.minecraft.world.level.block.state.BlockState;
@@ -27,7 +28,7 @@ public class SaplingBlockGrowMixin {
     )
     private void captureGrowSapling(ServerLevel world, BlockPos pos, BlockState state, RandomSource random, CallbackInfo ci) {
         if (!LayerConfig.CR_NBT_TREES) return;
-        NbtTreeInjector.setSaplingGrowContext(BuiltInRegistries.BLOCK.getKey(state.getBlock()));
+        NbtTreeInjector.setSaplingGrowContext(Compat.blockId(state.getBlock()));
     }
 
     @Inject(

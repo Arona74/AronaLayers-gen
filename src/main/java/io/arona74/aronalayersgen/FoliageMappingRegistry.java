@@ -3,7 +3,6 @@ package io.arona74.aronalayersgen;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,13 +24,13 @@ public class FoliageMappingRegistry {
         Map<String, String> configMappings = ConfigLoader.loadMappings("cr_extra_foliage_mappings.json");
 
         for (Map.Entry<String, String> entry : configMappings.entrySet()) {
-            ResourceLocation vanillaId = ResourceLocation.tryParse(entry.getKey());
+            String vanillaId = Compat.normalizeId(entry.getKey());
             if (vanillaId == null) {
                 AronaLayersGen.LOGGER.warn("Invalid surface block ID in foliage config: {}", entry.getKey());
                 continue;
             }
 
-            Block vanillaBlock = BuiltInRegistries.BLOCK.get(vanillaId);
+            Block vanillaBlock = Compat.blockFromId(vanillaId);
             if (vanillaBlock == Blocks.AIR) {
                 AronaLayersGen.LOGGER.warn("Surface block not found for foliage mapping: {}", entry.getKey());
                 continue;
@@ -53,13 +52,13 @@ public class FoliageMappingRegistry {
             return null;
         }
 
-        ResourceLocation identifier = ResourceLocation.tryParse(foliageBlockId);
+        String identifier = Compat.normalizeId(foliageBlockId);
         if (identifier == null) {
             AronaLayersGen.LOGGER.warn("Invalid foliage block identifier: {}", foliageBlockId);
             return null;
         }
 
-        Block foliageBlock = BuiltInRegistries.BLOCK.get(identifier);
+        Block foliageBlock = Compat.blockFromId(identifier);
         if (foliageBlock == Blocks.AIR) {
             AronaLayersGen.LOGGER.warn("Foliage block not found: {}. Is Conquest Reforged installed?", foliageBlockId);
             return null;

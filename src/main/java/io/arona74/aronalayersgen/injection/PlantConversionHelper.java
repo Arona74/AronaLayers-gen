@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.injection;
 
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.PlantMappingRegistry;
@@ -65,7 +66,7 @@ public class PlantConversionHelper {
 
                 if (LayerConfig.logPlants()) {
                     AronaLayersGen.LOGGER.info("[Plant Debug] Found plant {} at {}",
-                        net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(plantBlock), plantPos);
+                        Compat.blockId(plantBlock), plantPos);
                 }
 
                 BlockPos upperPos = null;
@@ -99,15 +100,15 @@ public class PlantConversionHelper {
                 if (conquestPlant == null) {
                     if (LayerConfig.logPlants()) {
                         AronaLayersGen.LOGGER.warn("[Plant Debug] No conquest mapping found for {}",
-                            net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(plantBlock));
+                            Compat.blockId(plantBlock));
                     }
                     continue;
                 }
 
                 if (LayerConfig.logPlants()) {
                     AronaLayersGen.LOGGER.info("[Plant Debug] Converting {} to {}, upperPos={}",
-                        net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(plantBlock),
-                        net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(conquestPlant),
+                        Compat.blockId(plantBlock),
+                        Compat.blockId(conquestPlant),
                         upperPos);
                 }
 

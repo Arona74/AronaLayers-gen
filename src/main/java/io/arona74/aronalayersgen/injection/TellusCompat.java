@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.injection;
 
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import net.fabricmc.loader.api.FabricLoader;
@@ -352,8 +353,8 @@ public class TellusCompat {
                     if (hasSurface) {
                         var surfaceState = chunk.getBlockState(new BlockPos(worldX, floorY - 1, worldZ));
                         var aboveState = chunk.getBlockState(new BlockPos(worldX, floorY, worldZ));
-                        surfaceId = String.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(surfaceState.getBlock()));
-                        aboveId = String.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(aboveState.getBlock()));
+                        surfaceId = String.valueOf(Compat.blockId(surfaceState.getBlock()));
+                        aboveId = String.valueOf(Compat.blockId(aboveState.getBlock()));
                         surfaceMapped = LayerPlacementHelper.hasMappingFor(surfaceState.getBlock());
                         // Tellus's own scaleElevationToHeight() is ceil(scaled)+offset, so for a
                         // column we sampled identically this must equal the real top solid block.
@@ -601,8 +602,8 @@ public class TellusCompat {
             if (floorY > chunk.getMinBuildHeight()) {
                 BlockState surfaceState = chunk.getBlockState(new BlockPos(worldX, floorY - 1, worldZ));
                 BlockState aboveState = chunk.getBlockState(new BlockPos(worldX, floorY, worldZ));
-                p.surfaceBlock = String.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(surfaceState.getBlock()));
-                p.aboveBlock = String.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(aboveState.getBlock()));
+                p.surfaceBlock = String.valueOf(Compat.blockId(surfaceState.getBlock()));
+                p.aboveBlock = String.valueOf(Compat.blockId(aboveState.getBlock()));
                 p.surfaceMapped = LayerPlacementHelper.hasMappingFor(surfaceState.getBlock());
 
                 // Tellus snow: a snow_block (or, after we run, a snow[8]) covers the terrain, with
@@ -647,7 +648,7 @@ public class TellusCompat {
                     for (int y = p.rawTopSolidY + 1; y >= p.rawTopSolidY - 2 && y > chunk.getMinBuildHeight(); y--) {
                         BlockState s = chunk.getBlockState(new BlockPos(worldX, y, worldZ));
                         if (LayerPlacementHelper.hasLayerProperty(s)) {
-                            p.existingLayer = String.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(s.getBlock()));
+                            p.existingLayer = String.valueOf(Compat.blockId(s.getBlock()));
                             p.existingLayerValue = LayerPlacementHelper.readLayerCount(s);
                             p.foundLayerY = y;
                             break;

@@ -1,0 +1,25 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "io.arona74.aronalayersgen.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "io.arona74.aronalayersgen.mixin.AronaLayersMixinPlugin",
+  "mixins": [
+    "NoiseBasedChunkGeneratorMixin",
+    "ChunkGeneratorMixin",
+    "ChunkGeneratorFeaturesMixin",
+    "ChunkMapMixin",
+    "PlantBlockMixin",
+    "TreeFeatureMixin",
+    "NbtTreeFeatureMixin",
+    "NbtTreeTemplateFeatureMixin",
+    "SaplingBlockGrowMixin",
+    "TreeSoilMixin",
+    "SnowBlockMixin",
+    "EntityTouchingPowderSnowAccessor"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

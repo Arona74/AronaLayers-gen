@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.mixin;
 
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.injection.RTFLayerInjector;
@@ -45,9 +46,9 @@ public class TreeSoilMixin {
             BlockState below2 = world.getBlockState(origin.below().below());
             AronaLayersGen.LOGGER.info("[TreeSoil] Tree attempt at {}: origin={}, below={}, below2={}",
                 origin,
-                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(atOrigin.getBlock()),
-                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(below.getBlock()),
-                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(below2.getBlock()));
+                Compat.blockId(atOrigin.getBlock()),
+                Compat.blockId(below.getBlock()),
+                Compat.blockId(below2.getBlock()));
         }
 
         int layersCleared = 0;

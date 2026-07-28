@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.injection;
 
+import io.arona74.aronalayersgen.Ids;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.BlockMappingRegistry;
@@ -230,14 +231,14 @@ public class LayerPlacementHelper {
      */
     public static Block getFullBlock(Block layerBlock) {
         Block result = fullBlockCache.computeIfAbsent(layerBlock, b -> {
-            net.minecraft.resources.ResourceLocation layerId = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(b);
-            String path = layerId.getPath();
-            String namespace = layerId.getNamespace();
+            String layerId = Compat.blockId(b);
+            String path = Ids.path(layerId);
+            String namespace = Ids.namespace(layerId);
             for (String suffix : new String[]{"_slab", "_layer"}) {
                 if (path.endsWith(suffix)) {
                     String fullPath = path.substring(0, path.length() - suffix.length());
-                    net.minecraft.resources.ResourceLocation fullId = Compat.id(namespace, fullPath);
-                    Block fullBlock = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(fullId);
+                    String fullId = Ids.of(namespace, fullPath);
+                    Block fullBlock = Compat.blockFromId(fullId);
                     if (fullBlock != Blocks.AIR) return fullBlock;
                 }
             }
@@ -270,16 +271,16 @@ public class LayerPlacementHelper {
     private static Block getWetSandSubstitute(Block layerBlock) {
         Block sand = cachedSandLayerBlock;
         if (sand == null) {
-            net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.tryParse("conquest:sand_layer");
-            sand = (id != null) ? net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(id) : Blocks.AIR;
+            String id = Compat.normalizeId("conquest:sand_layer");
+            sand = (id != null) ? Compat.blockFromId(id) : Blocks.AIR;
             cachedSandLayerBlock = sand;
         }
         if (sand == Blocks.AIR || layerBlock != sand) return null;
 
         Block wet = cachedWetSandLayerBlock;
         if (wet == null) {
-            net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.tryParse("conquest:wet_sand_layer");
-            wet = (id != null) ? net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(id) : Blocks.AIR;
+            String id = Compat.normalizeId("conquest:wet_sand_layer");
+            wet = (id != null) ? Compat.blockFromId(id) : Blocks.AIR;
             cachedWetSandLayerBlock = wet;
         }
         return (wet != Blocks.AIR) ? wet : null;
@@ -381,7 +382,7 @@ public class LayerPlacementHelper {
 
         if (LayerConfig.logRocks()) {
             AronaLayersGen.LOGGER.info("[Rock] Placed {} with density {} at {}",
-                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(rockBlock), density, rockPos);
+                Compat.blockId(rockBlock), density, rockPos);
         }
     }
 
@@ -396,8 +397,8 @@ public class LayerPlacementHelper {
 
         net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> biomeEntry =
             chunk.getNoiseBiome(worldX >> 2, rockPos.getY() >> 2, worldZ >> 2);
-        net.minecraft.resources.ResourceLocation biomeId = biomeEntry.unwrapKey()
-            .map(k -> k.location())
+        String biomeId = biomeEntry.unwrapKey()
+            .map(Compat::keyId)
             .orElse(null);
         if (biomeId == null) return false;
 
@@ -448,7 +449,7 @@ public class LayerPlacementHelper {
 
         if (LayerConfig.logRocks()) {
             AronaLayersGen.LOGGER.info("[EnhancedRock] Placed {} with density {} at {}",
-                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(rockBlock), density, rockPos);
+                Compat.blockId(rockBlock), density, rockPos);
         }
         return true;
     }
@@ -480,7 +481,7 @@ public class LayerPlacementHelper {
 
         if (LayerConfig.logFoliage()) {
             AronaLayersGen.LOGGER.info("[Foliage] Placed {} at {}",
-                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(foliageBlock), foliagePos);
+                Compat.blockId(foliageBlock), foliagePos);
         }
     }
 
@@ -496,8 +497,8 @@ public class LayerPlacementHelper {
         // Resolve biome at this column
         net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> biomeEntry =
             chunk.getNoiseBiome(worldX >> 2, foliagePos.getY() >> 2, worldZ >> 2);
-        net.minecraft.resources.ResourceLocation biomeId = biomeEntry.unwrapKey()
-            .map(k -> k.location())
+        String biomeId = biomeEntry.unwrapKey()
+            .map(Compat::keyId)
             .orElse(null);
         if (biomeId == null) return;
 
@@ -522,7 +523,7 @@ public class LayerPlacementHelper {
 
         if (LayerConfig.logFoliage()) {
             AronaLayersGen.LOGGER.info("[EnhancedFoliage] Placed {} at {}",
-                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(grassBlock), foliagePos);
+                Compat.blockId(grassBlock), foliagePos);
         }
     }
 
@@ -813,12 +814,12 @@ public class LayerPlacementHelper {
         if (secondPassCleanupBlocks == null) {
             secondPassCleanupBlocks = new java.util.HashSet<>();
             for (String id : io.arona74.aronalayersgen.ConfigLoader.loadBlockList("second_pass_cleanup_blocks.json")) {
-                net.minecraft.resources.ResourceLocation identifier = net.minecraft.resources.ResourceLocation.tryParse(id);
+                String identifier = Compat.normalizeId(id);
                 if (identifier == null) {
                     AronaLayersGen.LOGGER.warn("[SecondPass] Invalid block ID: {}", id);
                     continue;
                 }
-                Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(identifier);
+                Block block = Compat.blockFromId(identifier);
                 if (block == Blocks.AIR) {
                     AronaLayersGen.LOGGER.warn("[SecondPass] Block not found: {}", id);
                     continue;
@@ -1045,12 +1046,12 @@ public class LayerPlacementHelper {
         if (elevationProcessBlocks == null) {
             elevationProcessBlocks = new java.util.HashSet<>();
             for (String id : io.arona74.aronalayersgen.ConfigLoader.loadBlockList("structure_elevation_blocks.json")) {
-                net.minecraft.resources.ResourceLocation identifier = net.minecraft.resources.ResourceLocation.tryParse(id);
+                String identifier = Compat.normalizeId(id);
                 if (identifier == null) {
                     AronaLayersGen.LOGGER.warn("[ElevationFilter] Invalid block ID: {}", id);
                     continue;
                 }
-                Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(identifier);
+                Block block = Compat.blockFromId(identifier);
                 if (block == Blocks.AIR) {
                     AronaLayersGen.LOGGER.warn("[ElevationFilter] Block not found: {}", id);
                     continue;
@@ -1243,7 +1244,7 @@ public class LayerPlacementHelper {
         if (LayerConfig.logSnow() && surfaceIsIceOrWater) {
             AronaLayersGen.LOGGER.info("[IceTrace] ({},{}) surfaceY={} topBlock={} iceOrWater=true useSnowLayers={} layerCount={}",
                 worldX, worldZ, surfaceY,
-                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(topBlock),
+                Compat.blockId(topBlock),
                 useSnowLayers, layerCount);
         }
 
@@ -1308,7 +1309,7 @@ public class LayerPlacementHelper {
             if (LayerConfig.logSnow() && surfaceIsIceOrWater) {
                 AronaLayersGen.LOGGER.info("[IceTrace] ({},{}) fallback scan found {} at Y={}",
                     worldX, worldZ,
-                    net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(surfaceBlock),
+                    Compat.blockId(surfaceBlock),
                     surfacePos.getY());
             }
         }
@@ -1347,7 +1348,7 @@ public class LayerPlacementHelper {
             if (worldX == -125 && worldZ == 74) {
                 AronaLayersGen.LOGGER.info("[DebugPos] (-125,74) rtfBase={} expectedBaseY={} surfacePos.Y={} surfaceBlock={} layerCount={} isPostFeaturesCtx={} SKIP_ELEVATED={}",
                     rtfExpectedBaseY, expectedBaseY, surfacePos.getY(),
-                    net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(surfaceBlock),
+                    Compat.blockId(surfaceBlock),
                     layerCount, isPostFeaturesContext, LayerConfig.STRUCTURE_SKIP_ELEVATED);
             }
             // Surface above expectedBaseY means structure elevated the terrain.
@@ -1368,7 +1369,7 @@ public class LayerPlacementHelper {
                     if (LayerConfig.logSkipElevated()) {
                         AronaLayersGen.LOGGER.info("[SkipElevated] ({},{}) blocked: non-air above Y={} is {}",
                             worldX, worldZ, surfacePos.getY() + 1,
-                            net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(spaceAbove.getBlock()));
+                            Compat.blockId(spaceAbove.getBlock()));
                     }
                     debugSkipStructureElevated.incrementAndGet();
                     return false;
@@ -1383,7 +1384,7 @@ public class LayerPlacementHelper {
                         if (LayerConfig.logSkipElevated()) {
                             AronaLayersGen.LOGGER.info("[SkipElevated] ({},{}) REMOVE raised block Y={} expectedBase={} block={} (layerCount=0)",
                                 worldX, worldZ, surfacePos.getY(), expectedBaseY,
-                                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(surfaceBlock));
+                                Compat.blockId(surfaceBlock));
                         }
                         setBlockStateSafe(chunk, surfacePos, Blocks.AIR.defaultBlockState());
                         clearVegetationAbove(chunk, worldX, worldZ, surfacePos.getY() + 1);
@@ -1400,8 +1401,8 @@ public class LayerPlacementHelper {
                         if (LayerConfig.logSkipElevated()) {
                             AronaLayersGen.LOGGER.info("[SkipElevated] ({},{}) REPLACE surface Y={} expectedBase={} block={} -> {} layers={}",
                                 worldX, worldZ, surfacePos.getY(), expectedBaseY,
-                                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(surfaceBlock),
-                                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(layerBlock), layerCount);
+                                Compat.blockId(surfaceBlock),
+                                Compat.blockId(layerBlock), layerCount);
                         }
                         setBlockStateSafe(chunk, surfacePos, layerState);
                         if (LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP) cleanupNearbyLayers(chunk, worldX, worldZ, surfacePos.getY());
@@ -1451,8 +1452,8 @@ public class LayerPlacementHelper {
                             AronaLayersGen.LOGGER.info("[SkipElevated] ({},{}) LEVEL-HIGH cleared Y={}-{} layer at Y={} naturalBlock={} -> {} layers={}",
                                 worldX, worldZ, expectedBaseY + 2, surfacePos.getY(),
                                 expectedBaseY + 1,
-                                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(naturalBlock),
-                                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(layerBlock), layerCount);
+                                Compat.blockId(naturalBlock),
+                                Compat.blockId(layerBlock), layerCount);
                         }
                         setBlockStateSafe(chunk, layerTargetPos, layerState);
                         if (LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP) cleanupNearbyLayers(chunk, worldX, worldZ, surfacePos.getY());
@@ -1462,7 +1463,7 @@ public class LayerPlacementHelper {
                 if (LayerConfig.logSkipElevated()) {
                     AronaLayersGen.LOGGER.info("[SkipElevated] ({},{}) SKIP Y={} expectedBase={} delta={} block={}",
                         worldX, worldZ, surfacePos.getY(), expectedBaseY, delta,
-                        net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(surfaceBlock));
+                        Compat.blockId(surfaceBlock));
                 }
                 if (LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP) cleanupNearbyLayers(chunk, worldX, worldZ, surfacePos.getY());
                 debugSkipStructureElevated.incrementAndGet();
@@ -1607,7 +1608,7 @@ public class LayerPlacementHelper {
                     if (LayerConfig.logSnow()) {
                         AronaLayersGen.LOGGER.info("[IceTrace] ({},{}) placing underwater layer {} at Y={} (waterlogged={})",
                             worldX, worldZ,
-                            net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(layerState.getBlock()),
+                            Compat.blockId(layerState.getBlock()),
                             abovePos.getY(),
                             layerState.hasProperty(BlockStateProperties.WATERLOGGED) && layerState.getValue(BlockStateProperties.WATERLOGGED));
                     }
@@ -1638,7 +1639,7 @@ public class LayerPlacementHelper {
                         setBlockStateSafe(chunk, surfacePos, fullBlock.defaultBlockState());
                         if (LayerConfig.logFoliage()) {
                             AronaLayersGen.LOGGER.info("[DirtPath] Replaced dirt_path at {} with {}",
-                                surfacePos, net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(fullBlock));
+                                surfacePos, Compat.blockId(fullBlock));
                         }
                     }
                 }

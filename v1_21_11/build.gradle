@@ -1,0 +1,55 @@
+plugins {
+    id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+    id 'maven-publish'
+}
+
+version = rootProject.mod_version + "+mc${minecraft_version}"
+group = rootProject.maven_group
+
+base {
+    archivesName = rootProject.archives_base_name
+}
+
+// Pull shared Java source and resources from the root src/ tree.
+// Version-specific overrides (mixins that differ across versions) go in this subproject's own src/.
+sourceSets {
+    main {
+        java {
+            srcDirs += rootProject.file('src/main/java')
+        }
+        resources {
+            srcDirs += rootProject.file('src/main/resources')
+        }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    // No RTF dependency — no RTF port exists for 1.21.x yet
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 21
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+    from(rootProject.file('LICENSE')) {
+        rename { "${it}_${rootProject.archives_base_name}" }
+    }
+}

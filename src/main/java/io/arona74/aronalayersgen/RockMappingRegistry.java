@@ -3,7 +3,6 @@ package io.arona74.aronalayersgen;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,13 +24,13 @@ public class RockMappingRegistry {
         Map<String, String> configMappings = ConfigLoader.loadMappings("cr_rock_mappings.json");
 
         for (Map.Entry<String, String> entry : configMappings.entrySet()) {
-            ResourceLocation vanillaId = ResourceLocation.tryParse(entry.getKey());
+            String vanillaId = Compat.normalizeId(entry.getKey());
             if (vanillaId == null) {
                 AronaLayersGen.LOGGER.warn("Invalid surface block ID in rock config: {}", entry.getKey());
                 continue;
             }
 
-            Block vanillaBlock = BuiltInRegistries.BLOCK.get(vanillaId);
+            Block vanillaBlock = Compat.blockFromId(vanillaId);
             if (vanillaBlock == Blocks.AIR) {
                 AronaLayersGen.LOGGER.warn("Surface block not found for rock mapping: {}", entry.getKey());
                 continue;
@@ -53,13 +52,13 @@ public class RockMappingRegistry {
             return null;
         }
 
-        ResourceLocation identifier = ResourceLocation.tryParse(rockBlockId);
+        String identifier = Compat.normalizeId(rockBlockId);
         if (identifier == null) {
             AronaLayersGen.LOGGER.warn("Invalid rock block identifier: {}", rockBlockId);
             return null;
         }
 
-        Block rockBlock = BuiltInRegistries.BLOCK.get(identifier);
+        Block rockBlock = Compat.blockFromId(identifier);
         if (rockBlock == Blocks.AIR) {
             AronaLayersGen.LOGGER.warn("Rock block not found: {}. Is Conquest Reforged installed?", rockBlockId);
             return null;

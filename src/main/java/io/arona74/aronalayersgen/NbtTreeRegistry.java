@@ -7,7 +7,6 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 
 import java.io.IOException;
@@ -65,12 +64,12 @@ public class NbtTreeRegistry {
     }
 
     private static volatile NbtTreeRegistry instance = null;
-    private final Map<ResourceLocation, BiomeEntry> entries;
+    private final Map<String, BiomeEntry> entries;
     private final Map<String, List<Path>> speciesFiles;   // species → sorted list of .nbt Paths
-    private final Map<ResourceLocation, String>   saplingSpecies; // sapling block ID → species name
+    private final Map<String, String>   saplingSpecies; // sapling block ID → species name
 
-    private NbtTreeRegistry(Map<ResourceLocation, BiomeEntry> entries, Map<String, List<Path>> speciesFiles,
-                             Map<ResourceLocation, String> saplingSpecies) {
+    private NbtTreeRegistry(Map<String, BiomeEntry> entries, Map<String, List<Path>> speciesFiles,
+                             Map<String, String> saplingSpecies) {
         this.entries = entries;
         this.speciesFiles = speciesFiles;
         this.saplingSpecies = saplingSpecies;
@@ -98,7 +97,7 @@ public class NbtTreeRegistry {
 
     private static NbtTreeRegistry load() {
         JsonObject root = ConfigLoader.loadJsonObject("cr_nbt_trees.json");
-        Map<ResourceLocation, BiomeEntry> entries = new LinkedHashMap<>();
+        Map<String, BiomeEntry> entries = new LinkedHashMap<>();
         Set<String> allSpecies = new LinkedHashSet<>();
 
         if (!root.has("biomes")) {
@@ -109,7 +108,7 @@ public class NbtTreeRegistry {
                 JsonElement biomeElem = biomes.get(biomeId);
                 if (!biomeElem.isJsonObject()) continue;
 
-                ResourceLocation biomeIdent = ResourceLocation.tryParse(biomeId);
+                String biomeIdent = Compat.normalizeId(biomeId);
                 if (biomeIdent == null) {
                     AronaLayersGen.LOGGER.warn("[NbtTrees] Invalid biome ID: {}", biomeId);
                     continue;
@@ -122,9 +121,9 @@ public class NbtTreeRegistry {
                 Set<Block> surfaceBlocks = new HashSet<>();
                 if (biomeObj.has("surface_blocks")) {
                     for (JsonElement elem : biomeObj.getAsJsonArray("surface_blocks")) {
-                        ResourceLocation blockId = ResourceLocation.tryParse(elem.getAsString());
+                        String blockId = Compat.normalizeId(elem.getAsString());
                         if (blockId == null) continue;
-                        Block block = BuiltInRegistries.BLOCK.get(blockId);
+                        Block block = Compat.blockFromId(blockId);
                         if (block == Blocks.AIR) {
                             AronaLayersGen.LOGGER.warn("[NbtTrees] Surface block not found: {}", elem.getAsString());
                             continue;
@@ -156,13 +155,13 @@ public class NbtTreeRegistry {
         }
 
         // Parse sapling-to-species mappings
-        Map<ResourceLocation, String> saplingSpecies = new LinkedHashMap<>();
+        Map<String, String> saplingSpecies = new LinkedHashMap<>();
         if (root.has("saplings")) {
             JsonObject saplings = root.getAsJsonObject("saplings");
             for (String blockId : saplings.keySet()) {
                 JsonElement elem = saplings.get(blockId);
                 if (!elem.isJsonPrimitive()) continue; // skip _comment entries
-                ResourceLocation saplingIdent = ResourceLocation.tryParse(blockId);
+                String saplingIdent = Compat.normalizeId(blockId);
                 if (saplingIdent == null) {
                     AronaLayersGen.LOGGER.warn("[NbtTrees] Invalid sapling ID: {}", blockId);
                     continue;
@@ -212,16 +211,16 @@ public class NbtTreeRegistry {
     // Public API
     // -------------------------------------------------------------------------
 
-    public boolean hasBiome(ResourceLocation biomeId) {
+    public boolean hasBiome(String biomeId) {
         return entries.containsKey(biomeId);
     }
 
-    public float getChance(ResourceLocation biomeId) {
+    public float getChance(String biomeId) {
         BiomeEntry entry = entries.get(biomeId);
         return entry != null ? entry.chance() : 0f;
     }
 
-    public int getAttemptsPerChunk(ResourceLocation biomeId) {
+    public int getAttemptsPerChunk(String biomeId) {
         BiomeEntry entry = entries.get(biomeId);
         return entry != null ? entry.attemptsPerChunk() : 0;
     }
@@ -230,7 +229,7 @@ public class NbtTreeRegistry {
      * Pick a random variant path for the given sapling block ID.
      * Returns empty if the sapling has no configured species or no files exist for it.
      */
-    public Optional<Path> selectVariantForSapling(ResourceLocation saplingBlockId, RandomSource random) {
+    public Optional<Path> selectVariantForSapling(String saplingBlockId, RandomSource random) {
         String species = saplingSpecies.get(saplingBlockId);
         if (species == null) return Optional.empty();
         List<Path> files = speciesFiles.get(species);
@@ -243,7 +242,7 @@ public class NbtTreeRegistry {
      * Returns an empty Optional if: no biome entry, surface block not allowed,
      * no files found for the selected species.
      */
-    public Optional<Path> selectVariant(ResourceLocation biomeId, Block surfaceBlock, RandomSource random) {
+    public Optional<Path> selectVariant(String biomeId, Block surfaceBlock, RandomSource random) {
         BiomeEntry entry = entries.get(biomeId);
         if (entry == null) return Optional.empty();
         if (!entry.allowsSurface(surfaceBlock)) return Optional.empty();

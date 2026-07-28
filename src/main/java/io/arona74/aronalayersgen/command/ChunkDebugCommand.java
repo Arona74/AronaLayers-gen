@@ -1,5 +1,7 @@
 package io.arona74.aronalayersgen.command;
 
+import io.arona74.aronalayersgen.Ids;
+import io.arona74.aronalayersgen.Compat;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import io.arona74.aronalayersgen.LayerConfig;
@@ -92,9 +94,9 @@ public class ChunkDebugCommand {
                 else if (topBlock == Blocks.SNOW_BLOCK)                             { tc = 'S'; tn = "snow_block"; }
                 else if (topBlock == Blocks.SNOW)                                   { tc = 'N'; tn = "snow(layer)"; }
                 else if (LayerPlacementHelper.hasMappingFor(topBlock)) {
-                    tc = '.'; tn = BuiltInRegistries.BLOCK.getKey(topBlock).getPath();
+                    tc = '.'; tn = Ids.path(Compat.blockId(topBlock));
                 } else {
-                    tc = '?'; tn = "?" + BuiltInRegistries.BLOCK.getKey(topBlock).getPath();
+                    tc = '?'; tn = "?" + Ids.path(Compat.blockId(topBlock));
                 }
                 topGrid[lx][lz] = tc;
                 topBlockCounts.merge(tn, 1, Integer::sum);
@@ -216,9 +218,9 @@ public class ChunkDebugCommand {
         send(source, "");
         send(source, "--- Your Column (lx=" + plx + " lz=" + plz + ") ---");
         send(source, "  OCEAN_FLOOR=" + hmY + "  WORLD_SURFACE=" + wsY);
-        send(source, "  topBlock (OCEAN_FLOOR-1): " + BuiltInRegistries.BLOCK.getKey(topB) + " @Y=" + (hmY - 1));
-        send(source, "  groundBlock (after mapping scan): " + BuiltInRegistries.BLOCK.getKey(groundB) + " @Y=" + (gh - 1));
-        send(source, "  aboveGround (layer placement pos): " + BuiltInRegistries.BLOCK.getKey(aboveB) + " @Y=" + gh);
+        send(source, "  topBlock (OCEAN_FLOOR-1): " + Compat.blockId(topB) + " @Y=" + (hmY - 1));
+        send(source, "  groundBlock (after mapping scan): " + Compat.blockId(groundB) + " @Y=" + (gh - 1));
+        send(source, "  aboveGround (layer placement pos): " + Compat.blockId(aboveB) + " @Y=" + gh);
         send(source, "  groundHeight=" + gh + "  simLayerCount=" + lc
                 + (LayerConfig.RTF_LAYER_INJECTION ? " (RTF actual count may differ)" : ""));
         send(source, "  surfIceOrWater=" + surfIceOrWater + "  surfPowderSnow=" + surfPowderSnow);
@@ -231,13 +233,13 @@ public class ChunkDebugCommand {
             BlockState mappedState = mappedBlock.defaultBlockState();
             boolean supportsWaterlogged = mappedState.hasProperty(BlockStateProperties.WATERLOGGED);
             boolean hasCRLayer = LayerPlacementHelper.getCRLayerProperty(mappedBlock) != null;
-            send(source, "  mappedLayerBlock: " + BuiltInRegistries.BLOCK.getKey(mappedBlock)
+            send(source, "  mappedLayerBlock: " + Compat.blockId(mappedBlock)
                     + " (WATERLOGGED=" + supportsWaterlogged + " CRlayer=" + hasCRLayer + ")");
             if (aboveIsWater && !supportsWaterlogged) {
                 send(source, "  !! FAIL: above pos has water/ice but mapped block has no WATERLOGGED -> injectLayerAt will skip");
             }
         } else {
-            send(source, "  mappedLayerBlock: null (no mapping for " + BuiltInRegistries.BLOCK.getKey(groundB) + ")");
+            send(source, "  mappedLayerBlock: null (no mapping for " + Compat.blockId(groundB) + ")");
         }
 
         if (lc == 0) {
@@ -280,7 +282,7 @@ public class ChunkDebugCommand {
                 if (elevDelta > 0) {
                     send(source, "  -> Surface appears elevated by " + elevDelta + " block(s) above min neighbor");
                     boolean spaceAboveIsAir = aboveB == Blocks.AIR;
-                    send(source, "  -> Block at layer pos Y=" + gh + ": " + BuiltInRegistries.BLOCK.getKey(aboveB)
+                    send(source, "  -> Block at layer pos Y=" + gh + ": " + Compat.blockId(aboveB)
                             + " (isAir=" + spaceAboveIsAir + ")");
 
                     if (LayerConfig.STRUCTURE_SKIP_ELEVATED) {
