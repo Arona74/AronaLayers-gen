@@ -61,8 +61,8 @@ public class TellusDebugCommand {
         CommandSourceStack src = ctx.getSource();
         ServerLevel world = src.getLevel();
         ChunkGenerator generator = world.getChunkSource().getGenerator();
-        LevelChunk chunk = world.getChunk(new ChunkPos(new BlockPos(x, 0, z)).x,
-                                          new ChunkPos(new BlockPos(x, 0, z)).z);
+        ChunkPos probeChunk = Compat.chunkPosOf(new BlockPos(x, 0, z));
+        LevelChunk chunk = world.getChunk(Compat.chunkX(probeChunk), Compat.chunkZ(probeChunk));
 
         TellusCompat.Probe p = TellusCompat.probe(generator, chunk, x, z);
 
@@ -166,8 +166,8 @@ public class TellusDebugCommand {
             StringBuilder row = new StringBuilder();
             row.append(z == cz ? ">" : " ");
             for (int x = cx - radius; x <= cx + radius; x++) {
-                LevelChunk chunk = world.getChunk(new ChunkPos(new BlockPos(x, 0, z)).x,
-                                                  new ChunkPos(new BlockPos(x, 0, z)).z);
+                ChunkPos probeChunk = Compat.chunkPosOf(new BlockPos(x, 0, z));
+                LevelChunk chunk = world.getChunk(Compat.chunkX(probeChunk), Compat.chunkZ(probeChunk));
                 TellusCompat.Probe p = TellusCompat.probe(generator, chunk, x, z);
                 total++;
                 if (!p.valid) {

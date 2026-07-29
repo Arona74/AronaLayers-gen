@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.mixin;
 
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
@@ -94,7 +95,7 @@ public class ChunkGeneratorFeaturesMixin {
                     warnedTellusFallback = true;
                     AronaLayersGen.LOGGER.warn("[GenerateFeatures] tellus_layer_injection is on but Tellus did not handle chunk {},{} " +
                         "(available={}) — falling back to {}",
-                        chunk.getPos().x, chunk.getPos().z, TellusCompat.isAvailable(),
+                        Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), TellusCompat.isAvailable(),
                         LayerConfig.RTF_LAYER_INJECTION ? "RTF/vanilla" : (LayerConfig.LAYER_INJECTION ? "vanilla" : "nothing"));
                 }
             }
@@ -108,7 +109,7 @@ public class ChunkGeneratorFeaturesMixin {
                     boolean rtfSuccess = RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
                     if (!rtfSuccess && LayerConfig.LAYER_INJECTION) {
                         AronaLayersGen.LOGGER.warn("[GenerateFeatures] RTF tile miss at {},{} — falling back to vanilla injection",
-                            chunk.getPos().x, chunk.getPos().z);
+                            Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
                         VanillaLayerInjector.injectLayers(chunk, null);
                     }
                 } else if (LayerConfig.LAYER_INJECTION) {
@@ -136,7 +137,7 @@ public class ChunkGeneratorFeaturesMixin {
             }
 
         } catch (Exception e) {
-            AronaLayersGen.LOGGER.error("Failed to process layers in generateFeatures for chunk {},{}", chunk.getPos().x, chunk.getPos().z, e);
+            AronaLayersGen.LOGGER.error("Failed to process layers in generateFeatures for chunk {},{}", Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), e);
         } finally {
             LayerPlacementHelper.clearStructureBounds();
         }

@@ -144,7 +144,7 @@ public class PlantConversionHelper {
 
         if (converted > 0 && LayerConfig.logPlants()) {
             AronaLayersGen.LOGGER.info("[Plant Conversion] ChunkAccess {},{}: converted {} plants",
-                chunk.getPos().x, chunk.getPos().z, converted);
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), converted);
         }
     }
 }

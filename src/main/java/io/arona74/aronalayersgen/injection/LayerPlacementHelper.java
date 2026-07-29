@@ -582,7 +582,7 @@ public class LayerPlacementHelper {
         try {
             if (LayerConfig.logStructure()) {
                 AronaLayersGen.LOGGER.info("[Structure] ChunkAccess {},{}: getStructureStarts() count={} thread={}",
-                    chunk.getPos().x, chunk.getPos().z,
+                    Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()),
                     chunk.getAllStarts().size(),
                     Thread.currentThread().getName());
             }
@@ -591,7 +591,7 @@ public class LayerPlacementHelper {
                 if (start == StructureStart.INVALID_START) continue;
                 if (LayerConfig.logStructure()) {
                     AronaLayersGen.LOGGER.info("[Structure] ChunkAccess {},{}: collecting start={} pieces={}",
-                        chunk.getPos().x, chunk.getPos().z,
+                        Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()),
                         start.getClass().getSimpleName(),
                         start.getPieces().size());
                 }
@@ -602,7 +602,7 @@ public class LayerPlacementHelper {
 
             if (LayerConfig.logStructure()) {
                 AronaLayersGen.LOGGER.info("[Structure] ChunkAccess {},{}: starts done, boxes={}",
-                    chunk.getPos().x, chunk.getPos().z, bounds.size());
+                    Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), bounds.size());
             }
 
             // Only resolve cross-chunk structure references when a WorldGenRegion is available.
@@ -638,7 +638,7 @@ public class LayerPlacementHelper {
 
         if (LayerConfig.logStructure()) {
             AronaLayersGen.LOGGER.info("[Structure] ChunkAccess {},{}: prepareStructureBounds complete, total boxes={}",
-                chunk.getPos().x, chunk.getPos().z, bounds.size());
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), bounds.size());
         }
 
         // Always set the ThreadLocal, even when empty. A null value means
@@ -701,7 +701,7 @@ public class LayerPlacementHelper {
         try {
             if (LayerConfig.logStructure()) {
                 AronaLayersGen.LOGGER.info("[Structure] ChunkAccess {},{}: getStructureStarts() count={} thread={}",
-                    chunk.getPos().x, chunk.getPos().z,
+                    Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()),
                     chunk.getAllStarts().size(),
                     Thread.currentThread().getName());
             }
@@ -710,7 +710,7 @@ public class LayerPlacementHelper {
                 if (start == StructureStart.INVALID_START) continue;
                 if (LayerConfig.logStructure()) {
                     AronaLayersGen.LOGGER.info("[Structure] ChunkAccess {},{}: collecting start={} pieces={}",
-                        chunk.getPos().x, chunk.getPos().z,
+                        Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()),
                         start.getClass().getSimpleName(),
                         start.getPieces().size());
                 }
@@ -737,7 +737,7 @@ public class LayerPlacementHelper {
                                 if (refStart != null && refStart != StructureStart.INVALID_START) {
                                     if (LayerConfig.logStructure()) {
                                         AronaLayersGen.LOGGER.info("[Structure] ChunkAccess {},{}: cross-chunk ref from {},{} start={} pieces={}",
-                                            chunk.getPos().x, chunk.getPos().z,
+                                            Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()),
                                             refChunkX, refChunkZ,
                                             refStart.getClass().getSimpleName(),
                                             refStart.getPieces().size());
@@ -760,7 +760,7 @@ public class LayerPlacementHelper {
 
         if (LayerConfig.logStructure()) {
             AronaLayersGen.LOGGER.info("[Structure] ChunkAccess {},{}: prepareStructureBoundsWithWorld complete, total boxes={}",
-                chunk.getPos().x, chunk.getPos().z, bounds.size());
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), bounds.size());
         }
 
         structureBoundsLocal.set(bounds);
@@ -910,7 +910,7 @@ public class LayerPlacementHelper {
 
         if (LayerConfig.logSecondPass() && cleaned > 0) {
             AronaLayersGen.LOGGER.info("[SecondPass] ChunkAccess {},{}: tapered {} neighbor layer(s)",
-                chunkPos.x, chunkPos.z, cleaned);
+                Compat.chunkX(chunkPos), Compat.chunkZ(chunkPos), cleaned);
         }
     }
 
@@ -1927,7 +1927,7 @@ public class LayerPlacementHelper {
 
         if ((corrected > 0 || removed > 0 || waterlogged > 0 || structureCleanup > 0) && LayerConfig.logCorrection()) {
             AronaLayersGen.LOGGER.info("[Correction] ChunkAccess {},{}: corrected={}, removed={}, waterlogged={}, structureCleanup={}",
-                chunk.getPos().x, chunk.getPos().z, corrected, removed, waterlogged, structureCleanup);
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), corrected, removed, waterlogged, structureCleanup);
         }
     }
 
@@ -1967,7 +1967,7 @@ public class LayerPlacementHelper {
 
         if ((removed > 0 || preserved > 0) && LayerConfig.logStructureNoLayers()) {
             AronaLayersGen.LOGGER.info("[StructureNoLayers] ChunkAccess {},{}: removed={}, preserved={} (had plants above)",
-                chunk.getPos().x, chunk.getPos().z, removed, preserved);
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), removed, preserved);
         }
     }
 }

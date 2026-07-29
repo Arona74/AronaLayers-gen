@@ -49,7 +49,7 @@ public class VanillaLayerInjector {
                 return;
             }
             AronaLayersGen.LOGGER.warn("[VanillaNoiseRouter] RandomState unavailable for chunk {},{} — falling back to slope injection",
-                chunk.getPos().x, chunk.getPos().z);
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
         }
         injectLayersSlope(chunk);
     }
@@ -124,7 +124,7 @@ public class VanillaLayerInjector {
 
         if (LayerConfig.logVanilla()) {
             AronaLayersGen.LOGGER.info("[VanillaNoiseRouter] ChunkAccess {},{}: layers={} | skips: snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
-                chunk.getPos().x, chunk.getPos().z, layersPlaced,
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), layersPlaced,
                 LayerPlacementHelper.debugSkipSnowy.get(), LayerPlacementHelper.debugSkipNoSurface.get(),
                 LayerPlacementHelper.debugSkipNoMapping.get(), LayerPlacementHelper.debugSkipLayerZero.get(),
                 LayerPlacementHelper.debugSkipNoLayerBlock.get(), LayerPlacementHelper.debugSkipNotAir.get(),
@@ -185,7 +185,7 @@ public class VanillaLayerInjector {
 
         if (LayerConfig.logVanilla()) {
             AronaLayersGen.LOGGER.info("[Vanilla] ChunkAccess {},{}: layers={} | skips: snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
-                chunk.getPos().x, chunk.getPos().z, layersPlaced,
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), layersPlaced,
                 LayerPlacementHelper.debugSkipSnowy.get(), LayerPlacementHelper.debugSkipNoSurface.get(),
                 LayerPlacementHelper.debugSkipNoMapping.get(), LayerPlacementHelper.debugSkipLayerZero.get(),
                 LayerPlacementHelper.debugSkipNoLayerBlock.get(), LayerPlacementHelper.debugSkipNotAir.get(),

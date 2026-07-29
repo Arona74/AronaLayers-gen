@@ -7,7 +7,6 @@ import io.arona74.aronalayersgen.command.TellusDebugCommand;
 import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
 import io.arona74.aronalayersgen.injection.NbtTreeInjector;
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -58,7 +57,7 @@ public class AronaLayersGen implements ModInitializer {
             LOGGER.warn("[AronaLayersGen] cr_nbt_trees is enabled but Conquest Reforged is not present — disabling the feature.");
         }
 
-        ServerChunkEvents.CHUNK_LOAD.register((world, chunk) -> NbtTreeInjector.onChunkLoad(world, chunk));
+        Compat.registerChunkLoad(NbtTreeInjector::onChunkLoad);
         ServerTickEvents.END_SERVER_TICK.register(server -> NbtTreeInjector.flushReadyChunks());
 
         LOGGER.info("Arona Layers Generator initialized successfully");

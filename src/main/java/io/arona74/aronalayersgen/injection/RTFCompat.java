@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.injection;
 
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import net.fabricmc.loader.api.FabricLoader;
@@ -215,8 +216,8 @@ public class RTFCompat {
 
             final int finalWorldHeight = cachedWorldHeight;
 
-            int chunkX = chunk.getPos().x;
-            int chunkZ = chunk.getPos().z;
+            int chunkX = Compat.chunkX(chunk.getPos());
+            int chunkZ = Compat.chunkZ(chunk.getPos());
 
             Object tile = getTileNonBlocking(tileCache, chunkX, chunkZ);
             if (tile == null) return false;
@@ -253,7 +254,7 @@ public class RTFCompat {
             return true;
         } catch (Exception e) {
             AronaLayersGen.LOGGER.warn("[RTF] Layer injection failed at {},{}: {}: {}",
-                chunk.getPos().x, chunk.getPos().z,
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()),
                 e.getClass().getSimpleName(), e.getCause() != null ? e.getCause().toString() : e.getMessage());
             return false;
         }

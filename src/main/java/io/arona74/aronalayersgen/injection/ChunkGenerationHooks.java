@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.injection;
 
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import net.minecraft.server.level.WorldGenRegion;
@@ -51,7 +52,7 @@ public final class ChunkGenerationHooks {
             if (RTFCompat.isRTFAvailable()) {
                 if (noiseConfig != null) {
                     AronaLayersGen.LOGGER.debug("[ChunkGen] Injecting layers after carve for chunk {},{}",
-                        chunk.getPos().x, chunk.getPos().z);
+                        Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
                     RTFCompat.injectLayersWithRTF(chunk, noiseConfig);
                 } else if (RandomStateHolder.hasRTFRandomState()) {
                     Object randomState = RandomStateHolder.getRandomState();

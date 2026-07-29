@@ -54,8 +54,8 @@ public class ChunkDebugCommand {
 
         ServerLevel world    = source.getLevel();
         BlockPos   playerPos = source.getPlayer().blockPosition();
-        ChunkPos   cp        = new ChunkPos(playerPos);
-        LevelChunk chunk     = world.getChunk(cp.x, cp.z);
+        ChunkPos   cp        = Compat.chunkPosOf(playerPos);
+        LevelChunk chunk     = world.getChunk(Compat.chunkX(cp), Compat.chunkZ(cp));
 
         int startX = cp.getMinBlockX();
         int startZ = cp.getMinBlockZ();
@@ -138,7 +138,7 @@ public class ChunkDebugCommand {
         // ======== output ========
         String colMarker = buildColMarker(plx);
 
-        send(source, "--- ALG Chunk Debug (cx=" + cp.x + " cz=" + cp.z + ") ---");
+        send(source, "--- ALG Chunk Debug (cx=" + Compat.chunkX(cp) + " cz=" + Compat.chunkZ(cp) + ") ---");
         send(source, "Config: layer_inj=" + LayerConfig.LAYER_INJECTION
                 + " skip_snowy=" + LayerConfig.SKIP_SNOWY_BIOMES
                 + " improve_snowy=" + LayerConfig.IMPROVE_SNOWY_BIOMES

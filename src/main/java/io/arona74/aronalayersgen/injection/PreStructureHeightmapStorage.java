@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen.injection;
 
+import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -53,12 +54,12 @@ public class PreStructureHeightmapStorage {
                     Heightmap.Types.OCEAN_FLOOR_WG).getFirstAvailable(localX, localZ);
             }
         }
-        long key = chunk.getPos().toLong();
+        long key = Compat.chunkPosToLong(chunk.getPos());
         surfaceSnapshots.put(key, snapshot);
 
         if (LayerConfig.logSkipElevated()) {
             AronaLayersGen.LOGGER.info("[SkipElevated] Captured surface heightmap for chunk {},{}",
-                chunk.getPos().x, chunk.getPos().z);
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
         }
     }
 
@@ -70,7 +71,7 @@ public class PreStructureHeightmapStorage {
      * Safe to call concurrently; does not modify the map.
      */
     public static int peekSurfaceY(ChunkAccess chunk, int localX, int localZ) {
-        long key = chunk.getPos().toLong();
+        long key = Compat.chunkPosToLong(chunk.getPos());
         int[] snapshot = surfaceSnapshots.get(key);
         if (snapshot == null) return Integer.MIN_VALUE;
         return snapshot[localZ * 16 + localX];
@@ -81,7 +82,7 @@ public class PreStructureHeightmapStorage {
      * Call after layer injection is complete for this chunk.
      */
     public static void discardSurfaceSnapshot(ChunkAccess chunk) {
-        surfaceSnapshots.remove(chunk.getPos().toLong());
+        surfaceSnapshots.remove(Compat.chunkPosToLong(chunk.getPos()));
     }
 
     // ========== CARVERS-phase snapshots (for STRUCTURE_NO_LAYERS) ==========
@@ -101,12 +102,12 @@ public class PreStructureHeightmapStorage {
                     Heightmap.Types.OCEAN_FLOOR_WG).getFirstAvailable(localX, localZ);
             }
         }
-        long key = chunk.getPos().toLong();
+        long key = Compat.chunkPosToLong(chunk.getPos());
         heightmapSnapshots.put(key, snapshot);
 
         if (LayerConfig.logStructureNoLayers()) {
             AronaLayersGen.LOGGER.info("[StructureNoLayers] Captured heightmap for chunk {},{}",
-                chunk.getPos().x, chunk.getPos().z);
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
         }
     }
 
@@ -116,7 +117,7 @@ public class PreStructureHeightmapStorage {
      */
     @Deprecated
     public static int peekPreStructureSurfaceY(ChunkAccess chunk, int localX, int localZ) {
-        long key = chunk.getPos().toLong();
+        long key = Compat.chunkPosToLong(chunk.getPos());
         int[] snapshot = heightmapSnapshots.get(key);
         if (snapshot == null) return Integer.MIN_VALUE;
         return snapshot[localZ * 16 + localX];
@@ -127,7 +128,7 @@ public class PreStructureHeightmapStorage {
      * Only needed if getChangedColumns will not be called.
      */
     public static void discardSnapshot(ChunkAccess chunk) {
-        heightmapSnapshots.remove(chunk.getPos().toLong());
+        heightmapSnapshots.remove(Compat.chunkPosToLong(chunk.getPos()));
     }
 
     /**
@@ -138,7 +139,7 @@ public class PreStructureHeightmapStorage {
      * Automatically removes the snapshot after comparison.
      */
     public static Set<Integer> getChangedColumns(ChunkAccess chunk) {
-        long key = chunk.getPos().toLong();
+        long key = Compat.chunkPosToLong(chunk.getPos());
         int[] snapshot = heightmapSnapshots.remove(key);
 
         if (snapshot == null) {
@@ -161,7 +162,7 @@ public class PreStructureHeightmapStorage {
 
         if (LayerConfig.logStructureNoLayers() && !changed.isEmpty()) {
             AronaLayersGen.LOGGER.info("[StructureNoLayers] ChunkAccess {},{}: {} columns changed by structures",
-                chunk.getPos().x, chunk.getPos().z, changed.size());
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), changed.size());
         }
 
         return changed;

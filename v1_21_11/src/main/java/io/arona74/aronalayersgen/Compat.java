@@ -154,4 +154,39 @@ public final class Compat {
                 new net.minecraft.server.permissions.Permission.HasCommandLevel(
                         net.minecraft.server.permissions.PermissionLevel.byId(level)));
     }
+
+    // ---- ChunkPos -------------------------------------------------------
+    // 26.2 turned ChunkPos into a record: the x/z fields became accessors, and
+    // the BlockPos/long constructors and toLong/asLong were renamed.
+
+    public static int chunkX(net.minecraft.world.level.ChunkPos pos) {
+        return pos.x;
+    }
+
+    public static int chunkZ(net.minecraft.world.level.ChunkPos pos) {
+        return pos.z;
+    }
+
+    public static net.minecraft.world.level.ChunkPos chunkPosOf(net.minecraft.core.BlockPos pos) {
+        return new net.minecraft.world.level.ChunkPos(pos);
+    }
+
+    public static long chunkPosToLong(net.minecraft.world.level.ChunkPos pos) {
+        return pos.toLong();
+    }
+
+    public static long chunkPosAsLong(int x, int z) {
+        return net.minecraft.world.level.ChunkPos.asLong(x, z);
+    }
+
+    /**
+     * 26.2 added a third (boolean) parameter to the chunk-load callback, so the
+     * lambda arity differs per version and the registration cannot be shared.
+     */
+    public static void registerChunkLoad(java.util.function.BiConsumer<
+            net.minecraft.server.level.ServerLevel,
+            net.minecraft.world.level.chunk.LevelChunk> handler) {
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents.CHUNK_LOAD.register(
+                (world, chunk) -> handler.accept(world, chunk));
+    }
 }

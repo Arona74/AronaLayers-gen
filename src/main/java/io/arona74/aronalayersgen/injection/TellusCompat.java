@@ -82,7 +82,7 @@ public class TellusCompat {
      * should run injection again. Consumes the record.
      */
     public static boolean needsRerun(ChunkAccess chunk) {
-        return chunksNeedingRerun.remove(chunk.getPos().toLong());
+        return chunksNeedingRerun.remove(Compat.chunkPosToLong(chunk.getPos()));
     }
 
     /** True when the Tellus mod is loaded. Cheap; does not touch reflection. */
@@ -408,12 +408,12 @@ public class TellusCompat {
             // nothing could be placed. Flag the chunk for a retry at LevelChunk.<init>, once
             // heightmaps have been rebuilt.
             if (locHasSurface == 0) {
-                chunksNeedingRerun.add(chunk.getPos().toLong());
+                chunksNeedingRerun.add(Compat.chunkPosToLong(chunk.getPos()));
             }
 
             if (LayerConfig.logTellus()) {
                 AronaLayersGen.LOGGER.info("[Tellus] ChunkAccess {},{}: placed={} | cols layer>=1={} layer0={} | fail breakdown: noSurface={}, noMapping={}, aboveAir(should place)={}, abovePlant={}, aboveBlocked={} | submergedSkip={}, noBedData={}, noElev={}, demMismatch={}",
-                    chunk.getPos().x, chunk.getPos().z, layersPlaced,
+                    Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), layersPlaced,
                     locLayerGe1, locLayer0,
                     locNoSurface, locNoMapping, locAboveAir, locAbovePlant, locAboveBlocked,
                     locSubmerged, locNoBedData, locNoElev, locDemMismatch);
@@ -421,7 +421,7 @@ public class TellusCompat {
             return true;
         } catch (Throwable t) {
             AronaLayersGen.LOGGER.warn("[Tellus] Layer injection failed at {},{}: {}",
-                chunk.getPos().x, chunk.getPos().z, t.toString());
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), t.toString());
             return false;
         }
     }

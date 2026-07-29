@@ -85,7 +85,7 @@ public class NbtTreeInjector {
 
     /** Called from the worldgen mixin to cancel vanilla and queue for deferred placement. */
     public static void queueWorldgenTree(BlockPos origin) {
-        long key = ChunkPos.asLong(origin.getX() >> 4, origin.getZ() >> 4);
+        long key = Compat.chunkPosAsLong(origin.getX() >> 4, origin.getZ() >> 4);
         PENDING_TREES.computeIfAbsent(key, k -> Collections.synchronizedList(new ArrayList<>())).add(origin);
     }
 
@@ -96,7 +96,7 @@ public class NbtTreeInjector {
     /** Called from CHUNK_LOAD: records that this chunk's deferred trees can be placed soon. */
     public static void onChunkLoad(ServerLevel world, LevelChunk chunk) {
         if (!LayerConfig.CR_NBT_TREES) return;
-        long key = chunk.getPos().toLong();
+        long key = Compat.chunkPosToLong(chunk.getPos());
         if (PENDING_TREES.containsKey(key)) {
             READY_CHUNKS.put(key, world);
         }
@@ -248,7 +248,7 @@ public class NbtTreeInjector {
         NbtTreeRegistry registry = NbtTreeRegistry.getInstance();
         var cp = chunk.getPos();
         // Deterministic per-chunk seed, offset from vanilla worldgen seed
-        RandomSource rand = RandomSource.create(world.getSeed() ^ cp.toLong() ^ 0x4E4254726565L);
+        RandomSource rand = RandomSource.create(world.getSeed() ^ Compat.chunkPosToLong(cp) ^ 0x4E4254726565L);
 
         int startX = cp.getMinBlockX();
         int startZ = cp.getMinBlockZ();

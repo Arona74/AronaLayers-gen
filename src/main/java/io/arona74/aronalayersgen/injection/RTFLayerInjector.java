@@ -197,7 +197,7 @@ public class RTFLayerInjector {
 
         if (LayerConfig.logRtf()) {
             AronaLayersGen.LOGGER.info("[RTF] ChunkAccess {},{}: cells={}, null={}, layers={} | skips: river={}, submerged={}, snowy={}, noSurf={}, conserv={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
-                chunk.getPos().x, chunk.getPos().z, cellsProcessed, cellsNull, layersPlaced,
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), cellsProcessed, cellsNull, layersPlaced,
                 debugSkipRiver.get(), debugSkipSubmerged.get(),
                 LayerPlacementHelper.debugSkipSnowy.get(), LayerPlacementHelper.debugSkipNoSurface.get(),
                 LayerPlacementHelper.debugSkipConservativeSurface.get(),
