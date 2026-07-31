@@ -4,6 +4,7 @@ import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
@@ -530,6 +531,8 @@ public class TellusCompat {
         /** Human-readable snow stack, top-down (e.g. "snow[6]@139, snow[8]@138"). */
         public String snowStack = "";
         public String surfaceBlock = "-", aboveBlock = "-";
+        /** Layer block the surface maps to, or null when the mapping target is not registered. */
+        public String mappedLayerBlock = null;
         /** Layer value the backend decides for this column; 0 = no layer. */
         public int stackLayers;
         public String existingLayer = "-";
@@ -630,6 +633,13 @@ public class TellusCompat {
                 p.surfaceBlock = String.valueOf(Compat.blockId(surfaceState.getBlock()));
                 p.aboveBlock = String.valueOf(Compat.blockId(aboveState.getBlock()));
                 p.surfaceMapped = LayerPlacementHelper.hasMappingFor(surfaceState.getBlock());
+                // hasMappingFor only proves an entry exists and the vanilla side resolved.
+                // Resolve the target too: if the backend does not provide that block, nothing
+                // is placed even though mapped reads true. layerCount is only used for logging.
+                if (p.surfaceMapped) {
+                    Block resolved = LayerPlacementHelper.getMappedLayerBlock(surfaceState.getBlock(), 1);
+                    p.mappedLayerBlock = resolved == null ? null : Compat.blockId(resolved);
+                }
 
                 // Tellus snow: a snow_block (or, after we run, a snow[8]) covers the terrain, with
                 // our snow-layer terrace stacked above it. Use WORLD_SURFACE (highest non-air) to

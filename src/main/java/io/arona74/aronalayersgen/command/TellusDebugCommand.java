@@ -87,7 +87,13 @@ public class TellusDebugCommand {
                 + (p.layersStripped > 0 ? "  (skipped " + p.layersStripped + " layer/foliage block(s))" : ""));
         send(src, "  MISMATCH=" + p.mismatch
                 + (p.mismatch != 0 ? "  <-- DEM disagrees with built terrain" : "  (DEM agrees)"));
-        send(src, "  surface=" + p.surfaceBlock + " (mapped=" + p.surfaceMapped + ")  above=" + p.aboveBlock);
+        send(src, "  surface=" + p.surfaceBlock + " (mapped=" + p.surfaceMapped
+                + (p.surfaceMapped
+                    ? " -> " + (p.mappedLayerBlock != null
+                        ? p.mappedLayerBlock
+                        : "!! MAPPING TARGET NOT REGISTERED - backend does not provide it")
+                    : "")
+                + ")  above=" + p.aboveBlock);
         send(src, "  biome=" + p.biome + "  isCold(surfaceY)=" + p.coldAtSurface
                 + "  isCold(base<=80)=" + p.coldAtBase
                 + "  -> snow-eligible=" + (p.coldAtBase || p.coverClass == 70));
