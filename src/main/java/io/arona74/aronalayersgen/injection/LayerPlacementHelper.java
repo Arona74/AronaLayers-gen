@@ -10,6 +10,7 @@ import io.arona74.aronalayersgen.PlantMappingRegistry;
 import io.arona74.aronalayersgen.RockMappingRegistry;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.Holder;
@@ -1282,7 +1283,17 @@ public class LayerPlacementHelper {
             return true;
         }
 
-        if (isPostFeaturesContext && !getMappingRegistry().hasMapping(surfaceBlock)) {
+        // A tree canopy satisfies OCEAN_FLOOR's "blocks motion" predicate, so on a forested
+        // column the heightmap top is leaves and the real ground is several blocks below.
+        // The scan below already handles that, but it was gated on isPostFeaturesContext,
+        // which is false during worldgen because the chunk is still a ProtoChunk — even
+        // though this runs at the RETURN of applyBiomeDecoration, by which point the chunk's
+        // own trees exist. So the scan was disabled exactly when it was needed, and any
+        // column under a canopy silently got no layer. Whether a given column was affected
+        // depended on whether the overhanging tree belonged to this chunk or to a neighbour
+        // whose feature step had not run yet, which is why it presented as chunk-dependent.
+        boolean surfaceIsFoliage = surfaceState.is(BlockTags.LEAVES) || surfaceState.is(BlockTags.LOGS);
+        if ((isPostFeaturesContext || surfaceIsFoliage) && !getMappingRegistry().hasMapping(surfaceBlock)) {
             boolean found = false;
             for (int dy = 1; dy <= 30; dy++) {
                 int checkY = surfaceY - 1 - dy;
