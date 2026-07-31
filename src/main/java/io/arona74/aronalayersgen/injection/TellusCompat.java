@@ -184,19 +184,24 @@ public class TellusCompat {
 
 
     /**
-     * True for blocks that sit above the natural ground top yet still satisfy
-     * OCEAN_FLOOR's "blocks motion" predicate, so the heightmap counts them as
-     * terrain: this mod's own layer blocks, and tree canopies and trunks.
+     * True for the first block that counts as real ground when walking down from
+     * the OCEAN_FLOOR heightmap top.
+     *
+     * <p>That heightmap's predicate is "blocks motion", so a tree canopy registers
+     * as terrain. Descending has to pass over the canopy's leaves and trunk, the
+     * air gaps between them, any ground cover, and this mod's own layer blocks —
+     * hence a positive test for ground rather than a list of things to skip, which
+     * previously stopped at the first air gap under the topmost leaf.
      *
      * <p>Vanilla's MOTION_BLOCKING_NO_LEAVES would exclude leaves, but it also
      * counts fluids, which would return the water surface over oceans and break
-     * the submerged/bathymetry readings this probe depends on. Filtering during
-     * the descent keeps OCEAN_FLOOR's fluid semantics intact.
+     * the submerged/bathymetry readings this probe depends on.
      */
-    private static boolean isAboveNaturalTop(BlockState state) {
-        return LayerPlacementHelper.hasLayerProperty(state)
-            || state.is(BlockTags.LEAVES)
-            || state.is(BlockTags.LOGS);
+    private static boolean isNaturalGround(BlockState state) {
+        return state.blocksMotion()
+            && !LayerPlacementHelper.hasLayerProperty(state)
+            && !state.is(BlockTags.LEAVES)
+            && !state.is(BlockTags.LOGS);
     }
 
     /**
@@ -569,8 +574,8 @@ public class TellusCompat {
             // otherwise MISMATCH reports our own output as a DEM disagreement.
             int natural = floorY - 1;
             int guard = 0;
-            while (natural > Compat.minY(chunk) && guard++ < 48
-                   && isAboveNaturalTop(chunk.getBlockState(new BlockPos(worldX, natural, worldZ)))) {
+            while (natural > Compat.minY(chunk) && guard++ < 64
+                   && !isNaturalGround(chunk.getBlockState(new BlockPos(worldX, natural, worldZ)))) {
                 natural--;
             }
             p.actualTopSolidY = natural;
@@ -618,8 +623,10 @@ public class TellusCompat {
             }
 
             if (floorY > Compat.minY(chunk)) {
-                BlockState surfaceState = chunk.getBlockState(new BlockPos(worldX, floorY - 1, worldZ));
-                BlockState aboveState = chunk.getBlockState(new BlockPos(worldX, floorY, worldZ));
+                // Anchored to the natural top, not floorY - 1: on a forested column the
+                // raw heightmap top is the canopy, which would report leaves as the surface.
+                BlockState surfaceState = chunk.getBlockState(new BlockPos(worldX, p.actualTopSolidY, worldZ));
+                BlockState aboveState = chunk.getBlockState(new BlockPos(worldX, p.actualTopSolidY + 1, worldZ));
                 p.surfaceBlock = String.valueOf(Compat.blockId(surfaceState.getBlock()));
                 p.aboveBlock = String.valueOf(Compat.blockId(aboveState.getBlock()));
                 p.surfaceMapped = LayerPlacementHelper.hasMappingFor(surfaceState.getBlock());
