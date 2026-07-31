@@ -1118,6 +1118,32 @@ public class LayerPlacementHelper {
             return false;
         }
 
+        // OCEAN_FLOOR counts leaves, so on a forested column the heightmap top is the tree
+        // canopy rather than the ground. Correct surfaceY once, here at the source: every
+        // consumer below reads it — the conservative-surface delta, the biome and cold
+        // lookups, and surfacePos itself — and a canopy-inflated value made all of them
+        // describe a block several metres above the real surface.
+        //
+        // This is what left columns unlayered under a neighbouring chunk's overhanging tree:
+        // that chunk's feature step had already run, so the canopy was present when this
+        // column was injected, the surface resolved to leaves, and the conservative gate
+        // rejected the column before the later scan-down could look past it.
+        //
+        // Only engages when the top block really is foliage, so ordinary columns are
+        // untouched. The descent passes over the canopy's air gaps as well as its leaves
+        // and trunk, stopping at the first block that genuinely blocks motion.
+        BlockState heightmapTop = chunk.getBlockState(new BlockPos(worldX, surfaceY - 1, worldZ));
+        if (heightmapTop.is(BlockTags.LEAVES) || heightmapTop.is(BlockTags.LOGS)) {
+            int probeY = surfaceY - 1;
+            int foliageGuard = 0;
+            while (probeY > Compat.minY(chunk) && foliageGuard++ < 64) {
+                BlockState s = chunk.getBlockState(new BlockPos(worldX, probeY, worldZ));
+                if (s.blocksMotion() && !s.is(BlockTags.LEAVES) && !s.is(BlockTags.LOGS)) break;
+                probeY--;
+            }
+            surfaceY = probeY + 1;
+        }
+
         // Tellus covers snowy columns with a snow_block (Blocks.SNOW_BLOCK) during the surface
         // build. Without intervention the mod's snowy path converts that to snow[8] in place; we
         // instead want a snow-layer terrace of our computed count ABOVE it. Normalise a snow_block
