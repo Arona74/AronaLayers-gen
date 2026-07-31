@@ -924,6 +924,10 @@ public class LayerPlacementHelper {
             // Replaceable blocks (tall grass, flowers, snow layers, water) are not ceilings.
             // Non-replaceable non-air blocks (stairs, slabs, glass, stone, fences, etc.) are.
             if (state.canBeReplaced()) continue;
+            // Nor is a tree. Leaves and logs are neither air nor replaceable, so a canopy
+            // overhead used to read as an enclosing ceiling and suppress the column. This
+            // check exists to avoid layering inside structures; a tree is not one.
+            if (state.is(BlockTags.LEAVES) || state.is(BlockTags.LOGS)) continue;
 
             return true;
         }
