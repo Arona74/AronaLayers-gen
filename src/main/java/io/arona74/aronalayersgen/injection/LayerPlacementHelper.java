@@ -1039,6 +1039,40 @@ public class LayerPlacementHelper {
     public static final AtomicInteger debugSkipStructureElevated = new AtomicInteger();
     public static final AtomicInteger debugSkipConservativeSurface = new AtomicInteger();
 
+    private static final AtomicInteger[] SKIP_COUNTERS = {
+        debugSkipSnowy, debugSkipNoSurface, debugSkipNoMapping, debugSkipLayerZero,
+        debugSkipNoLayerBlock, debugSkipNotAir, debugSkipEnclosed,
+        debugSkipStructureElevated, debugSkipConservativeSurface
+    };
+    private static final String[] SKIP_NAMES = {
+        "snowy", "no_surface", "no_mapping", "layer_zero",
+        "no_layer_block", "not_air", "enclosed",
+        "structure_elevated", "conservative_surface"
+    };
+
+    /** Snapshot of the skip counters, for attributing a single column's non-placement. */
+    public static int[] skipCountersSnapshot() {
+        int[] out = new int[SKIP_COUNTERS.length];
+        for (int i = 0; i < out.length; i++) out[i] = SKIP_COUNTERS[i].get();
+        return out;
+    }
+
+    /**
+     * Which gate rejected a column, by diffing against a snapshot taken just before
+     * the injection call. Best effort only: the counters are global and worldgen is
+     * threaded, so a concurrent column can occasionally be misattributed.
+     */
+    public static String skipReasonSince(int[] before) {
+        StringBuilder moved = new StringBuilder();
+        for (int i = 0; i < SKIP_COUNTERS.length; i++) {
+            if (SKIP_COUNTERS[i].get() != before[i]) {
+                if (moved.length() > 0) moved.append('+');
+                moved.append(SKIP_NAMES[i]);
+            }
+        }
+        return moved.length() == 0 ? "unknown" : moved.toString();
+    }
+
     // ========== Structure Elevation Block Filter ==========
 
     private static Set<Block> elevationProcessBlocks = null;

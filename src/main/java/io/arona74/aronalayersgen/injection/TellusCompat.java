@@ -405,10 +405,20 @@ public class TellusCompat {
 
                     boolean logCenter = LayerConfig.logTellus() && localX == 8 && localZ == 8;
                     boolean logWater = LayerConfig.logTellus() && isSubmerged && !loggedWaterColumn;
+                    // Snapshot the skip counters so a column that wanted a layer but did not
+                    // get one can name the gate that rejected it, instead of us inferring it.
+                    int[] skipsBefore = LayerConfig.logTellus() && layerCount >= 1
+                        ? LayerPlacementHelper.skipCountersSnapshot() : null;
                     boolean placed = LayerPlacementHelper.injectLayerAtTellus(
                         chunk, worldX, worldZ, layerCount, useSnowLayers, baseForGuards);
                     if (placed) {
                         layersPlaced++;
+                    } else if (skipsBefore != null) {
+                        AronaLayersGen.LOGGER.info(
+                            "[Tellus] SKIP ({},{}) layers={} reason={} surface={} above={} hmTop={} expectedBase={}",
+                            worldX, worldZ, layerCount,
+                            LayerPlacementHelper.skipReasonSince(skipsBefore),
+                            surfaceId, aboveId, floorY - 1, baseForGuards);
                     }
 
                     // GEOMETRY PROBE: topSolidY is the real block Tellus placed. Comparing it
