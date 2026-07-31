@@ -6,6 +6,7 @@ import io.arona74.aronalayersgen.LayerConfig;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -179,6 +180,23 @@ public class TellusCompat {
                 return false;
             }
         }
+    }
+
+
+    /**
+     * True for blocks that sit above the natural ground top yet still satisfy
+     * OCEAN_FLOOR's "blocks motion" predicate, so the heightmap counts them as
+     * terrain: this mod's own layer blocks, and tree canopies and trunks.
+     *
+     * <p>Vanilla's MOTION_BLOCKING_NO_LEAVES would exclude leaves, but it also
+     * counts fluids, which would return the water surface over oceans and break
+     * the submerged/bathymetry readings this probe depends on. Filtering during
+     * the descent keeps OCEAN_FLOOR's fluid semantics intact.
+     */
+    private static boolean isAboveNaturalTop(BlockState state) {
+        return LayerPlacementHelper.hasLayerProperty(state)
+            || state.is(BlockTags.LEAVES)
+            || state.is(BlockTags.LOGS);
     }
 
     /**
@@ -551,8 +569,8 @@ public class TellusCompat {
             // otherwise MISMATCH reports our own output as a DEM disagreement.
             int natural = floorY - 1;
             int guard = 0;
-            while (natural > Compat.minY(chunk) && guard++ < 8
-                   && LayerPlacementHelper.hasLayerProperty(chunk.getBlockState(new BlockPos(worldX, natural, worldZ)))) {
+            while (natural > Compat.minY(chunk) && guard++ < 48
+                   && isAboveNaturalTop(chunk.getBlockState(new BlockPos(worldX, natural, worldZ)))) {
                 natural--;
             }
             p.actualTopSolidY = natural;
@@ -645,7 +663,7 @@ public class TellusCompat {
                     }
                 } else {
                     // Find where a layer actually landed (stacking writes one above the surface).
-                    for (int y = p.rawTopSolidY + 1; y >= p.rawTopSolidY - 2 && y > Compat.minY(chunk); y--) {
+                    for (int y = p.actualTopSolidY + 1; y >= p.actualTopSolidY - 2 && y > Compat.minY(chunk); y--) {
                         BlockState s = chunk.getBlockState(new BlockPos(worldX, y, worldZ));
                         if (LayerPlacementHelper.hasLayerProperty(s)) {
                             p.existingLayer = String.valueOf(Compat.blockId(s.getBlock()));

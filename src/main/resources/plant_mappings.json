@@ -31,6 +31,8 @@
     "minecraft:white_tulip": "conquest:white_tulip",
     "minecraft:pink_petals": "minecraft:pink_petals",
     "minecraft:leaf_litter": "minecraft:leaf_litter",
-    "minecraft:wildflowers": "minecraft:wildflowers"
+    "minecraft:wildflowers": "minecraft:wildflowers",
+    "minecraft:short_dry_grass": "minecraft:short_dry_grass",
+    "minecraft:tall_dry_grass": "minecraft:tall_dry_grass"
   }
 }

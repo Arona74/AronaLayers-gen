@@ -84,7 +84,7 @@ public class TellusDebugCommand {
                 + "  naturalTopSolidY=" + p.actualTopSolidY
                 + "  rawTopSolidY=" + p.rawTopSolidY
                 + "  heightmapY=" + p.heightmapY
-                + (p.layersStripped > 0 ? "  (stripped " + p.layersStripped + " existing layer block(s))" : ""));
+                + (p.layersStripped > 0 ? "  (skipped " + p.layersStripped + " layer/foliage block(s))" : ""));
         send(src, "  MISMATCH=" + p.mismatch
                 + (p.mismatch != 0 ? "  <-- DEM disagrees with built terrain" : "  (DEM agrees)"));
         send(src, "  surface=" + p.surfaceBlock + " (mapped=" + p.surfaceMapped + ")  above=" + p.aboveBlock);
@@ -138,7 +138,7 @@ public class TellusDebugCommand {
     private static String decision(int layers) {
         return layers == 0
                 ? "0 (no layer)"
-                : layers + "/8 layer placed above the surface block";
+                : "would place " + layers + "/8 above the surface block";
     }
 
     /**
