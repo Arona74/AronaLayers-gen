@@ -1,0 +1,6 @@
+// Temporary: lift javac's 100-error cap so a whole migration pass is visible at once.
+allprojects {
+    tasks.withType(JavaCompile).configureEach {
+        options.compilerArgs << '-Xmaxerrs' << '10000'
+    }
+}

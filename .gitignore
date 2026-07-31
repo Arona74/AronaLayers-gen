@@ -40,3 +40,7 @@ remappedSrc/
 /nbt_trees/
 /schematic_trees
 libs/reterraforged-0.0.6-fabric-1.20.1.jar
+
+# Python bytecode from the scripts/ helpers
+__pycache__/
+*.pyc
