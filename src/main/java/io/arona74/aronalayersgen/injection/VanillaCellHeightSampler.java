@@ -12,6 +12,19 @@ import net.minecraft.world.level.levelgen.RandomState;
  *                    world seed so each world has a unique pattern.
  *
  * cellHeight = surfaceNorm * 0.4 + positionNoise * 0.6
+ *
+ * <p>Despite the name and the {@code RandomState} constructor parameter, this does
+ * <em>not</em> read vanilla's density functions: the parameter is unused, and
+ * positionNoise is an independent seeded hash. So the dominant 60% of the result is
+ * a decorative pattern uncorrelated with the landscape, while surfaceNorm changes by
+ * only ~0.0026 per block over a 384-block world — meaning terrain alone needs roughly
+ * a 48-block elevation change to complete one layer cycle at GRADIENT_SCALE=8. The
+ * banding it produces is therefore mostly noise-driven rather than terrain-driven.
+ *
+ * <p>{@link FractionalSurfaceSampler} is the terrain-accurate alternative: it reads
+ * the real density field and recovers actual sub-block elevation. This class is kept
+ * for the existing vanilla_noise_router_layer_injection behaviour, and as the
+ * per-column fallback for columns whose surface the density field cannot describe.
  */
 public class VanillaCellHeightSampler {
 
@@ -25,6 +38,7 @@ public class VanillaCellHeightSampler {
     // World seed mixed into every hash so each world has a unique pattern.
     private final long seed;
 
+    /** @param noiseConfig unused; kept so call sites need not change if this ever samples the router. */
     public VanillaCellHeightSampler(RandomState noiseConfig, long worldSeed) {
         this.seed = worldSeed;
     }

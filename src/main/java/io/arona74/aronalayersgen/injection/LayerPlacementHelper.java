@@ -100,6 +100,51 @@ public class LayerPlacementHelper {
         return mappingRegistry;
     }
 
+
+    /**
+     * Removes vanilla's snow dusting when it is left floating by a surface demotion.
+     *
+     * <p>Snow layers never block motion, at any depth — a {@code snow[7]} reads as non-solid to
+     * both OCEAN_FLOOR and MOTION_BLOCKING. A {@code snow_block} does block it. So on a snowy peak
+     * vanilla's ordering is: surface rules place a snow_block, MOTION_BLOCKING therefore points a
+     * block higher, and FREEZE_TOP_LAYER drops {@code snow[1]} on top of it.
+     *
+     * <p>Converting that snow_block into a snow layer is correct for depth, but it stops blocking
+     * motion, and the dusting that was resting on it is left hanging one block above the surface —
+     * the {@code snow[8]} with a {@code snow[1]} floating over it. The layer below was never placed
+     * twice; the block underneath the dusting simply changed out from under it, so the dusting has
+     * to go with it.
+     */
+    private static void clearStrandedSnowAbove(ChunkAccess chunk, BlockPos surfacePos, int worldX, int worldZ) {
+        BlockPos above = surfacePos.above();
+        if (chunk.getBlockState(above).getBlock() != Blocks.SNOW) return;
+        setBlockStateSafe(chunk, above, Blocks.AIR.defaultBlockState());
+        if (LayerConfig.logSnow()) {
+            AronaLayersGen.LOGGER.info("[Snow] ({},{}) cleared stranded vanilla snow at Y={}",
+                worldX, worldZ, above.getY());
+        }
+    }
+
+    /**
+     * Whether a block counts as the terrain surface for the purpose of anchoring a layer.
+     *
+     * <p>Ground scans used to test {@code hasMappingFor} instead, i.e. "does this block have a
+     * layer variant". That is a different question, and getting it wrong is expensive: packed_ice
+     * has no layer variant but is perfectly good terrain, so on frozen peaks the scan walked
+     * straight past it and anchored several blocks too low. Every one of those columns then read
+     * as the field disagreeing with the world and got no layer at all — 145 of 256 in a measured
+     * chunk, which is also what pushed the chunk over the skip threshold.
+     *
+     * <p>What actually disqualifies a block is being something the mod or a feature put on top of
+     * the terrain: our own layer blocks, and tree canopies, both of which block motion and would
+     * otherwise be mistaken for ground. Anything else solid is ground, mapped or not.
+     */
+    public static boolean isGroundBlock(BlockState state) {
+        if (!state.blocksMotion()) return false;
+        if (getMappingRegistry().isLayerBlock(state.getBlock())) return false;
+        return !state.is(BlockTags.LEAVES) && !state.is(BlockTags.LOGS);
+    }
+
     public static boolean hasMappingFor(Block surfaceBlock) {
         return getMappingRegistry().hasMapping(surfaceBlock);
     }
@@ -1297,7 +1342,18 @@ public class LayerPlacementHelper {
             return false;
         }
 
-        if (isSnowyBiome && LayerConfig.IMPROVE_SNOWY_BIOMES && !surfaceIsPowderSnow && !surfaceIsIceOrWater) {
+        // Vanilla decides snow per position, not per biome: SnowAndFreezeFeature tests the
+        // temperature at the column, so cold spots inside a warm biome — biome borders, higher
+        // ground — receive snow[1] while the biome itself reports snowy=false. Taking the biome
+        // as the only signal left those columns with useSnowLayers=false, so the snow-replacement
+        // branch never fired and vanilla's snow blocked placement as "not air": they kept the flat
+        // one-eighth dusting while everything around them got a fractional depth. Where vanilla has
+        // already put snow down, treat that as the decision and refine its depth.
+        boolean vanillaSnowAtPlacement =
+            chunk.getBlockState(new BlockPos(worldX, surfaceY, worldZ)).getBlock() == Blocks.SNOW;
+
+        if ((isSnowyBiome || vanillaSnowAtPlacement)
+                && LayerConfig.IMPROVE_SNOWY_BIOMES && !surfaceIsPowderSnow && !surfaceIsIceOrWater) {
             useSnowLayers = true;
         } else if (surfaceIsIceOrWater || surfaceIsPowderSnow) {
             // Override any caller-supplied useSnowLayers=true: these surfaces need the CR
@@ -1339,13 +1395,20 @@ public class LayerPlacementHelper {
             }
         }
 
-        if (useSnowLayers && surfaceBlock == Blocks.SNOW_BLOCK) {
-            setBlockStateSafe(chunk, surfacePos, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 8));
-            if (LayerConfig.logSnow()) {
-                AronaLayersGen.LOGGER.info("[Snow] Converted snow_block to snow_layers(8) at {}", surfacePos);
-            }
-            return true;
-        }
+        // A snow_block surface is treated as ordinary ground and layered on top of, not converted.
+        //
+        // This used to rewrite it as snow[8] and return, discarding the computed count. Since
+        // snow[8] and snow_block are both full height that changed nothing visible, so the four
+        // biomes whose surface rules place snow_block — jagged_peaks, frozen_peaks, snowy_slopes
+        // and grove — never received a depth gradient at all. It also caused the floating dusting:
+        // snow layers do not block motion while snow_block does, so demoting the surface left
+        // vanilla's snow[1] hanging a block above nothing.
+        //
+        // Leaving the snow_block alone fixes both. The layer position is exactly where vanilla put
+        // its dusting (snow_block blocks motion, so the heightmap points one block higher), so the
+        // ordinary placement path overwrites it with the real count instead of stranding it. It is
+        // also stable across the two injection passes: the snow_block keeps blocking motion, so the
+        // second pass resolves the same surface and rewrites the same value.
 
         // A tree canopy satisfies OCEAN_FLOOR's "blocks motion" predicate, so on a forested
         // column the heightmap top is leaves and the real ground is several blocks below.
@@ -1590,8 +1653,15 @@ public class LayerPlacementHelper {
                 boolean seagrassAtSurface = false;
                 BlockState savedTallUpperState = null;
                 if (!existingState.isAir() && !underwater && !isPowderSnow) {
+                    // A snow layer already here is vanilla's, not ours: SnowAndFreezeFeature drops
+                    // snow[1] on every exposed snowy column during the feature step, which lands on
+                    // exactly the position this layer wants. Without this it counted as "not air"
+                    // and the column was skipped, so snowy biomes kept vanilla's flat one-eighth
+                    // dusting and never received a fractional depth at all. Overwriting is safe:
+                    // thick vanilla snow is a snow_block, handled earlier and separately.
                     boolean isSnowBlockReplacement = useSnowLayers
-                        && existingState.getBlock() == Blocks.SNOW_BLOCK;
+                        && (existingState.getBlock() == Blocks.SNOW_BLOCK
+                         || existingState.getBlock() == Blocks.SNOW);
 
                     boolean isSeagrass = existingState.getBlock() == Blocks.SEAGRASS
                         || existingState.getBlock() == Blocks.TALL_SEAGRASS;
@@ -1664,6 +1734,21 @@ public class LayerPlacementHelper {
 
                 BlockState layerState = layerBlock.defaultBlockState();
                 layerState = applyLayerCount(layerState, layerBlock, layerCount);
+
+                // Same stranding as the snow_block conversion: if vanilla's dusting was resting on
+                // whatever used to block motion here, replacing this position leaves it hanging.
+                if (layerBlock == Blocks.SNOW) {
+                    clearStrandedSnowAbove(chunk, abovePos, worldX, worldZ);
+                }
+
+                // Every snow write, with the position and what it replaced. Two entries for one
+                // column mean something is placing twice, which no amount of reading the
+                // heightmaps afterwards can distinguish from a single write.
+                if (LayerConfig.logSnow() && layerBlock == Blocks.SNOW) {
+                    AronaLayersGen.LOGGER.info("[Snow] place ({},{}) Y={} layers={} over {} (was {})",
+                        worldX, worldZ, abovePos.getY(), layerCount,
+                        Compat.blockId(surfaceBlock), Compat.blockId(existingState.getBlock()));
+                }
 
                 // Seagrass replacement (CR or VP): waterlog the layer whenever seagrass was here
                 Block seagrassCheck = replacedPlantState != null ? replacedPlantState.getBlock() : replacedPlant;
@@ -1850,17 +1935,44 @@ public class LayerPlacementHelper {
     }
 
     private static void setBlockStateSafe(ChunkAccess chunk, BlockPos pos, BlockState state) {
-        if (chunk instanceof LevelChunk) {
+        if (chunk instanceof LevelChunk levelChunk) {
             int y = pos.getY();
             int sectionIdx = chunk.getSectionIndex(y);
             if (sectionIdx < 0 || sectionIdx >= chunk.getSectionsCount()) return;
             int lx = pos.getX() & 15, lz = pos.getZ() & 15;
+            BlockState previous = chunk.getSection(sectionIdx).getBlockState(lx, y & 15, lz);
             chunk.getSection(sectionIdx).setBlockState(lx, y & 15, lz, state);
             for (Map.Entry<Heightmap.Types, Heightmap> entry : chunk.getHeightmaps()) {
                 entry.getValue().update(lx, y, lz, state);
             }
+            notifyLightEngine(levelChunk, pos, previous, state);
         } else {
             Compat.chunkSetBlockState(chunk, pos, state);
+        }
+    }
+
+    /**
+     * Tells the light engine a live chunk changed under it.
+     *
+     * <p>The branch above writes straight into the section and updates the heightmaps by hand,
+     * deliberately bypassing {@code LevelChunk.setBlockState} — that path runs the block's
+     * onBlockAdded with NOTIFY_ALL, which can cascade during chunk init. The cost is that it also
+     * bypasses the light notification that method would have issued, so on a live chunk every
+     * write leaves the light engine believing the old state is still there.
+     *
+     * <p>Removals are where that shows: taking a block out leaves the position at its previous
+     * value, dark enough to spawn mobs, and it stays that way until an unrelated block update
+     * forces a recheck — which is why placing and breaking a block next to it appears to fix it.
+     * During worldgen none of this applies, because the chunk is a ProtoChunk and lighting is
+     * computed from scratch afterwards.
+     */
+    private static void notifyLightEngine(LevelChunk chunk, BlockPos pos, BlockState previous, BlockState state) {
+        if (previous == state) return;
+        try {
+            chunk.getLevel().getLightEngine().checkBlock(pos);
+        } catch (Throwable t) {
+            // Never fail a placement over a lighting hint; the position simply keeps stale light.
+            AronaLayersGen.LOGGER.debug("[Light] Could not request relight at {}", pos, t);
         }
     }
 

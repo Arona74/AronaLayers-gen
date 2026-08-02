@@ -110,13 +110,13 @@ public class ChunkGeneratorFeaturesMixin {
                     if (!rtfSuccess && LayerConfig.LAYER_INJECTION) {
                         AronaLayersGen.LOGGER.warn("[GenerateFeatures] RTF tile miss at {},{} — falling back to vanilla injection",
                             Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
-                        VanillaLayerInjector.injectLayers(chunk, null);
+                        VanillaLayerInjector.injectLayers(chunk, RandomStateHolder.noiseConfigFor(serverWorld), (ChunkGenerator)(Object)this);
                     }
                 } else if (LayerConfig.LAYER_INJECTION) {
-                    VanillaLayerInjector.injectLayers(chunk, null);
+                    VanillaLayerInjector.injectLayers(chunk, RandomStateHolder.noiseConfigFor(serverWorld), (ChunkGenerator)(Object)this);
                 }
             } else if (LayerConfig.LAYER_INJECTION) {
-                VanillaLayerInjector.injectLayers(chunk, null);
+                VanillaLayerInjector.injectLayers(chunk, RandomStateHolder.noiseConfigFor(serverWorld), (ChunkGenerator)(Object)this);
             }
 
             if (LayerConfig.STRUCTURE_SKIP_ELEVATED) {

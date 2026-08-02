@@ -103,14 +103,14 @@ public class NoiseBasedChunkGeneratorMixin {
                         if (!rtfSuccess && LayerConfig.LAYER_INJECTION) {
                             AronaLayersGen.LOGGER.warn("[ChunkInit] RTF tile miss at {},{} (CARVERS mode) — falling back to vanilla injection",
                                 Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
-                            VanillaLayerInjector.injectLayers(chunk, null);
+                            VanillaLayerInjector.injectLayers(chunk, RandomStateHolder.noiseConfigFor(world), world.getChunkSource().getGenerator());
                         }
                     }
                 } else if (LayerConfig.LAYER_INJECTION) {
                     // RTF requested but not available: fall back to vanilla injection
                     if (LayerConfig.logChunkInit())
                         AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject START {},{}", Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
-                    VanillaLayerInjector.injectLayers(chunk, null);
+                    VanillaLayerInjector.injectLayers(chunk, RandomStateHolder.noiseConfigFor(world), world.getChunkSource().getGenerator());
                     if (LayerConfig.logChunkInit()) {
                         AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject DONE {},{} ms={}",
                             Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), (System.nanoTime() - stepStart) / 1_000_000L);
@@ -120,7 +120,7 @@ public class NoiseBasedChunkGeneratorMixin {
             } else if (LayerConfig.LAYER_INJECTION) {
                 if (LayerConfig.logChunkInit())
                     AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject START {},{}", Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
-                VanillaLayerInjector.injectLayers(chunk, null);
+                VanillaLayerInjector.injectLayers(chunk, RandomStateHolder.noiseConfigFor(world), world.getChunkSource().getGenerator());
                 if (LayerConfig.logChunkInit()) {
                     AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject DONE {},{} ms={}",
                         Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), (System.nanoTime() - stepStart) / 1_000_000L);

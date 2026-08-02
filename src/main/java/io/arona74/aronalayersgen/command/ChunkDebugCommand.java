@@ -5,8 +5,13 @@ import io.arona74.aronalayersgen.Compat;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import io.arona74.aronalayersgen.LayerConfig;
+import io.arona74.aronalayersgen.injection.FractionalSurfaceSampler;
 import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
+import io.arona74.aronalayersgen.injection.RandomStateHolder;
+import io.arona74.aronalayersgen.injection.VanillaCellHeightSampler;
+import io.arona74.aronalayersgen.injection.VanillaLayerInjector;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
@@ -29,6 +34,14 @@ import java.util.Map;
 /**
  * Debug command that analyses the current chunk and reports what the layer injector
  * sees: surface blocks, ground heights, edge detection, and expected layer counts.
+ *
+ * <p>The simulated counts mirror whichever injector path is actually live — fractional
+ * surface, noise router, or the slope heuristic — resolved with the same precedence
+ * {@code VanillaLayerInjector.injectLayers} uses, and calling into the same formulas
+ * rather than keeping private copies of them. This matters: simulating the slope
+ * heuristic while a density-function path is running turns every legitimate difference
+ * into an 'M' marker in the presence grid, which reads as a swarm of missing layers
+ * that do not exist.
  *
  * Usage (requires permission level 2):
  *   /algdebug
@@ -66,15 +79,64 @@ public class ChunkDebugCommand {
         // ---- compute ground heights (mirrors VanillaLayerInjector) ----
         int[][] groundHeights = computeGroundHeights(chunk, startX, startZ, bottomY);
 
+        // ---- surface elevations, chunk plus a one-column border ring (mirrors the injector) ----
+        // Filled below once the sampler exists; NaN where the field describes no surface.
+        float[][] elevations = new float[18][18];
+
+        // ---- resolve which injector path is actually live, and mirror that one ----
+        // Simulating the slope heuristic while the injector runs a density-function path
+        // makes every disagreement look like a missing layer, so the mode is resolved with
+        // the same precedence VanillaLayerInjector.injectLayers uses.
+        RandomState randomState = RandomStateHolder.noiseConfigFor(world);
+        boolean vanillaWorldgen = !RandomStateHolder.hasRTFRandomState();
+        boolean canUseRouter    = vanillaWorldgen && randomState != null;
+
+        boolean fractionalMode = canUseRouter && LayerConfig.FRACTIONAL_SURFACE_LAYER_INJECTION;
+        boolean routerMode     = canUseRouter && !fractionalMode && LayerConfig.VANILLA_NOISE_ROUTER_LAYER_INJECTION;
+
+        String simMode = fractionalMode ? "fractional-surface"
+                       : routerMode     ? "noise-router"
+                       :                  "slope";
+
+        FractionalSurfaceSampler fracSampler = fractionalMode
+                ? FractionalSurfaceSampler.create(randomState, world.getChunkSource().getGenerator(), bottomY)
+                : null;
+        VanillaCellHeightSampler cellSampler = (fractionalMode || routerMode)
+                ? new VanillaCellHeightSampler(randomState, RandomStateHolder.getWorldSeed())
+                : null;
+
+        int worldHeight = Compat.maxY(chunk) - bottomY;
+
+        if (fractionalMode) {
+            for (int i = 0; i < 18; i++) {
+                for (int j = 0; j < 18; j++) {
+                    int lx = i - 1, lz = j - 1;
+                    boolean inside = lx >= 0 && lx < 16 && lz >= 0 && lz < 16;
+                    int anchor = inside
+                            ? groundHeights[lx][lz] - 1
+                            : groundHeights[Math.min(15, Math.max(0, lx))][Math.min(15, Math.max(0, lz))] - 1 + 4;
+                    elevations[i][j] = fracSampler.surfaceElevation(startX + lx, startZ + lz, anchor, bottomY);
+                }
+            }
+        }
+
         // ---- per-column analysis ----
         char[][] topGrid      = new char[16][16];
         char[][] layerGrid    = new char[16][16];
+        char[][] fracGrid     = new char[16][16]; // tenths of a block, '-' = no crossing
         char[][] presenceGrid = new char[16][16]; // '#'=has layer, 'M'=sim>0 but missing, '.'=sim=0
         int[][]  layerCounts  = new int[16][16];
+        float[][] fractions   = new float[16][16];
         Map<String, Integer> topBlockCounts = new LinkedHashMap<>();
         int wouldPlace = 0;
         int existingLayers = 0;
         int missingLayers = 0;
+        int fallbackColumns = 0;
+        int mismatchColumns = 0;
+        int flatGradientColumns = 0;
+        int[] gradientHist = new int[FractionalSurfaceSampler.GRADIENT_BUCKETS.length + 1];
+        int overfullColumns = 0;
+        int[] fallbackRun = new int[FractionalSurfaceSampler.FIELD_RUN_PROBE + 1];
 
         for (int lx = 0; lx < 16; lx++) {
             for (int lz = 0; lz < 16; lz++) {
@@ -101,7 +163,59 @@ public class ChunkDebugCommand {
                 topGrid[lx][lz] = tc;
                 topBlockCounts.merge(tn, 1, Integer::sum);
 
-                int lc = calculateLayerCount(groundHeights, lx, lz, bottomY);
+                float fraction = FractionalSurfaceSampler.NO_CROSSING;
+                int lc;
+                if (fractionalMode) {
+                    gradientHist[fracSampler.gradientBucketOf(wx, wz, groundHeights[lx][lz] - 1)]++;
+                    // Anchor on the ground scan, not raw OCEAN_FLOOR. The injector samples
+                    // during generation when no layers exist yet, so its topSolidY is the real
+                    // terrain; by the time this command runs our own layer blocks sit on top and
+                    // count toward OCEAN_FLOOR, which would move the sample a block up and make
+                    // the command disagree with the run it is supposed to be explaining.
+                    // groundHeights already descends past blocks with no ground mapping.
+                    fraction = fracSampler.surfaceFraction(wx, wz, groundHeights[lx][lz] - 1, bottomY);
+                    float elev = elevations[lx + 1][lz + 1];
+                    boolean blockMismatch = !Float.isNaN(elev)
+                            && (int) Math.floor(elev) != groundHeights[lx][lz] - 1;
+                    if (blockMismatch) {
+                        // Field and world disagree about which block is the surface, so the
+                        // fraction describes the wrong block. Mirrors the injector.
+                        lc = 0;
+                        mismatchColumns++;
+                    } else if (fraction != FractionalSurfaceSampler.NO_CROSSING) {
+                        lc = FractionalSurfaceSampler.layersFromFraction(fraction);
+                    } else if (fracSampler.isGradientUnreliable(wx, wz, groundHeights[lx][lz] - 1)) {
+                        // Field disagrees with the world and is too flat to locate the surface.
+                        // Mirrors the injector.
+                        lc = 0;
+                        flatGradientColumns++;
+                    } else if (fracSampler.isOverfull(wx, wz, groundHeights[lx][lz] - 1)) {
+                        // Field overshoots the world's ground by one block: the block is full,
+                        // not carved. Mirrors the injector.
+                        lc = FractionalSurfaceSampler.fullBlockLayers();
+                        overfullColumns++;
+                    } else {
+                        fallbackRun[fracSampler.fieldSolidRunAbove(
+                                wx, wz, groundHeights[lx][lz] - 1, FractionalSurfaceSampler.FIELD_RUN_PROBE)]++;
+                        // Same per-column fallback the injector uses, full-height cap included,
+                        // so counts agree.
+                        lc = FractionalSurfaceSampler.capPlacedLayers(
+                                VanillaLayerInjector.calculateNoiseLayerCount(
+                                        cellSampler.getCellHeight(wx, wz, hmY, bottomY, worldHeight),
+                                        snowyColumn(chunk, lx, lz, wx, wz, hmY, bottomY)));
+                        fallbackColumns++;
+                    }
+                } else if (routerMode) {
+                    lc = VanillaLayerInjector.calculateNoiseLayerCount(
+                            cellSampler.getCellHeight(wx, wz, hmY, bottomY, worldHeight),
+                            snowyColumn(chunk, lx, lz, wx, wz, hmY, bottomY));
+                } else {
+                    lc = calculateLayerCount(groundHeights, lx, lz, bottomY);
+                }
+
+                fractions[lx][lz]   = fraction;
+                fracGrid[lx][lz]    = fraction == FractionalSurfaceSampler.NO_CROSSING
+                        ? '-' : (char)('0' + Math.min(9, (int)(fraction * 10.0f)));
                 layerCounts[lx][lz] = lc;
                 layerGrid[lx][lz]   = lc == 0 ? '_' : (char)('0' + Math.min(lc, 9));
                 if (lc > 0) wouldPlace++;
@@ -125,6 +239,36 @@ public class ChunkDebugCommand {
                         missingLayers++;
                     }
                 }
+            }
+        }
+
+        // The injector judges the whole chunk before placing anything: where the field disagrees
+        // with the placed world too often, it leaves vanilla terrain. Apply the same verdict here
+        // so the grids report the outcome rather than the per-column intent behind it.
+        boolean chunkSkipped = fractionalMode
+                && (mismatchColumns + overfullColumns + fallbackColumns) / 256.0
+                    > LayerConfig.FRACTIONAL_SURFACE_MAX_DISAGREEMENT;
+        if (chunkSkipped) {
+            for (int lx = 0; lx < 16; lx++) {
+                for (int lz = 0; lz < 16; lz++) {
+                    layerCounts[lx][lz] = 0;
+                    layerGrid[lx][lz] = '_';
+                    presenceGrid[lx][lz] = '.';
+                }
+            }
+            wouldPlace = 0;
+            missingLayers = 0;
+        }
+
+        // ---- rendered surface, and where it jumps ----
+        // The count grids describe intent; this is the height a player actually sees, so a
+        // tooth shows up here as a column standing above its neighbours no matter which part
+        // of the pipeline produced it. groundHeights is the ground block's top face, and the
+        // layer stacks on top of that.
+        float[][] renderedTop = new float[16][16];
+        for (int lx = 0; lx < 16; lx++) {
+            for (int lz = 0; lz < 16; lz++) {
+                renderedTop[lx][lz] = groundHeights[lx][lz] + layerCounts[lx][lz] / 8.0f;
             }
         }
 
@@ -158,7 +302,57 @@ public class ChunkDebugCommand {
                 + " extra_cleanup=" + LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP
                 + "(" + LayerConfig.STRUCTURE_SKIP_EXTRA_CLEANUP_DISTANCE + ")");
         send(source, "Biome: " + biomeName + " (snowy=" + isSnowyBiome + ")");
-        send(source, "Layers: existing=" + existingLayers + "  would-place(sim)=" + wouldPlace
+        send(source, "Sim path: " + simMode
+                + " (fractional=" + LayerConfig.FRACTIONAL_SURFACE_LAYER_INJECTION
+                + " reduce=" + LayerConfig.FRACTIONAL_SURFACE_REDUCE_LAYER_COUNT
+                + " exactInterp=" + LayerConfig.FRACTIONAL_SURFACE_EXACT_INTERPOLATION
+                + " router=" + LayerConfig.VANILLA_NOISE_ROUTER_LAYER_INJECTION
+                + " randomState=" + (randomState != null) + ")");
+        if (fractionalMode) {
+            send(source, "  density fallback columns=" + fallbackColumns + "/256"
+                    + (fallbackColumns > 128 ? "  !! majority fell back — density field disagrees with heightmap" : ""));
+            send(source, "  block-mismatch columns (field surface in a different block, left bare)=" + mismatchColumns + "/256");
+            send(source, "  density tree: " + fracSampler.describeMarkers());
+            StringBuilder gh2 = new StringBuilder("  gradient distribution: ");
+            for (int i = 0; i <= FractionalSurfaceSampler.GRADIENT_BUCKETS.length; i++) {
+                if (i > 0) gh2.append(' ');
+                gh2.append(i < FractionalSurfaceSampler.GRADIENT_BUCKETS.length
+                            ? "<" + FractionalSurfaceSampler.GRADIENT_BUCKETS[i]
+                            : ">=" + FractionalSurfaceSampler.GRADIENT_BUCKETS[FractionalSurfaceSampler.GRADIENT_BUCKETS.length - 1]);
+                gh2.append('=').append(gradientHist[i]);
+            }
+            send(source, gh2.toString());
+            int disagreeing = mismatchColumns + overfullColumns + fallbackColumns;
+            double rate = disagreeing / 256.0;
+            send(source, String.format("  field/world disagreement=%d/256 (%.0f%%)  threshold %.0f%% -> %s",
+                    disagreeing, rate * 100, LayerConfig.FRACTIONAL_SURFACE_MAX_DISAGREEMENT * 100,
+                    rate > LayerConfig.FRACTIONAL_SURFACE_MAX_DISAGREEMENT
+                            ? "CHUNK SKIPPED, vanilla terrain kept" : "chunk layered"));
+            send(source, "  flat-gradient columns (field too flat to locate surface, left to vanilla)="
+                    + flatGradientColumns + "/256  (threshold " + LayerConfig.FRACTIONAL_SURFACE_MIN_GRADIENT + ")");
+            send(source, "  overfull columns (field surface a block above ground, given full count)=" + overfullColumns + "/256");
+            send(source, "  fallback solid-run above ground (index=blocks, last=8+): "
+                    + java.util.Arrays.toString(fallbackRun));
+        }
+        if ((LayerConfig.FRACTIONAL_SURFACE_LAYER_INJECTION || LayerConfig.VANILLA_NOISE_ROUTER_LAYER_INJECTION)
+                && !canUseRouter) {
+            send(source, "  !! requested density path unavailable ("
+                    + (randomState == null ? "no RandomState captured" : "RTF worldgen active")
+                    + ") — injector uses slope, sim matches");
+        }
+        if (missingLayers > 0) {
+            // A missing column is one a placement guard rejected. The counters are cumulative
+            // across the generation pass rather than per-column, but they name which guard fired,
+            // which the grids alone cannot.
+            send(source, "  !! " + missingLayers + " column(s) want a layer but have none."
+                    + " Last injection pass skips: enclosed=" + LayerPlacementHelper.debugSkipEnclosed.get()
+                    + " notAir=" + LayerPlacementHelper.debugSkipNotAir.get()
+                    + " noMapping=" + LayerPlacementHelper.debugSkipNoMapping.get()
+                    + " structElev=" + LayerPlacementHelper.debugSkipStructureElevated.get()
+                    + " conservSurf=" + LayerPlacementHelper.debugSkipConservativeSurface.get());
+        }
+        send(source, "Layers: existing=" + existingLayers + (chunkSkipped ? " (stale, chunk predates the skip)" : "")
+                + "  would-place(sim)=" + wouldPlace
                 + "/256  missing=" + missingLayers
                 + (LayerConfig.RTF_LAYER_INJECTION ? " (RTF mode: sim!=actual)" : ""));
 
@@ -172,9 +366,22 @@ public class ChunkDebugCommand {
             send(source, row.toString());
         }
 
-        // layer count grid (vanilla sim)
+        // sub-block surface fraction grid (fractional mode only)
+        if (fractionalMode) {
+            send(source, "");
+            send(source, "Surface Fraction (tenths of a block, - = no crossing/fallback)");
+            send(source, "  Smooth gradients = density field tracking terrain. Blocks of '-' = features or carvers.");
+            send(source, "  " + colMarker);
+            for (int lz = 0; lz < 16; lz++) {
+                StringBuilder row = new StringBuilder(lz == plz ? ">>" : "  ");
+                for (int lx = 0; lx < 16; lx++) row.append(fracGrid[lx][lz]);
+                send(source, row.toString());
+            }
+        }
+
+        // layer count grid (sim)
         send(source, "");
-        send(source, "Layer Count (vanilla sim)  (_ = 0)" + (LayerConfig.RTF_LAYER_INJECTION ? " [RTF actual count may differ]" : ""));
+        send(source, "Layer Count (sim: " + simMode + ")  (_ = 0)" + (LayerConfig.RTF_LAYER_INJECTION ? " [RTF actual count may differ]" : ""));
         send(source, "  " + colMarker);
         for (int lz = 0; lz < 16; lz++) {
             StringBuilder row = new StringBuilder(lz == plz ? ">>" : "  ");
@@ -191,6 +398,56 @@ public class ChunkDebugCommand {
             StringBuilder row = new StringBuilder(lz == plz ? ">>" : "  ");
             for (int lx = 0; lx < 16; lx++) row.append(presenceGrid[lx][lz]);
             send(source, row.toString());
+        }
+
+        // rendered-surface discontinuities: the teeth, measured rather than inferred
+        if (fractionalMode) {
+            send(source, "");
+            send(source, "Standing columns (rendered top vs lowest 4-neighbour, worst 8, threshold 0.5)");
+
+            // Reported columns are excluded as sources only; their heights stay intact so
+            // later ranks still compare against the real surface.
+            boolean[][] reportedCol = new boolean[16][16];
+            int reported = 0;
+            for (int rank = 0; rank < 8; rank++) {
+                float bestDrop = 0.5f;
+                int bx = -1, bz = -1, nx = -1, nz = -1;
+                for (int lx = 0; lx < 16; lx++) {
+                    for (int lz = 0; lz < 16; lz++) {
+                        if (reportedCol[lx][lz]) continue;
+                        for (int[] off : new int[][]{{-1,0},{1,0},{0,-1},{0,1}}) {
+                            int ax = lx + off[0], az = lz + off[1];
+                            if (ax < 0 || ax > 15 || az < 0 || az > 15) continue;
+                            float drop = renderedTop[lx][lz] - renderedTop[ax][az];
+                            if (drop > bestDrop) { bestDrop = drop; bx = lx; bz = lz; nx = ax; nz = az; }
+                        }
+                    }
+                }
+                if (bx < 0) break;
+                float f = fractions[bx][bz];
+                boolean noCrossing = (f == FractionalSurfaceSampler.NO_CROSSING);
+                send(source, String.format("  (%2d,%2d) top=%.3f stands %.3f over (%2d,%2d) top=%.3f | frac=%s raw=%s placed=%d groundTop=%d",
+                        bx, bz, renderedTop[bx][bz], bestDrop, nx, nz, renderedTop[nx][nz],
+                        noCrossing ? "none" : String.format("%.3f", f),
+                        noCrossing ? "-" : String.valueOf(FractionalSurfaceSampler.rawLayers(f)),
+                        layerCounts[bx][bz], groundHeights[bx][bz]));
+                // Elevation beside the block it was measured in: a crossing block that differs
+                // from groundTop-1 is the mismatch that produced standing columns before.
+                float e  = elevations[bx + 1][bz + 1];
+                float en = elevations[nx + 1][nz + 1];
+                if (Float.isNaN(e)) {
+                    send(source, String.format("        elev=none (no crossing)  neighbourElev=%s",
+                            Float.isNaN(en) ? "none" : String.format("%.3f", en)));
+                } else {
+                    send(source, String.format("        elev=%.3f (block %d, layer sits on %d%s)  neighbourElev=%s",
+                            e, (int) Math.floor(e), groundHeights[bx][bz] - 1,
+                            (int) Math.floor(e) == groundHeights[bx][bz] - 1 ? "" : " MISMATCH",
+                            Float.isNaN(en) ? "none" : String.format("%.3f", en)));
+                }
+                reportedCol[bx][bz] = true;
+                reported++;
+            }
+            if (reported == 0) send(source, "  none above 0.5 block — rendered surface is smooth");
         }
 
         // block type summary
@@ -213,7 +470,12 @@ public class ChunkDebugCommand {
         boolean surfIceOrWater = topB == Blocks.ICE || topB == Blocks.FROSTED_ICE || topB == Blocks.WATER;
         boolean surfPowderSnow = topB == Blocks.POWDER_SNOW
                 || (wsY > bottomY && chunk.getBlockState(new BlockPos(playerPos.getX(), wsY - 1, playerPos.getZ())).getBlock() == Blocks.POWDER_SNOW);
-        boolean wouldUseSnow  = isSnowyBiome && LayerConfig.IMPROVE_SNOWY_BIOMES && !surfPowderSnow && !surfIceOrWater;
+        // Mirrors LayerPlacementHelper: vanilla places snow per position, so its own snow at the
+        // placement spot counts as much as a snowy biome does.
+        boolean vanillaSnowAtPlacement = chunk.getBlockState(
+                new BlockPos(playerPos.getX(), hmY, playerPos.getZ())).getBlock() == Blocks.SNOW;
+        boolean wouldUseSnow  = (isSnowyBiome || vanillaSnowAtPlacement)
+                && LayerConfig.IMPROVE_SNOWY_BIOMES && !surfPowderSnow && !surfIceOrWater;
 
         send(source, "");
         send(source, "--- Your Column (lx=" + plx + " lz=" + plz + ") ---");
@@ -223,8 +485,78 @@ public class ChunkDebugCommand {
         send(source, "  aboveGround (layer placement pos): " + Compat.blockId(aboveB) + " @Y=" + gh);
         send(source, "  groundHeight=" + gh + "  simLayerCount=" + lc
                 + (LayerConfig.RTF_LAYER_INJECTION ? " (RTF actual count may differ)" : ""));
+
+        if (fractionalMode) {
+            float frac = fractions[plx][plz];
+            if (frac != FractionalSurfaceSampler.NO_CROSSING) {
+                int topSolidY = gh - 1;   // ground scan, so already-placed layers don't shift it
+                // Layers sit on top of the solid block, so the rendered surface is the true
+                // surface plus a constant 1-block offset — that offset is what keeps the
+                // count continuous across a block step instead of stepping with it.
+                send(source, String.format("  density fraction=%.4f  trueSurfaceY=%.4f  renderedSurfaceY=%.4f",
+                        frac, topSolidY + frac, topSolidY + 1 + lc / 8.0f));
+
+                int crossingBlock = (int) Math.floor(elevations[plx + 1][plz + 1]);
+                if (crossingBlock != gh - 1) {
+                    send(source, "  !! field surface sits in block " + crossingBlock
+                            + " but the layer would sit on block " + (gh - 1)
+                            + " -> fraction measures the wrong block, column left bare");
+                }
+                send(source, String.format("  vertical gradient=%.4f per block (threshold %.4f)%s",
+                        fracSampler.verticalGradientAt(playerPos.getX(), playerPos.getZ(), gh - 1),
+                        LayerConfig.FRACTIONAL_SURFACE_MIN_GRADIENT,
+                        fracSampler.isGradientUnreliable(playerPos.getX(), playerPos.getZ(), gh - 1)
+                                ? "  !! below threshold" : ""));
+                int raw = FractionalSurfaceSampler.rawLayers(frac);
+
+                send(source, "  rawCount=" + raw + " -> placed=" + lc
+                        + (LayerConfig.FRACTIONAL_SURFACE_REDUCE_LAYER_COUNT
+                            ? "  (reduced by one)" : "  (unreduced)"));
+                send(source, "  neighbour groundHeights: N=" + neighbourHeight(groundHeights, plx, plz, 0, -1)
+                        + " S=" + neighbourHeight(groundHeights, plx, plz, 0, 1)
+                        + " W=" + neighbourHeight(groundHeights, plx, plz, -1, 0)
+                        + " E=" + neighbourHeight(groundHeights, plx, plz, 1, 0)
+                        + "  (center=" + gh + ", -1 = outside chunk, context only)");
+            } else {
+                boolean overfull = fracSampler.isOverfull(playerPos.getX(), playerPos.getZ(), gh - 1);
+                if (overfull) {
+                    send(source, String.format("  field density: ground(%d)=%+.4f  above(%d)=%+.4f  above2(%d)=%+.4f",
+                            gh - 1, fracSampler.fieldDensityAt(playerPos.getX(), gh - 1, playerPos.getZ()),
+                            gh,     fracSampler.fieldDensityAt(playerPos.getX(), gh,     playerPos.getZ()),
+                            gh + 1, fracSampler.fieldDensityAt(playerPos.getX(), gh + 1, playerPos.getZ())));
+                    send(source, String.format("  vertical gradient=%.4f per block (threshold %.4f)",
+                            fracSampler.verticalGradientAt(playerPos.getX(), playerPos.getZ(), gh - 1),
+                            LayerConfig.FRACTIONAL_SURFACE_MIN_GRADIENT));
+                    send(source, "  density fraction: NO_CROSSING, field overfull by one block");
+                    send(source, "     the field calls block " + gh + " solid while the world has no terrain there,");
+                    send(source, "     so block " + (gh - 1) + " is completely full -> full count " + lc);
+                } else {
+                    int run = fracSampler.fieldSolidRunAbove(playerPos.getX(), playerPos.getZ(),
+                            gh - 1, FractionalSurfaceSampler.FIELD_RUN_PROBE);
+                    send(source, "  density fraction: NO_CROSSING -> fell back to noise-router count");
+                    send(source, "     field stays solid " + run + " block(s) above ground"
+                            + (run >= FractionalSurfaceSampler.FIELD_RUN_PROBE ? "+ (deep: carver or structure)"
+                                                                           : " (shallow: field/world disagreement)"));
+                }
+            }
+        }
+        // Exact block stack around the surface. The heightmaps summarise the column and can
+        // disagree with what is actually there; this shows the states themselves so a stacked or
+        // duplicated layer is visible rather than inferred.
+        send(source, "  block stack:");
+        for (int y = gh + 3; y >= gh - 2; y--) {
+            if (y <= bottomY) continue;
+            BlockState st = chunk.getBlockState(new BlockPos(playerPos.getX(), y, playerPos.getZ()));
+            String detail = "";
+            if (st.hasProperty(BlockStateProperties.LAYERS)) {
+                detail = " layers=" + st.getValue(BlockStateProperties.LAYERS);
+            }
+            send(source, String.format("    Y=%d  %s%s%s", y, Compat.blockId(st.getBlock()), detail,
+                    st.blocksMotion() ? "  [blocksMotion]" : ""));
+        }
         send(source, "  surfIceOrWater=" + surfIceOrWater + "  surfPowderSnow=" + surfPowderSnow);
-        send(source, "  isSnowyBiome=" + isSnowyBiome + "  wouldUseSnowLayers=" + wouldUseSnow);
+        send(source, "  isSnowyBiome=" + isSnowyBiome + "  vanillaSnowAtPlacement=" + vanillaSnowAtPlacement
+                + "  wouldUseSnowLayers=" + wouldUseSnow);
 
         // mapped layer block info — most useful for diagnosing WATERLOGGED failures
         boolean aboveIsWater = aboveB == Blocks.WATER || aboveB == Blocks.ICE || aboveB == Blocks.FROSTED_ICE;
@@ -345,6 +677,25 @@ public class ChunkDebugCommand {
         return sb.toString();
     }
 
+    /**
+     * The useSnowLayers flag as VanillaLayerInjector computes it, needed because the
+     * noise-router formula skips its layer-count reduction on snowy columns.
+     */
+    private static boolean snowyColumn(LevelChunk chunk, int lx, int lz, int wx, int wz, int floorY, int bottomY) {
+        if (floorY <= bottomY) return false;
+        Holder<Biome> biome = chunk.getNoiseBiome(lx >> 2, floorY >> 2, lz >> 2);
+        boolean snowy = Compat.coldEnoughToSnow(biome.value(), new BlockPos(wx, floorY, wz));
+        return snowy && LayerConfig.IMPROVE_SNOWY_BIOMES;
+    }
+
+    /** Neighbour ground height, or -1 when the offset falls outside this chunk. */
+    private static int neighbourHeight(int[][] heights, int lx, int lz, int dx, int dz) {
+        int nx = lx + dx;
+        int nz = lz + dz;
+        if (nx < 0 || nx > 15 || nz < 0 || nz > 15) return -1;
+        return heights[nx][nz];
+    }
+
     private static int[][] computeGroundHeights(LevelChunk chunk, int startX, int startZ, int bottomY) {
         int[][] heights = new int[16][16];
         for (int lx = 0; lx < 16; lx++) {
@@ -364,14 +715,14 @@ public class ChunkDebugCommand {
                 }
 
                 BlockState surfState = chunk.getBlockState(new BlockPos(wx, hmY - 1, wz));
-                if (LayerPlacementHelper.hasMappingFor(surfState.getBlock())) {
+                if (LayerPlacementHelper.isGroundBlock(surfState)) {
                     heights[lx][lz] = hmY;
                 } else {
                     boolean found = false;
                     for (int dy = 1; dy <= 30; dy++) {
                         int cy = hmY - 1 - dy;
                         if (cy <= bottomY) break;
-                        if (LayerPlacementHelper.hasMappingFor(chunk.getBlockState(new BlockPos(wx, cy, wz)).getBlock())) {
+                        if (LayerPlacementHelper.isGroundBlock(chunk.getBlockState(new BlockPos(wx, cy, wz)))) {
                             heights[lx][lz] = cy + 1;
                             found = true;
                             break;

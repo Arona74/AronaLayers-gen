@@ -5,6 +5,9 @@ build/
 out/
 classes/
 
+# stray compiled classes (yarn-mapped extraction artifacts have landed at the repo root before)
+*.class
+
 # eclipse
 
 *.launch

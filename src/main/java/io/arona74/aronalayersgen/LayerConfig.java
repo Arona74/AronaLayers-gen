@@ -71,6 +71,94 @@ public class LayerConfig {
     public static boolean VANILLA_NOISE_ROUTER_LAYER_INJECTION = false;
 
     /**
+     * Derive layer counts from the sub-block surface elevation recovered out of vanilla's
+     * density field, instead of from a synthetic height.
+     *
+     * <p>Vanilla decides terrain from a continuous field and keeps a block wherever that
+     * field is positive, so the blocky surface is the real surface rounded up. Reading the
+     * discarded fraction back gives eight times the vertical resolution the block grid can
+     * represent, and spending it on layers replaces the 1-block staircase with a smooth
+     * surface that tracks the true isosurface.
+     *
+     * <p>Unlike {@link #VANILLA_NOISE_ROUTER_LAYER_INJECTION}, whose height only correlates
+     * with the landscape, this follows it exactly, producing orderly contour bands that track
+     * real slope. Counts run 0-7: the raw count is reduced by one, which keeps the top of the
+     * range off a full block and leaves about 19% of columns bare.
+     * Takes precedence when both are set. Requires layer_injection=true.
+     * Has no effect when RTF or Tellus is active. Requires game restart.
+     */
+    public static boolean FRACTIONAL_SURFACE_LAYER_INJECTION = false;
+
+    /**
+     * Reduce the fractional-surface layer count by one, as the noise-router and RTF paths do.
+     *
+     * <p>True keeps the established look: the shallowest columns stay bare — {@code t < 3/16},
+     * about 19% of them — and the rendered surface sits a constant ~0.875 above the true one.
+     * False layers every column with any fill at all, giving thicker layers and a clean 1.0
+     * offset, at the cost of almost no bare ground.
+     *
+     * <p>Independent of the cap that stops a layer filling its whole block, so turning this off
+     * does not reintroduce block-height layers. Only affects the fractional-surface backend.
+     */
+    public static boolean FRACTIONAL_SURFACE_REDUCE_LAYER_COUNT = true;
+
+    /**
+     * Smallest vertical density change per block at which the surface position is trusted.
+     *
+     * <p>The reconstructed field carries a small absolute error, around 0.02. Where density falls
+     * steeply through the surface — beaches, plains, ordinary slopes — that error moves the
+     * crossing by a hundredth of a block and the fractions are exact. On high peaks the field
+     * flattens out near the top of the terrain envelope: a measured jagged-peaks column changed by
+     * only 0.019 per block, so the same error moved the crossing a whole block and 251 of 256
+     * columns were reported as full. Below this threshold the column is left to vanilla rather
+     * than given a fabricated depth.
+     *
+     * <p>Only consulted where the field and the placed world already disagree, so raising or
+     * lowering it cannot affect terrain that produces a valid crossing. Only affects the
+     * fractional-surface backend.
+     */
+    public static double FRACTIONAL_SURFACE_MIN_GRADIENT = 0.0;
+
+    /**
+     * Fraction of a chunk's columns that may disagree with the density field before the whole
+     * chunk is left to vanilla. Set to 1.0 to never skip.
+     *
+     * <p>Measured rates: a beach chunk 0%, plains chunks between 23% and 42%, a jagged-peaks
+     * chunk 61%. So this separates peaks from ordinary ground by roughly eight points, not by the
+     * wide margin the first beach-versus-peak comparison suggested — an earlier default of 0.25
+     * cut straight through normal plains and stripped their layers.
+     *
+     * <p>0.5 is therefore a judgement call, not a boundary the data draws for us: it clears every
+     * plains chunk measured and still skips peaks, but a plains chunk above 50% would lose its
+     * layers. Raise toward 1.0 if layers go missing on ordinary terrain; the cost is that peaks
+     * get a uniform full-thickness slab instead of vanilla ground.
+     *
+     * <p>Nothing here models the underlying cause, which remains unidentified: reproducing
+     * vanilla's marker interpolation changed the peak numbers not at all, its quart-resolution
+     * caching is a no-op at the sampled corners, and vertical gradient runs the wrong way
+     * (beaches sit lower than peaks). Only affects the fractional-surface backend.
+     */
+    public static double FRACTIONAL_SURFACE_MAX_DISAGREEMENT = 0.5;
+
+    /**
+     * Interpolate each of the router's Interpolated markers separately, as NoiseChunk does,
+     * instead of interpolating the whole density tree as one unit.
+     *
+     * <p>A measured world carries five Interpolated markers: vanilla interpolates five separate
+     * sub-expressions and evaluates everything combining them per block. Where those combining
+     * operations are nonlinear — clamps, squeeze, multiplication, the slides —
+     * {@code interp(f(a,b))} is not {@code f(interp(a), interp(b))}, and whole-tree interpolation
+     * placed the surface one to three blocks above the world on jagged peaks while agreeing
+     * closely on gentle terrain.
+     *
+     * <p>Costs a tree rebuild per chunk and eight sub-expression evaluations per query, memoised
+     * per chunk. Off by default until it has been measured against real terrain; when it works,
+     * the overfull, block-mismatch and minimum-gradient guards all exist only to paper over the
+     * error it removes. Only affects the fractional-surface backend.
+     */
+    public static boolean FRACTIONAL_SURFACE_EXACT_INTERPOLATION = false;
+
+    /**
      * When to inject layers during world generation.
      * CARVERS: Inject after carvers but before features/structures.
      * POST_FEATURES: Inject after all features including structures.
@@ -422,6 +510,11 @@ public class LayerConfig {
         if (config.has("tellus_layer_injection")) TELLUS_LAYER_INJECTION = config.get("tellus_layer_injection").getAsBoolean();
         if (config.has("tellus_reduce_layer_count")) TELLUS_REDUCE_LAYER_COUNT = config.get("tellus_reduce_layer_count").getAsBoolean();
         if (config.has("vanilla_noise_router_layer_injection")) VANILLA_NOISE_ROUTER_LAYER_INJECTION = config.get("vanilla_noise_router_layer_injection").getAsBoolean();
+        if (config.has("fractional_surface_layer_injection")) FRACTIONAL_SURFACE_LAYER_INJECTION = config.get("fractional_surface_layer_injection").getAsBoolean();
+        if (config.has("fractional_surface_reduce_layer_count")) FRACTIONAL_SURFACE_REDUCE_LAYER_COUNT = config.get("fractional_surface_reduce_layer_count").getAsBoolean();
+        if (config.has("fractional_surface_min_gradient")) FRACTIONAL_SURFACE_MIN_GRADIENT = config.get("fractional_surface_min_gradient").getAsDouble();
+        if (config.has("fractional_surface_max_disagreement")) FRACTIONAL_SURFACE_MAX_DISAGREEMENT = config.get("fractional_surface_max_disagreement").getAsDouble();
+        if (config.has("fractional_surface_exact_interpolation")) FRACTIONAL_SURFACE_EXACT_INTERPOLATION = config.get("fractional_surface_exact_interpolation").getAsBoolean();
         if (config.has("injection_mode")) {
             try {
                 INJECTION_MODE = InjectionMode.valueOf(config.get("injection_mode").getAsString().toUpperCase());
@@ -534,6 +627,11 @@ public class LayerConfig {
             config.addProperty("tellus_layer_injection", TELLUS_LAYER_INJECTION);
             config.addProperty("tellus_reduce_layer_count", TELLUS_REDUCE_LAYER_COUNT);
             config.addProperty("vanilla_noise_router_layer_injection", VANILLA_NOISE_ROUTER_LAYER_INJECTION);
+            config.addProperty("fractional_surface_layer_injection", FRACTIONAL_SURFACE_LAYER_INJECTION);
+            config.addProperty("fractional_surface_reduce_layer_count", FRACTIONAL_SURFACE_REDUCE_LAYER_COUNT);
+            config.addProperty("fractional_surface_min_gradient", FRACTIONAL_SURFACE_MIN_GRADIENT);
+            config.addProperty("fractional_surface_max_disagreement", FRACTIONAL_SURFACE_MAX_DISAGREEMENT);
+            config.addProperty("fractional_surface_exact_interpolation", FRACTIONAL_SURFACE_EXACT_INTERPOLATION);
             config.addProperty("injection_mode", INJECTION_MODE.name());
             config.addProperty("skip_snowy_biomes", SKIP_SNOWY_BIOMES);
             config.addProperty("debug_logging", DEBUG_LOGGING);
