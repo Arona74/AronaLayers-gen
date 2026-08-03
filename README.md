@@ -12,9 +12,9 @@ The mod places sub-block-height layers on terrain so slopes read as smooth gradi
 
 | Source | Notes |
 |--------|-------|
-| **ReTerraForged** | Recommended on 1.20.1 / 1.21.1. Uses RTF's cell height data for accurate gradient-based depth |
+| **Vanilla** | No extra mod needed. Reads the sub-block surface height back out of vanilla's own density field — see below |
+| **ReTerraForged** | Uses RTF's cell height data for gradient-based depth |
 | **Tellus** | Real-world elevation. Uses Tellus's Digital Elevation Model — the sub-block fraction of each column's continuous elevation drives the layer count |
-| **Vanilla** | No extra mod. Less accurate; see the note below |
 
 **Layer block providers** (pick one):
 
@@ -23,13 +23,21 @@ The mod places sub-block-height layers on terrain so slopes read as smooth gradi
 | **Conquest Reforged** | Layer blocks, plants, rocks, foliage and NBT trees |
 | **VanillaLayerPlus** | Layer blocks only |
 
-Vanilla terrain generation with layers is CURSED, please don't use it, the results are bad, use RTF or Tellus!
+### Vanilla worldgen is fully supported
+
+Vanilla decides terrain from a continuous density field and keeps a block wherever that field is positive, so the blocky surface you see is the true surface rounded up. The mod now reconstructs that field and reads the discarded fraction back, which gives eight times the vertical resolution the block grid can represent. Layer depth is *measured*, not inferred — the same quality of signal RTF and Tellus provide, taken from vanilla itself.
+
+This works with **any worldgen that runs through vanilla's density-function pipeline**, which includes datapack-driven and noise-settings mods such as **Terralith, Tectonic, Lithosphere** and similar. Nothing is hardcoded to vanilla's own noise settings: the interpolation lattice and world height are read from whatever generator is active, so custom cell sizes and world heights are handled.
+
+Mods that replace the pipeline outright rather than extending it — ReTerraForged is the notable one — are served by their own backend instead, and the mod switches automatically.
+
+Columns where a carver cut into the surface after the noise stage (cave mouths, ravine floors, overhang shadows) have no recoverable sub-block height, and are left with vanilla's own surface rather than a fabricated depth.
 
 ## Features
 
+- **Vanilla injection** — sub-block surface height recovered from vanilla's density field, giving measured layer depth with no terrain mod required. Works with Terralith, Tectonic, Lithosphere and other density-function worldgen
 - **RTF-based layer injection** — uses ReTerraForged's cell height data for realistic, gradient-based layer depth
 - **Tellus-based layer injection** — layers driven by real-world elevation data, with land-cover-aware water and snow handling
-- **Vanilla injection** — heightmap + noise-router fallback for worlds with no terrain mod (experimental)
 - **Dual backend** — Conquest Reforged or VanillaLayerPlus
 - **Plant handling** — converts vanilla plants to CR equivalents, or shifts them up for VLP
 - **Underwater layers** — waterlogged layer blocks on ocean and river floors
@@ -53,7 +61,7 @@ Plus a layer block provider:
 - [Conquest Reforged](https://www.curseforge.com/minecraft/mc-mods/conquest-reforged) *(recommended — required for plants, rocks, foliage and NBT trees)*
 - VanillaLayerPlus *(layer blocks only)*
 
-And, STRONGLY RECOMMENDED, a terrain source:
+A terrain source is **optional** — vanilla worldgen, including worldgen mods built on it, is fully supported on its own. Install one only if you want that mod's terrain:
 
 - [ReTerraForged](https://github.com/racoonman2/ReTerraForged) — you can use this [working fork](https://github.com/UF4OVER/ReTerraForged/releases/tag/0.0.6-fix2)
 - or [Tellus](https://modrinth.com/mod/tellus) for real-world terrain
@@ -64,7 +72,7 @@ And, STRONGLY RECOMMENDED, a terrain source:
 
 1. Install Fabric Loader and Fabric API for your Minecraft version (see the table above)
 2. Install Conquest Reforged **or** VanillaLayerPlus
-3. Install ReTerraForged or Tellus *(recommended)*
+3. Optionally install ReTerraForged or Tellus — vanilla worldgen works without either
 4. Place the mod JAR for your Minecraft version in your mods folder
 5. Launch once to generate config files in `config/aronalayersgen/`
 
@@ -83,7 +91,7 @@ config/aronalayersgen/nbt_trees/
 
 All settings live in `config/aronalayersgen/layer_config.json`. The defaults below are what ships with the mod.
 
-> **Default setup:** preconfigured for **RTF or Tellus + Conquest Reforged** with most features enabled. If you are using neither RTF nor Tellus, set `rtf_layer_injection: false` and `tellus_layer_injection: false`, and rely on `layer_injection` instead.
+> **Default setup:** most features enabled, and safe as shipped whichever terrain source you use. Each injection path only activates when its terrain mod is actually present, so you do not need to turn anything off — a vanilla or Terralith world falls through to `layer_injection` on its own.
 
 ---
 
@@ -91,15 +99,27 @@ All settings live in `config/aronalayersgen/layer_config.json`. The defaults bel
 
 | Key | Default | Description |
 |-----|---------|-------------|
+| `layer_injection` | `true` | Vanilla worldgen layer generation, from the density field. Also covers Terralith, Tectonic, Lithosphere and other density-function worldgen |
 | `rtf_layer_injection` | `true` | RTF-based layer generation — requires ReTerraForged |
 | `tellus_layer_injection` | `true` | Tellus-based layer generation from real-world elevation data — requires Tellus |
-| `layer_injection` | `true` | Vanilla heightmap-based layer generation |
-| `vanilla_noise_router_layer_injection` | `false` | Improve vanilla mode using NoiseRouter density functions instead of the slope heuristic. No effect when RTF is active |
 | `injection_mode` | `POST_FEATURES` | `CARVERS` (before features) or `POST_FEATURES` (after structures, cleaner result) |
 
 Each injection path only runs when its terrain mod is present, so leaving all three enabled is safe.
 
-> **Vanilla mode note:** `layer_injection` is functional but less accurate than RTF or Tellus injection — terrain heightmap heuristics produce inconsistent layer depth on complex terrain. Enabling `vanilla_noise_router_layer_injection` closes most of this gap.
+---
+
+### Vanilla surface reconstruction
+
+These tune the vanilla backend only, and have no effect under RTF or Tellus. The defaults are good; they are documented because the debug output refers to them.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `fractional_surface_reduce_layer_count` | `false` | Reduce each layer count by one, as the RTF path does. `true` keeps the shallowest ~19% of columns bare and sits the surface a constant ~0.875 above the true one; `false` layers every column with any fill at all |
+| `fractional_surface_max_disagreement` | `1.0` | Fraction of a chunk's columns that may disagree with the density field before the whole chunk is left as vanilla terrain. `1.0` never skips |
+| `fractional_surface_min_gradient` | `0.0` | Smallest vertical density change per block at which the surface position is trusted. `0.0` disables the check. Only consulted where the field and the world already disagree |
+| `fractional_surface_exact_interpolation` | `false` | Interpolate each of the noise router's markers separately, the way vanilla's `NoiseChunk` does, instead of interpolating the density tree as one unit. Costs a tree rebuild per chunk |
+
+> `fractional_surface_min_gradient` is easy to set badly. Measured snowy-slopes chunks put **all** 256 columns under `0.01` while still producing clean surface crossings, so a value like `0.03` strips whole chunks that were working. Raise it only with `/algdebug` in front of you.
 
 ---
 
@@ -118,9 +138,9 @@ Each injection path only runs when its terrain mod is present, so leaving all th
 |---------|-------------|
 | `/algtellus` | Inspect the column you are standing in: sampled elevation, predicted surface Y against what was actually built, the resolved surface block and the layer block it maps to, and whether a layer is present |
 | `/algtellus grid` | The same over an area, for spotting patterns rather than single columns |
-| `/algdebug` | General chunk inspection — heightmaps, surface blocks and mapping resolution |
+| `/algdebug` | General chunk inspection — heightmaps, surface blocks and mapping resolution. On vanilla worldgen it also prints the reconstructed surface fraction per column, the simulated layer count, and which guard rejected any column that got nothing |
 
-These are the fastest way to work out why a particular column did or did not get a layer. Pair them with `debug_log_tellus`, which logs the specific reason a column was skipped.
+These are the fastest way to work out why a particular column did or did not get a layer. Pair them with `debug_log_tellus` or `debug_log_vanilla`, which log the specific reason a column was skipped.
 
 ---
 

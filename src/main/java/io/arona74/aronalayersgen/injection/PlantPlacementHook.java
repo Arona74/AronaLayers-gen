@@ -2,6 +2,7 @@ package io.arona74.aronalayersgen.injection;
 
 import io.arona74.aronalayersgen.LayerConfig;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.state.BlockState;
@@ -42,5 +43,34 @@ public final class PlantPlacementHook {
             return check.mayPlaceOn(world.getBlockState(surfacePos), world, surfacePos);
         }
         return null;
+    }
+
+    /**
+     * The same look-through for blocks that demand a sturdy top face instead of a floor material.
+     *
+     * <p>{@code leaf_litter} is the case. It extends the plant base but overrides
+     * {@code canSurvive} without calling super, so the {@code mayPlaceOn} hook above never runs for
+     * it, and what it actually asks is {@code isFaceSturdy(UP)} — which a layer block below
+     * answers false for at any count under 8. Worldgen writes the litter without consulting
+     * {@code canSurvive}, so it sits there until the first neighbour update pops it, exactly the
+     * way snow on packed ice does.
+     *
+     * <p>Deliberately checks the surface under the layer rather than returning a blanket true: a
+     * layer over something that could not hold leaf litter anyway should still fail.
+     *
+     * @return the value canSurvive should return, or null to leave vanilla alone
+     */
+    public static Boolean lookThroughLayersForSturdyFace(LevelReader world, BlockPos pos) {
+        if (!LayerConfig.PLANT_INJECTION) {
+            return null;
+        }
+
+        BlockPos belowPos = pos.below();
+        if (!RTFLayerInjector.hasLayerProperty(world.getBlockState(belowPos))) {
+            return null;
+        }
+
+        BlockPos surfacePos = belowPos.below();
+        return world.getBlockState(surfacePos).isFaceSturdy(world, surfacePos, Direction.UP);
     }
 }

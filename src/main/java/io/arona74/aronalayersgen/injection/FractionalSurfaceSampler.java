@@ -440,17 +440,6 @@ public final class FractionalSurfaceSampler {
     }
 
     /**
-     * Caps a count so it can never fill its whole block.
-     *
-     * <p>{@link #layersFromFraction} already lands at or below this by construction; the cap
-     * exists for the noise-router fallback, which skips its own reduction on snowy columns
-     * and could otherwise emit a full-height layer.
-     */
-    public static int capPlacedLayers(int layers) {
-        return Math.min(MAX_PLACED_LAYERS, layers);
-    }
-
-    /**
      * Density as generation saw it: sampled at the corners of the enclosing cell and
      * trilinearly interpolated.
      *

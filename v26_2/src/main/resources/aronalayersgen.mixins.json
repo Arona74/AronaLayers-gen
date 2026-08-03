@@ -10,6 +10,7 @@
     "ChunkGeneratorFeaturesMixin",
     "ChunkMapMixin",
     "PlantBlockMixin",
+    "LeafLitterBlockMixin",
     "TreeFeatureMixin",
     "NbtTreeFeatureMixin",
     "NbtTreeTemplateFeatureMixin",

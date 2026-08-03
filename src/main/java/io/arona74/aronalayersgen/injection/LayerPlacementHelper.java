@@ -138,11 +138,82 @@ public class LayerPlacementHelper {
      * <p>What actually disqualifies a block is being something the mod or a feature put on top of
      * the terrain: our own layer blocks, and tree canopies, both of which block motion and would
      * otherwise be mistaken for ground. Anything else solid is ground, mapped or not.
+     *
+     * <p>powder_snow is the one piece of terrain that fails the motion test: entities fall through
+     * it, so {@code blocksMotion()} is false and OCEAN_FLOOR does not count it. It is still terrain
+     * — vanilla's surface rules substitute it for the top block of a column, the same way they
+     * substitute snow_block — so a scan that walked past it anchored on the stone underneath and
+     * measured the wrong block. It is accepted here explicitly.
      */
     public static boolean isGroundBlock(BlockState state) {
+        if (state.is(Blocks.POWDER_SNOW)) return true;
         if (!state.blocksMotion()) return false;
         if (getMappingRegistry().isLayerBlock(state.getBlock())) return false;
         return !state.is(BlockTags.LEAVES) && !state.is(BlockTags.LOGS);
+    }
+
+    /**
+     * Ground height per column: the first free Y above real terrain, for all 16x16 columns.
+     *
+     * <p>Deliberately not a bare heightmap read, for two reasons.
+     *
+     * <p>First, the injector runs twice per chunk — once at {@code generateFeatures} and again at
+     * {@code LevelChunk.<init>} — and on the second pass the heightmap counts the layers the first
+     * pass placed. A neighbour carrying a thick layer then measures a block taller than its terrain,
+     * so a column the first pass correctly left bare sees a phantom step up and gains a layer on the
+     * second; its own position is still air, so the not-air guard never catches it. That is the
+     * isolated-column artifact, and reading terrain rather than block tops is what prevents it.
+     *
+     * <p>Second, powder_snow does not block motion, so the heightmap reports the free Y as the
+     * powder_snow block's own position rather than above it. The scan climbs the full pile so the
+     * caller measures the top of the snow, not the stone buried underneath it. Without this the
+     * density field's surface crossing landed a block above the anchor and every powder_snow column
+     * took the overfull branch — a flat maximal count with no gradient, which is the same defect
+     * snow_block had for the same underlying reason.
+     *
+     * <p>Shared between the injector and /algdebug: they kept separate copies, only one of which
+     * climbed powder snow, so the command disagreed with the run it was supposed to be explaining.
+     */
+    public static int[][] computeGroundFloorYs(ChunkAccess chunk, Heightmap.Types hmType,
+                                               int startX, int startZ, int worldBottom) {
+        int[][] heights = new int[16][16];
+        for (int lx = 0; lx < 16; lx++) {
+            for (int lz = 0; lz < 16; lz++) {
+                int hmY = chunk.getOrCreateHeightmapUnprimed(hmType).getFirstAvailable(lx, lz);
+                if (hmY <= worldBottom) {
+                    heights[lx][lz] = worldBottom;
+                    continue;
+                }
+
+                int wx = startX + lx;
+                int wz = startZ + lz;
+
+                // powder_snow sits AT the reported free Y, not below it. Climb the whole pile.
+                if (chunk.getBlockState(new BlockPos(wx, hmY, wz)).is(Blocks.POWDER_SNOW)) {
+                    hmY++;
+                    while (chunk.getBlockState(new BlockPos(wx, hmY, wz)).is(Blocks.POWDER_SNOW)) {
+                        hmY++;
+                    }
+                }
+
+                if (isGroundBlock(chunk.getBlockState(new BlockPos(wx, hmY - 1, wz)))) {
+                    heights[lx][lz] = hmY;
+                    continue;
+                }
+
+                int found = worldBottom;
+                for (int dy = 1; dy <= 30; dy++) {
+                    int cy = hmY - 1 - dy;
+                    if (cy <= worldBottom) break;
+                    if (isGroundBlock(chunk.getBlockState(new BlockPos(wx, cy, wz)))) {
+                        found = cy + 1;
+                        break;
+                    }
+                }
+                heights[lx][lz] = found;
+            }
+        }
+        return heights;
     }
 
     public static boolean hasMappingFor(Block surfaceBlock) {
@@ -1087,6 +1158,8 @@ public class LayerPlacementHelper {
     public static final AtomicInteger debugSkipEnclosed = new AtomicInteger();
     public static final AtomicInteger debugSkipStructureElevated = new AtomicInteger();
     public static final AtomicInteger debugSkipConservativeSurface = new AtomicInteger();
+    /** Not a skip: invisible marker blocks (minecraft:light) the layer overwrote. */
+    public static final AtomicInteger debugReplacedMarker = new AtomicInteger();
 
     private static final AtomicInteger[] SKIP_COUNTERS = {
         debugSkipSnowy, debugSkipNoSurface, debugSkipNoMapping, debugSkipLayerZero,
@@ -1332,9 +1405,24 @@ public class LayerPlacementHelper {
         // Ice and water surfaces need the full CR mapping path (waterlogged layers).
         // Switching to vanilla snow layers (IMPROVE_SNOWY_BIOMES) would fail because
         // snow layers have no WATERLOGGED property.
+        //
+        // packed_ice is here for a second, harder reason: vanilla's SnowLayerBlock.canSurvive
+        // returns false outright when the block below is ice, packed_ice or a barrier. Worldgen
+        // writes layers straight into the section and never consults canSurvive, so a snow layer
+        // placed on packed_ice looks fine until anything triggers a neighbour update — breaking a
+        // block nearby, placing one — at which point updateShape evicts every illegal layer at
+        // once. That is the "layers refresh along the same Y level" artifact, and it is why a
+        // packed_ice column must take its mapped layer block rather than snow. Unconditional:
+        // with no mapping the column gets nothing, which still beats a layer that pops.
+        //
+        // blue_ice is NOT in vanilla's exclusion list, so snow does survive on it. It joins the
+        // mapping path only once it has a mapping to go to; forcing it unconditionally would
+        // trade a working snow layer for a bare column.
         Block topBlock = chunk.getBlockState(new BlockPos(worldX, surfaceY - 1, worldZ)).getBlock();
         boolean surfaceIsIceOrWater = topBlock == Blocks.ICE
                 || topBlock == Blocks.FROSTED_ICE
+                || topBlock == Blocks.PACKED_ICE
+                || (topBlock == Blocks.BLUE_ICE && getMappingRegistry().hasMapping(Blocks.BLUE_ICE))
                 || topBlock == Blocks.WATER;
 
         if (LayerConfig.SKIP_SNOWY_BIOMES && isSnowyBiome && !surfaceIsPowderSnow) {
@@ -1663,6 +1751,16 @@ public class LayerPlacementHelper {
                         && (existingState.getBlock() == Blocks.SNOW_BLOCK
                          || existingState.getBlock() == Blocks.SNOW);
 
+                    // Invisible technical markers occupy the placement position without being part
+                    // of the terrain. minecraft:light is the one seen in the wild: datapack
+                    // worldgen (Lithosphere + Still Life on snowy peaks) leaves light blocks on
+                    // exposed rock. It has no collision and no render shape, so it appears in
+                    // neither heightmap and the density field is unaware of it — every diagnostic
+                    // says the column is fine and should be layered — but isAir() is false, so the
+                    // guard below dropped the column. Whole mountainsides of calcite and
+                    // cyan_terracotta went unlayered with no counter to explain it.
+                    boolean isTechnicalMarker = existingState.getBlock() == Blocks.LIGHT;
+
                     boolean isSeagrass = existingState.getBlock() == Blocks.SEAGRASS
                         || existingState.getBlock() == Blocks.TALL_SEAGRASS;
                     boolean isReplaceablePlant = isPostFeaturesContext
@@ -1675,6 +1773,9 @@ public class LayerPlacementHelper {
 
                     if (isSnowBlockReplacement) {
                         // Snow_block will be overwritten by the snow layer below
+                    } else if (isTechnicalMarker) {
+                        // Overwritten by the layer below. The light it emitted goes with it.
+                        debugReplacedMarker.incrementAndGet();
                     } else if (canReplacePlant) {
                         replacedTallPlant = isTallPlant(existingState);
                         if (isSeagrass) {

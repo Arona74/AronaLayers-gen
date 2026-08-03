@@ -62,35 +62,7 @@ public class LayerConfig {
     public static boolean TELLUS_REDUCE_LAYER_COUNT = false;
 
     /**
-     * Use vanilla's NoiseRouter density functions (continents, erosion, ridges) to
-     * compute a synthetic cell height for layer placement, replacing the slope-based
-     * heuristic. Applies the same fractional formula as RTF layer injection for smooth,
-     * terrain-correlated layer count variation. Requires layer_injection=true.
-     * Has no effect when RTF is active. Requires game restart.
-     */
-    public static boolean VANILLA_NOISE_ROUTER_LAYER_INJECTION = false;
-
-    /**
-     * Derive layer counts from the sub-block surface elevation recovered out of vanilla's
-     * density field, instead of from a synthetic height.
-     *
-     * <p>Vanilla decides terrain from a continuous field and keeps a block wherever that
-     * field is positive, so the blocky surface is the real surface rounded up. Reading the
-     * discarded fraction back gives eight times the vertical resolution the block grid can
-     * represent, and spending it on layers replaces the 1-block staircase with a smooth
-     * surface that tracks the true isosurface.
-     *
-     * <p>Unlike {@link #VANILLA_NOISE_ROUTER_LAYER_INJECTION}, whose height only correlates
-     * with the landscape, this follows it exactly, producing orderly contour bands that track
-     * real slope. Counts run 0-7: the raw count is reduced by one, which keeps the top of the
-     * range off a full block and leaves about 19% of columns bare.
-     * Takes precedence when both are set. Requires layer_injection=true.
-     * Has no effect when RTF or Tellus is active. Requires game restart.
-     */
-    public static boolean FRACTIONAL_SURFACE_LAYER_INJECTION = false;
-
-    /**
-     * Reduce the fractional-surface layer count by one, as the noise-router and RTF paths do.
+     * Reduce the fractional-surface layer count by one, as the RTF path does.
      *
      * <p>True keeps the established look: the shallowest columns stay bare — {@code t < 3/16},
      * about 19% of them — and the rendered surface sits a constant ~0.875 above the true one.
@@ -509,8 +481,6 @@ public class LayerConfig {
         if (config.has("rtf_layer_injection")) RTF_LAYER_INJECTION = config.get("rtf_layer_injection").getAsBoolean();
         if (config.has("tellus_layer_injection")) TELLUS_LAYER_INJECTION = config.get("tellus_layer_injection").getAsBoolean();
         if (config.has("tellus_reduce_layer_count")) TELLUS_REDUCE_LAYER_COUNT = config.get("tellus_reduce_layer_count").getAsBoolean();
-        if (config.has("vanilla_noise_router_layer_injection")) VANILLA_NOISE_ROUTER_LAYER_INJECTION = config.get("vanilla_noise_router_layer_injection").getAsBoolean();
-        if (config.has("fractional_surface_layer_injection")) FRACTIONAL_SURFACE_LAYER_INJECTION = config.get("fractional_surface_layer_injection").getAsBoolean();
         if (config.has("fractional_surface_reduce_layer_count")) FRACTIONAL_SURFACE_REDUCE_LAYER_COUNT = config.get("fractional_surface_reduce_layer_count").getAsBoolean();
         if (config.has("fractional_surface_min_gradient")) FRACTIONAL_SURFACE_MIN_GRADIENT = config.get("fractional_surface_min_gradient").getAsDouble();
         if (config.has("fractional_surface_max_disagreement")) FRACTIONAL_SURFACE_MAX_DISAGREEMENT = config.get("fractional_surface_max_disagreement").getAsDouble();
@@ -626,8 +596,6 @@ public class LayerConfig {
             config.addProperty("rtf_layer_injection", RTF_LAYER_INJECTION);
             config.addProperty("tellus_layer_injection", TELLUS_LAYER_INJECTION);
             config.addProperty("tellus_reduce_layer_count", TELLUS_REDUCE_LAYER_COUNT);
-            config.addProperty("vanilla_noise_router_layer_injection", VANILLA_NOISE_ROUTER_LAYER_INJECTION);
-            config.addProperty("fractional_surface_layer_injection", FRACTIONAL_SURFACE_LAYER_INJECTION);
             config.addProperty("fractional_surface_reduce_layer_count", FRACTIONAL_SURFACE_REDUCE_LAYER_COUNT);
             config.addProperty("fractional_surface_min_gradient", FRACTIONAL_SURFACE_MIN_GRADIENT);
             config.addProperty("fractional_surface_max_disagreement", FRACTIONAL_SURFACE_MAX_DISAGREEMENT);

@@ -69,9 +69,9 @@ public class NoiseBasedChunkGeneratorMixin {
                 // are recovered. Chunks already done are effectively a no-op because
                 // injectLayerAt skips positions that already hold a non-air block.
                 //
-                // Deliberately NOT VanillaLayerInjector: that one is slope/edge based and would
-                // stack a second set of layers on every riser, which is the double injection that
-                // caused the "edges getting extra layers" artifact.
+                // Deliberately NOT VanillaLayerInjector: it reads vanilla's density field, which
+                // does not describe Tellus terrain, so its counts would be fiction stacked on top
+                // of the ones Tellus already placed.
                 if (TellusCompat.needsRerun(chunk)) {
                     if (LayerConfig.logTellus()) {
                         AronaLayersGen.LOGGER.info("[ChunkInit] Tellus re-run at {},{} — features pass found no surface (empty heightmap)",

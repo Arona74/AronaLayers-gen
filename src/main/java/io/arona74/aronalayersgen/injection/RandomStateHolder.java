@@ -22,10 +22,10 @@ public class RandomStateHolder {
      * density functions describe End terrain. Evaluating those at Overworld coordinates
      * makes the field disagree with the ground everywhere.
      *
-     * <p>This went unnoticed because the only consumer was {@link VanillaCellHeightSampler},
-     * which ignores the RandomState entirely; {@link FractionalSurfaceSampler} is the first
-     * to actually read it. Same keep-the-first rule as {@link #setRandomState}, and for the
-     * same reason — see the note there.
+     * <p>This went unnoticed for a long time because the only consumer back then was a
+     * cell-height sampler that ignored the RandomState entirely; {@link FractionalSurfaceSampler}
+     * is the first to actually read it. Same keep-the-first rule as {@link #setRandomState}, and
+     * for the same reason — see the note there.
      *
      * <p>Prefer {@link #noiseConfigFor(ServerLevel)}: this global is only a fallback for
      * callers with no level in hand.
