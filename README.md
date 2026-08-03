@@ -59,7 +59,7 @@ Columns where a carver cut into the surface after the noise stage (cave mouths, 
 Plus a layer block provider:
 
 - [Conquest Reforged](https://www.curseforge.com/minecraft/mc-mods/conquest-reforged) *(recommended — required for plants, rocks, foliage and NBT trees)*
-- VanillaLayerPlus *(layer blocks only)*
+- VanillaLayerPlus *(layer blocks only)* — you can use [my fork](https://github.com/Arona74/vanillalayerplus)
 
 A terrain source is **optional** — vanilla worldgen, including worldgen mods built on it, is fully supported on its own. Install one only if you want that mod's terrain:
 
@@ -73,8 +73,9 @@ A terrain source is **optional** — vanilla worldgen, including worldgen mods b
 1. Install Fabric Loader and Fabric API for your Minecraft version (see the table above)
 2. Install Conquest Reforged **or** VanillaLayerPlus
 3. Optionally install ReTerraForged or Tellus — vanilla worldgen works without either
-4. Place the mod JAR for your Minecraft version in your mods folder
-5. Launch once to generate config files in `config/aronalayersgen/`
+4. Optional but strongly recommended, install my [AronaLayers-extras mod](https://github.com/Arona74/AronaLayers-extras) for plant visual offset and few layer mechanics
+5. Place the mod JAR for your Minecraft version in your mods folder
+6. Launch once to generate config files in `config/aronalayersgen/`
 
 ### NBT Trees (Conquest Reforged only)
 
