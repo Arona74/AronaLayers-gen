@@ -14,6 +14,7 @@
     "TreeFeatureMixin",
     "NbtTreeFeatureMixin",
     "NbtTreeTemplateFeatureMixin",
+    "TellusProceduralTreeMixin",
     "SaplingBlockGrowMixin",
     "TreeSoilMixin",
     "SnowBlockMixin",

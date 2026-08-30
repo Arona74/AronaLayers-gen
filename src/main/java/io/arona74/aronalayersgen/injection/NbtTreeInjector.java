@@ -7,8 +7,6 @@ import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.NbtTreeRegistry;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.NbtIo;
@@ -17,8 +15,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.levelgen.structure.templatesystem.BlockIgnoreProcessor;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.minecraft.world.level.block.Mirror;
@@ -38,16 +35,20 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Handles CR NBT tree placement in two modes:
+ * Handles CR NBT tree placement by direct interception at the source:
  *
- * 1. Direct intercept (non-RTF worlds): tryPlaceTree() is called from
- *    NbtTreeFeatureMixin when vanilla TreeFeature.generate() is invoked.
+ * <ul>
+ *   <li>Vanilla worldgen / sapling growth — tryPlaceTree() is called from NbtTreeFeatureMixin when
+ *       TreeFeature.generate() runs.</li>
+ *   <li>Tellus custom-tree worldgen — TellusProceduralTreeMixin cancels Tellus's procedural
+ *       generator and defers a CR tree via queueWorldgenTree(), placed on the next server tick.</li>
+ * </ul>
  *
- * 2. Scan-and-replace (RTF worlds): RTF bypasses vanilla TreeFeature entirely.
- *    ServerChunkEvents.CHUNK_LOAD fires after the chunk is fully in the world
- *    cache; scanAndReplace() scans for vanilla log trunk-bases (identified by
- *    the AXIS property and "minecraft" namespace), clears the whole tree, and
- *    places a CR NBT tree in its place.
+ * <p>Both routes converge on tryPlaceTree(), which places the tree only where the trunk base sits in
+ * open, at-surface space. There is deliberately no post-hoc "scan finished chunks for stray logs"
+ * fallback: it could not distinguish a surface tree from a buried log and stamped CR trees inside
+ * terrain (notably deepslate crevices on stony_peaks). Trees the intercept does not handle are left
+ * as the generator placed them.
  */
 public class NbtTreeInjector {
 
@@ -80,7 +81,11 @@ public class NbtTreeInjector {
         if (!LayerConfig.CR_NBT_TREES_VANILLA_FALLBACK) return true;
         Optional<ResourceKey<Biome>> biomeKey = world.getBiome(pos).unwrapKey();
         if (biomeKey.isEmpty()) return false;
-        return NbtTreeRegistry.getInstance().hasBiome(Compat.keyId(biomeKey.get()));
+        boolean configured = NbtTreeRegistry.getInstance().hasBiome(Compat.keyId(biomeKey.get()));
+        if (!configured && LayerConfig.logNbtTrees())
+            AronaLayersGen.LOGGER.info("[NbtTrees] fallback (unconfigured biome) biome={} pos={} — Tellus tree kept",
+                Compat.keyId(biomeKey.get()), pos);
+        return configured;
     }
 
     /** Called from the worldgen mixin to cancel vanilla and queue for deferred placement. */
@@ -104,11 +109,12 @@ public class NbtTreeInjector {
 
     /** Called from END_SERVER_TICK: places deferred trees for all ready chunks. */
     public static void flushReadyChunks() {
-        if (READY_CHUNKS.isEmpty()) return;
-        List<Map.Entry<Long, ServerLevel>> batch = new ArrayList<>(READY_CHUNKS.entrySet());
-        for (Map.Entry<Long, ServerLevel> e : batch) {
-            READY_CHUNKS.remove(e.getKey());
-            placeDeferredTrees(e.getValue(), e.getKey());
+        if (!READY_CHUNKS.isEmpty()) {
+            List<Map.Entry<Long, ServerLevel>> batch = new ArrayList<>(READY_CHUNKS.entrySet());
+            for (Map.Entry<Long, ServerLevel> e : batch) {
+                READY_CHUNKS.remove(e.getKey());
+                placeDeferredTrees(e.getValue(), e.getKey());
+            }
         }
     }
 
@@ -204,6 +210,24 @@ public class NbtTreeInjector {
             return false;
         }
 
+        // Clearance guard — the trunk base (surfacePos) must sit in open, replaceable space AND at
+        // (not below) the live surface. Tellus's own place() aborts via hasTrunkClearance() when a
+        // column has no room for the trunk (buried spots, overhangs, or a stale/low ground Y at
+        // extreme world scale), which is why disabling this feature leaves those columns bare. Our
+        // mixin cancels at HEAD, before that guard, so without this check we stamp the tree inside
+        // solid rock — its sparse conquest foliage replaces deepslate and reads as an "underground
+        // crater". A growing sapling's own position is already air, so this never blocks saplings.
+        // Logged at WARN so it is visible without debug flags while we confirm the cause.
+        BlockState atOrigin = world.getBlockState(surfacePos);
+        int liveSurfaceY = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, surfacePos.getX(), surfacePos.getZ());
+        boolean solid  = !atOrigin.isAir() && !atOrigin.canBeReplaced();
+        boolean buried = surfacePos.getY() < liveSurfaceY - 2;
+        if (solid || buried) {
+            AronaLayersGen.LOGGER.warn("[NbtTrees] SKIP buried tryPlaceTree block={} origin={} originY={} liveSurfaceY={} (solid={} buried={})",
+                Compat.blockId(atOrigin.getBlock()), surfacePos, surfacePos.getY(), liveSurfaceY, solid, buried);
+            return false;
+        }
+
         // ArdaTrees-style placement: rotate the trunk anchor around ORIGIN, then subtract
         // from the sapling position so the anchor block lands exactly at surfacePos.
         BlockPos anchor = ANCHOR_CACHE.getOrDefault(nbtPath, BlockPos.ZERO);
@@ -213,7 +237,12 @@ public class NbtTreeInjector {
             .setRotation(rotation)
             .setMirror(Mirror.NONE)
             .setIgnoreEntities(true)
-            .setKnownShape(false);
+            .setKnownShape(false)
+            // Non-destructive: skip the template's air (and structure) cells so the tree only adds
+            // logs/leaves and never carves terrain. On steep biomes (stony_peaks) the template's
+            // bounding box sinks into the rising slope; without this its air blocks would overwrite
+            // the mountain into craters.
+            .addProcessor(BlockIgnoreProcessor.STRUCTURE_AND_AIR);
 
         BlockPos rotatedAnchor = StructureTemplate.transform(anchor, Mirror.NONE, rotation, BlockPos.ZERO);
         BlockPos placePos = surfacePos.subtract(rotatedAnchor);
@@ -230,143 +259,6 @@ public class NbtTreeInjector {
                 nbtPath.getFileName(), rotation, surfacePos);
         }
         return true;
-    }
-
-    // -------------------------------------------------------------------------
-    // Mode 2: scan-and-replace (RTF-compatible, called from CHUNK_LOAD event)
-    // -------------------------------------------------------------------------
-
-    /**
-     * Scans a fully-loaded chunk for vanilla log trunk-bases, clears each
-     * vanilla tree, and places a CR NBT tree in its place.
-     *
-     * Vanilla logs are identified by having the AXIS block-state property AND
-     * belonging to the "minecraft" namespace — this avoids re-processing CR logs
-     * on reload and handles RTF+CR worlds where CR logs lack vanilla block tags.
-     */
-    public static void scanAndReplace(ServerLevel world, LevelChunk chunk) {
-        NbtTreeRegistry registry = NbtTreeRegistry.getInstance();
-        var cp = chunk.getPos();
-        // Deterministic per-chunk seed, offset from vanilla worldgen seed
-        RandomSource rand = RandomSource.create(world.getSeed() ^ Compat.chunkPosToLong(cp) ^ 0x4E4254726565L);
-
-        int startX = cp.getMinBlockX();
-        int startZ = cp.getMinBlockZ();
-        int bottomY = Compat.minY(world);
-
-        // Track trunk positions already processed to avoid duplicate CR trees
-        // (e.g. 2×2 jungle trunks appear in four columns; 2-block radius deduplicates them)
-        List<BlockPos> doneTrunks = new ArrayList<>();
-
-        for (int lx = 0; lx < 16; lx++) {
-            for (int lz = 0; lz < 16; lz++) {
-                int wx = startX + lx;
-                int wz = startZ + lz;
-
-                // Start scan just below the motion-blocking heightmap
-                int topY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, lx, lz) - 1;
-
-                BlockPos trunk = null;
-                for (int y = topY; y >= bottomY; y--) {
-                    BlockPos pos = new BlockPos(wx, y, wz);
-                    BlockState st = world.getBlockState(pos);
-
-                    // Only match vanilla logs (minecraft namespace + has AXIS property)
-                    if (!st.hasProperty(BlockStateProperties.AXIS)) continue;
-                    if (!"minecraft".equals(Ids.namespace(Compat.blockId(st.getBlock())))) continue;
-
-                    BlockState below = world.getBlockState(pos.below());
-                    // Trunk base: log with non-log, non-leaf solid block beneath it
-                    boolean belowIsLog  = below.hasProperty(BlockStateProperties.AXIS);
-                    boolean belowIsLeaf = below.getBlock() instanceof LeavesBlock;
-                    if (below.isAir() || belowIsLog || belowIsLeaf) continue;
-
-                    trunk = pos;
-                    break;
-                }
-
-                if (trunk == null) continue;
-
-                // Skip if too close to an already-processed trunk
-                final BlockPos finalTrunk = trunk;
-                boolean tooClose = doneTrunks.stream().anyMatch(p ->
-                    Math.abs(p.getX() - finalTrunk.getX()) <= 2 &&
-                    Math.abs(p.getZ() - finalTrunk.getZ()) <= 2);
-                if (tooClose) continue;
-
-                // Biome + registry check
-                Optional<ResourceKey<Biome>> biomeOpt = world.getBiome(trunk).unwrapKey();
-                if (biomeOpt.isEmpty()) continue;
-                String biomeId = Compat.keyId(biomeOpt.get());
-
-                if (!registry.hasBiome(biomeId)) continue;
-                if (rand.nextFloat() >= registry.getChance(biomeId)) continue;
-
-                Block surface = world.getBlockState(trunk.below()).getBlock();
-                Optional<Path> variantOpt = registry.selectVariant(biomeId, surface, rand);
-                if (variantOpt.isEmpty()) continue;
-
-                doneTrunks.add(trunk);
-
-                // Clear vanilla tree, then place CR tree
-                clearVanillaTree(world, trunk);
-                placeCrTree(world, trunk, variantOpt.get(), rand);
-            }
-        }
-    }
-
-    /**
-     * Remove all log and leaf blocks in a generous bounding box around the trunk base.
-     * Detects logs via AXIS property and leaves via DISTANCE+PERSISTENT — covers both
-     * vanilla and modded variants without relying on block tags.
-     */
-    private static void clearVanillaTree(ServerLevel world, BlockPos trunk) {
-        int radius = 5, height = 22;
-        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
-        for (int dy = -1; dy <= height; dy++) {
-            for (int dx = -radius; dx <= radius; dx++) {
-                for (int dz = -radius; dz <= radius; dz++) {
-                    m.set(trunk.getX() + dx, trunk.getY() + dy, trunk.getZ() + dz);
-                    BlockState s = world.getBlockState(m);
-                    boolean isLog  = s.hasProperty(BlockStateProperties.AXIS);
-                    boolean isLeaf = s.getBlock() instanceof LeavesBlock;
-                    if (isLog || isLeaf) {
-                        world.setBlock(m, Blocks.AIR.defaultBlockState(),
-                            Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
-                    }
-                }
-            }
-        }
-    }
-
-    /** Load CR NBT template and place it at the trunk-base position (Mode 2, currently unused). */
-    private static void placeCrTree(ServerLevel world, BlockPos trunk, Path nbtPath, RandomSource rand) {
-        StructureTemplate tpl = getTemplate(nbtPath, world);
-        if (tpl == null) return;
-
-        BlockPos anchor = ANCHOR_CACHE.getOrDefault(nbtPath, BlockPos.ZERO);
-        Rotation rot = ROTATIONS[rand.nextInt(ROTATIONS.length)];
-
-        StructurePlaceSettings sd = new StructurePlaceSettings()
-            .setRotation(rot)
-            .setMirror(Mirror.NONE)
-            .setIgnoreEntities(true)
-            .setKnownShape(false);
-
-        BlockPos rotatedAnchor = StructureTemplate.transform(anchor, Mirror.NONE, rot, BlockPos.ZERO);
-        BlockPos placePos = trunk.subtract(rotatedAnchor);
-
-        try {
-            tpl.placeInWorld(world, placePos, placePos, sd, rand, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
-        } catch (RuntimeException e) {
-            AronaLayersGen.LOGGER.warn("[NbtTrees] CR tree placement error at {}: {}", trunk, e.getMessage());
-            return;
-        }
-
-        if (LayerConfig.logNbtTrees()) {
-            AronaLayersGen.LOGGER.info("[NbtTrees] Replaced vanilla tree with '{}' rotation={} at {}",
-                nbtPath.getFileName(), rot, trunk);
-        }
     }
 
     // -------------------------------------------------------------------------

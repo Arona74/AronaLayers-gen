@@ -29,13 +29,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  * hierarchy sidesteps that entirely.
  *
  * <p>Tellus builds terrain from a real-world Digital Elevation Model. Its
- * {@code EarthChunkGenerator.scaleElevationToHeight()} converts continuous elevation in
- * metres to a block Y with {@code scaled = elevation * heightScale / verticalWorldScale}
- * then {@code ceil}/{@code floor} + {@code heightOffset}. The fractional part of
- * {@code scaled + heightOffset} is exactly the sub-block elevation our layer system
- * consumes — the same idea as ReTerraForged's normalized {@code Cell.height}. We re-sample
- * the same elevation source (a warm cache hit during generateFeatures) and apply the same
- * snow-layer fractional formula used by {@link RTFLayerInjector}.
+ * {@code EarthChunkGenerator.scaleElevationToHeight()} converts elevation in metres to a
+ * continuous block height via {@code TerrainHeightTransform.scaledElevationBlocks(...)} (a
+ * latitude-corrected, optionally compressed mapping — no longer a plain linear scale as of
+ * Tellus 0.8.3), then rounds away from sea level and adds {@code heightOffset}. We reflect that
+ * same transform (see {@code computeScaled}) so our continuous height — and thus the sub-block
+ * fraction that drives the layer count — matches Tellus exactly. We re-sample the same elevation
+ * source (a warm cache hit during generateFeatures) and apply the snow-layer fractional formula
+ * used by {@link RTFLayerInjector}.
  */
 public class TellusCompat {
 
@@ -56,6 +57,14 @@ public class TellusCompat {
     private static Method verticalWorldScaleMethod;     // double effectiveVerticalWorldScale()
     private static Method heightOffsetMethod;           // int effectiveHeightOffset()
     private static Method demSelectionMethod;           // DemSelection demSelection()
+    private static Method increaseHeightMethod;         // boolean experimentalIncreaseHeight()
+    private static Method autoHeightScalingMethod;      // boolean automaticHeightScaling()
+
+    // TerrainHeightTransform.scaledElevationBlocks(elev, blockZ, worldScale, terrScale, oceanScale,
+    // increaseHeight, autoScaling) -> double (continuous block height before offset/rounding).
+    // Reflected so we match Tellus's own latitude/Mercator correction + increase-height compression
+    // instead of replicating the formula (which broke when Tellus 0.8.3 made it non-linear).
+    private static Method scaledElevationBlocksMethod;
 
     private static Method sampleElevationMemoryOnly;    // (double,double,double,boolean,DemSelection,double)->double
     private static Method sampleElevationBlocking;      // (double,double,double)->double  (fallback)
@@ -99,6 +108,17 @@ public class TellusCompat {
             }
         }
         return modPresent;
+    }
+
+    /** True when {@code generator} is (or extends) Tellus's EarthChunkGenerator. */
+    public static boolean isTellusGenerator(ChunkGenerator generator) {
+        if (!isAvailable() || generator == null) return false;
+        Class<?> c = generator.getClass();
+        while (c != null && c != Object.class) {
+            if (c.getName().equals("com.yucareux.tellus.worldgen.EarthChunkGenerator")) return true;
+            c = c.getSuperclass();
+        }
+        return false;
     }
 
     /** Resolve every reflection handle from the running generator's own class. */
@@ -150,6 +170,24 @@ public class TellusCompat {
                 heightOffsetMethod = settingsClass.getMethod("effectiveHeightOffset");
                 demSelectionMethod = settingsClass.getMethod("demSelection");
                 Class<?> demSelectionClass = demSelectionMethod.getReturnType();
+
+                // Tellus 0.8.3 height pipeline: a non-linear, latitude-corrected transform driven
+                // by two extra settings. Optional so older Tellus (linear formula) still binds —
+                // if absent we fall back to the legacy elevation*scale/verticalScale computation.
+                try {
+                    increaseHeightMethod = settingsClass.getMethod("experimentalIncreaseHeight");
+                    autoHeightScalingMethod = settingsClass.getMethod("automaticHeightScaling");
+                    Class<?> transformClass = Class.forName(
+                        "com.yucareux.tellus.worldgen.TerrainHeightTransform", false, found.getClassLoader());
+                    scaledElevationBlocksMethod = transformClass.getMethod("scaledElevationBlocks",
+                        double.class, double.class, double.class, double.class, double.class,
+                        boolean.class, boolean.class);
+                } catch (ReflectiveOperationException e) {
+                    increaseHeightMethod = null;
+                    autoHeightScalingMethod = null;
+                    scaledElevationBlocksMethod = null;
+                    AronaLayersGen.LOGGER.info("[Tellus] TerrainHeightTransform not found — using legacy linear height formula");
+                }
 
                 Class<?> elevationClass = elevationSource.getClass();
                 Class<?> coverClass = landCoverSource.getClass();
@@ -227,6 +265,8 @@ public class TellusCompat {
             double verticalScale = (double) verticalWorldScaleMethod.invoke(settings);
             int heightOffset = (int) heightOffsetMethod.invoke(settings);
             Object demSelection = demSelectionMethod.invoke(settings);
+            boolean increaseHeight = increaseHeightMethod != null && (boolean) increaseHeightMethod.invoke(settings);
+            boolean autoScaling = autoHeightScalingMethod != null && (boolean) autoHeightScalingMethod.invoke(settings);
 
             if (!loggedEngaged) {
                 loggedEngaged = true;
@@ -322,8 +362,8 @@ public class TellusCompat {
                         continue;
                     }
 
-                    double heightScale = elevation >= 0.0 ? terrestrialScale : oceanicScale;
-                    double scaled = elevation * heightScale / verticalScale;
+                    double scaled = computeScaled(elevation, worldZ, terrestrialScale, oceanicScale,
+                        verticalScale, increaseHeight, autoScaling);
                     double continuous = scaled + heightOffset;
                     // The sub-block fraction that drives the layer count.
                     double depth = continuous - Math.floor(continuous); // [0..1)
@@ -461,6 +501,36 @@ public class TellusCompat {
     }
 
     /**
+     * Continuous scaled block height for a column (before {@code heightOffset} and rounding).
+     *
+     * <p>Prefers Tellus's own {@code TerrainHeightTransform.scaledElevationBlocks(...)} so we match
+     * its latitude/Mercator correction and increase-height compression exactly (Tellus 0.8.3 made
+     * the height mapping non-linear and latitude-dependent, which broke our old linear formula and
+     * produced large MISMATCH values). Falls back to the legacy {@code elevation*scale/verticalScale}
+     * when the transform is unavailable (older Tellus).
+     */
+    private static double computeScaled(double elevation, double blockZ, double terrestrialScale,
+                                        double oceanicScale, double verticalScale,
+                                        boolean increaseHeight, boolean autoScaling) {
+        if (scaledElevationBlocksMethod != null) {
+            try {
+                // Param order mirrors EarthChunkGenerator.scaleElevationToHeight: verticalScale is
+                // passed as the transform's "worldScale" argument.
+                double v = (double) scaledElevationBlocksMethod.invoke(null,
+                    elevation, blockZ, verticalScale, terrestrialScale, oceanicScale,
+                    increaseHeight, autoScaling);
+                if (!Double.isNaN(v)) {
+                    return v;
+                }
+            } catch (Throwable ignored) {
+                // fall through to legacy
+            }
+        }
+        double heightScale = elevation >= 0.0 ? terrestrialScale : oceanicScale;
+        return elevation * heightScale / verticalScale;
+    }
+
+    /**
      * Fractional layer count: {@code layers = round(depth * 8)}. When {@code skipReduction} is
      * false one layer is subtracted (a legacy RTF aesthetic tweak). The caller decides the
      * reduction policy — it is no longer tied to whether snow layers are used (see the
@@ -573,6 +643,8 @@ public class TellusCompat {
             double verticalScale = (double) verticalWorldScaleMethod.invoke(settings);
             int heightOffset = (int) heightOffsetMethod.invoke(settings);
             Object demSelection = demSelectionMethod.invoke(settings);
+            boolean increaseHeight = increaseHeightMethod != null && (boolean) increaseHeightMethod.invoke(settings);
+            boolean autoScaling = autoHeightScalingMethod != null && (boolean) autoHeightScalingMethod.invoke(settings);
 
             int localX = worldX & 15, localZ = worldZ & 15;
             Heightmap.Types floorType = (chunk instanceof LevelChunk)
@@ -590,6 +662,16 @@ public class TellusCompat {
             while (natural > Compat.minY(chunk) && guard++ < 64
                    && !isNaturalGround(chunk.getBlockState(new BlockPos(worldX, natural, worldZ)))) {
                 natural--;
+            }
+            // powder_snow doesn't block motion, so OCEAN_FLOOR points at the stone UNDER the pile.
+            // The real surface is the top of the powder — climb it so MISMATCH isn't inflated by the
+            // pile depth (mirrors the conservative-guard fix in LayerPlacementHelper).
+            if (chunk.getBlockState(new BlockPos(worldX, floorY, worldZ)).getBlock() == net.minecraft.world.level.block.Blocks.POWDER_SNOW) {
+                int y = floorY;
+                while (chunk.getBlockState(new BlockPos(worldX, y, worldZ)).getBlock() == net.minecraft.world.level.block.Blocks.POWDER_SNOW) {
+                    y++;
+                }
+                natural = y - 1;
             }
             p.actualTopSolidY = natural;
             p.layersStripped = (floorY - 1) - natural;
@@ -614,8 +696,8 @@ public class TellusCompat {
 
             p.skippedNoBedData = p.submerged && !p.bathymetry;
             p.elevation = elevation;
-            double heightScale = elevation >= 0.0 ? terrestrialScale : oceanicScale;
-            p.scaled = elevation * heightScale / verticalScale;
+            p.scaled = computeScaled(elevation, worldZ, terrestrialScale, oceanicScale,
+                verticalScale, increaseHeight, autoScaling);
             p.continuous = p.scaled + heightOffset;
             p.depth = p.continuous - Math.floor(p.continuous);
             p.floorCont = (int) Math.floor(p.continuous);

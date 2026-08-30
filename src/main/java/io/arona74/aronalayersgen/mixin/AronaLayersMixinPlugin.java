@@ -12,11 +12,16 @@ public class AronaLayersMixinPlugin implements IMixinConfigPlugin {
 
     private static final String RTF_MIXIN =
         "io.arona74.aronalayersgen.mixin.NbtTreeTemplateFeatureMixin";
+    private static final String TELLUS_TREE_MIXIN =
+        "io.arona74.aronalayersgen.mixin.TellusProceduralTreeMixin";
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (RTF_MIXIN.equals(mixinClassName)) {
             return FabricLoader.getInstance().isModLoaded("reterraforged");
+        }
+        if (TELLUS_TREE_MIXIN.equals(mixinClassName)) {
+            return FabricLoader.getInstance().isModLoaded("tellus");
         }
         return true;
     }

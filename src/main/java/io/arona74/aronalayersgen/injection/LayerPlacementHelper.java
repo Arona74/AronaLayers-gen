@@ -403,6 +403,74 @@ public class LayerPlacementHelper {
         return (wet != Blocks.AIR) ? wet : null;
     }
 
+    // Cached references to the pale_garden decorations added in 1.21.4 (Blocks.AIR = not present on
+    // older versions): pale_hanging_moss dangles from the canopy into the placement position, and
+    // pale_moss_carpet sits on the floor at the placement position. Both are decoration, not terrain,
+    // so treat them as overwritable — otherwise the not-air guard skips the column and no layer is
+    // placed. The layer takes their spot (the carpet is replaced; the hanging moss keeps the
+    // canopy-anchored remainder above).
+    private static volatile Block cachedPaleHangingMoss = null;
+    private static volatile Block cachedPaleMossCarpet = null;
+    private static Block paleHangingMoss() {
+        Block moss = cachedPaleHangingMoss;
+        if (moss == null) {
+            String id = Compat.normalizeId("minecraft:pale_hanging_moss");
+            moss = (id != null) ? Compat.blockFromId(id) : Blocks.AIR;
+            cachedPaleHangingMoss = moss;
+        }
+        return moss;
+    }
+    private static Block paleMossCarpet() {
+        Block carpet = cachedPaleMossCarpet;
+        if (carpet == null) {
+            String id = Compat.normalizeId("minecraft:pale_moss_carpet");
+            carpet = (id != null) ? Compat.blockFromId(id) : Blocks.AIR;
+            cachedPaleMossCarpet = carpet;
+        }
+        return carpet;
+    }
+    private static boolean isOverwritablePaleVegetation(Block block) {
+        Block moss = paleHangingMoss();
+        Block carpet = paleMossCarpet();
+        return (moss != Blocks.AIR && block == moss) || (carpet != Blocks.AIR && block == carpet);
+    }
+
+    /**
+     * After a layer overwrites the lowest pale_hanging_moss segment, the segment now directly above
+     * the layer becomes the new bottom of the strand, so it must carry {@code tip=true} (the tapered
+     * end) or it renders with a flat cut. The "tip" property is looked up by name from the block's
+     * state definition because {@code BlockStateProperties.TIP} only exists on 1.21.4+ and this is
+     * shared code compiled against older versions too.
+     */
+    private static void fixHangingMossTipAbove(ChunkAccess chunk, BlockPos layerPos) {
+        Block moss = paleHangingMoss();
+        if (moss == Blocks.AIR) return;
+        BlockPos abovePos = layerPos.above();
+        BlockState aboveState = chunk.getBlockState(abovePos);
+        if (aboveState.getBlock() != moss) return;
+        net.minecraft.world.level.block.state.properties.Property<?> tipProp =
+            moss.getStateDefinition().getProperty("tip");
+        if (tipProp instanceof net.minecraft.world.level.block.state.properties.BooleanProperty boolTip
+                && !aboveState.getValue(boolTip)) {
+            setBlockStateSafe(chunk, abovePos, aboveState.setValue(boolTip, true));
+        }
+    }
+
+    /**
+     * Pale moss carpet climbs and stacks, so a strand can be several blocks tall. When the layer
+     * takes the bottom segment, the segment(s) directly above lose their support and would float, so
+     * clear the contiguous run of carpet above the layer.
+     */
+    private static void clearStackedMossCarpetAbove(ChunkAccess chunk, BlockPos layerPos) {
+        Block carpet = paleMossCarpet();
+        if (carpet == Blocks.AIR) return;
+        BlockPos p = layerPos.above();
+        while (chunk.getBlockState(p).getBlock() == carpet) {
+            setBlockStateSafe(chunk, p, Blocks.AIR.defaultBlockState());
+            p = p.above();
+        }
+    }
+
     // Cache for density property lookup per block
     private static final ConcurrentHashMap<Block, IntegerProperty> densityPropertyCache = new ConcurrentHashMap<>();
 
@@ -1044,6 +1112,10 @@ public class LayerPlacementHelper {
             // overhead used to read as an enclosing ceiling and suppress the column. This
             // check exists to avoid layering inside structures; a tree is not one.
             if (state.is(BlockTags.LEAVES) || state.is(BlockTags.LOGS)) continue;
+            // Nor is pale_hanging_moss dangling from that canopy — it is vegetation, not a
+            // structure ceiling, so it must not suppress or (via the correction pass) remove the
+            // layer below it, which left bare air under pale_garden moss.
+            if (isOverwritablePaleVegetation(state.getBlock())) continue;
 
             return true;
         }
@@ -1361,7 +1433,19 @@ public class LayerPlacementHelper {
         // Uses the raw heightmap value (surfaceY - 1) before any scan-down adjustments so
         // it reflects what is actually sitting at the top of the terrain right now.
         if (LayerConfig.CONSERVATIVE_SURFACE_HEIGHTMAP && rtfExpectedBaseY != Integer.MIN_VALUE) {
-            int delta = (surfaceY - 1) - rtfExpectedBaseY;
+            // powder_snow doesn't block motion, so OCEAN_FLOOR reports the solid block UNDER the
+            // pile — surfaceY-1 is the buried stone, not the real surface. Climb the pile so the
+            // delta reflects the actual top; otherwise every powder column reads as "terrain
+            // lowered by the pile depth" and gets clamped to the conservative fallback value.
+            int effectiveSurfaceTop = surfaceY - 1;
+            if (chunk.getBlockState(new BlockPos(worldX, surfaceY, worldZ)).is(Blocks.POWDER_SNOW)) {
+                int y = surfaceY;
+                while (chunk.getBlockState(new BlockPos(worldX, y, worldZ)).is(Blocks.POWDER_SNOW)) {
+                    y++;
+                }
+                effectiveSurfaceTop = y - 1;
+            }
+            int delta = effectiveSurfaceTop - rtfExpectedBaseY;
             if (delta > LayerConfig.CONSERVATIVE_SURFACE_TOLERANCE_UP
                     || delta < -LayerConfig.CONSERVATIVE_SURFACE_TOLERANCE_DOWN) {
                 if (LayerConfig.CONSERVATIVE_SURFACE_FALLBACK) {
@@ -1739,6 +1823,8 @@ public class LayerPlacementHelper {
             } else {
                 boolean replacedTallPlant = false;
                 boolean seagrassAtSurface = false;
+                boolean overwroteHangingMoss = false;
+                boolean overwroteMossCarpet = false;
                 BlockState savedTallUpperState = null;
                 if (!existingState.isAir() && !underwater && !isPowderSnow) {
                     // A snow layer already here is vanilla's, not ours: SnowAndFreezeFeature drops
@@ -1761,6 +1847,12 @@ public class LayerPlacementHelper {
                     // cyan_terracotta went unlayered with no counter to explain it.
                     boolean isTechnicalMarker = existingState.getBlock() == Blocks.LIGHT;
 
+                    // Pale_garden decoration at this position (pale_hanging_moss dangling from the
+                    // canopy, or pale_moss_carpet on the floor). Neither is terrain, so let the layer
+                    // overwrite it instead of the not-air guard skipping the whole column and leaving
+                    // it unlayered.
+                    boolean isOverwritablePaleMoss = isOverwritablePaleVegetation(existingState.getBlock());
+
                     boolean isSeagrass = existingState.getBlock() == Blocks.SEAGRASS
                         || existingState.getBlock() == Blocks.TALL_SEAGRASS;
                     boolean isReplaceablePlant = isPostFeaturesContext
@@ -1776,6 +1868,13 @@ public class LayerPlacementHelper {
                     } else if (isTechnicalMarker) {
                         // Overwritten by the layer below. The light it emitted goes with it.
                         debugReplacedMarker.incrementAndGet();
+                    } else if (isOverwritablePaleMoss) {
+                        // Overwrite the pale decoration with the layer: the floor carpet is replaced
+                        // outright; for hanging moss only the lowest segment goes, the canopy-anchored
+                        // remainder above is left untouched (its new bottom segment gets tip=true below).
+                        // A stacked carpet strand has its floating remainder cleared below.
+                        overwroteHangingMoss = existingState.getBlock() == paleHangingMoss();
+                        overwroteMossCarpet = existingState.getBlock() == paleMossCarpet();
                     } else if (canReplacePlant) {
                         replacedTallPlant = isTallPlant(existingState);
                         if (isSeagrass) {
@@ -1789,11 +1888,11 @@ public class LayerPlacementHelper {
                                 seagrassAtSurface = true;
                             }
                             if (replacedTallPlant) {
-                                // Upper half was occupying a water column block; restore water there.
-                                BlockState upperFill = seagrassAtSurface
-                                    ? Blocks.WATER.defaultBlockState()
-                                    : Blocks.AIR.defaultBlockState();
-                                setBlockStateSafe(chunk, abovePos.above(), upperFill);
+                                // Upper half sat in a water column (submerged or at the surface), so
+                                // restore WATER, never AIR. A plant_injection replacement overwrites this
+                                // position; with plant_injection off (or no CR/VP mapping) the water stays
+                                // instead of leaving an air pocket underwater.
+                                setBlockStateSafe(chunk, abovePos.above(), Blocks.WATER.defaultBlockState());
                             }
                         } else {
                             replacedPlant = existingState.getBlock();
@@ -1814,11 +1913,11 @@ public class LayerPlacementHelper {
                             }
                             if (replacedTallPlant) {
                                 savedTallUpperState = chunk.getBlockState(abovePos.above());
-                                // Upper half was occupying a water column block; restore water there.
-                                BlockState upperFill = seagrassAtSurface
-                                    ? Blocks.WATER.defaultBlockState()
-                                    : Blocks.AIR.defaultBlockState();
-                                setBlockStateSafe(chunk, abovePos.above(), upperFill);
+                                // Upper half sat in a water column (submerged or at the surface), so
+                                // restore WATER, never AIR. A plant_injection replacement overwrites this
+                                // position; with plant_injection off (or no CR/VP mapping) the water stays
+                                // instead of leaving an air pocket underwater.
+                                setBlockStateSafe(chunk, abovePos.above(), Blocks.WATER.defaultBlockState());
                             }
                         } else {
                             replacedPlantState = existingState;
@@ -1893,6 +1992,16 @@ public class LayerPlacementHelper {
 
                 setBlockStateSafe(chunk, abovePos, layerState);
                 layerPlaced = true;
+
+                // The layer took the moss strand's old bottom (tip) segment; make the segment now
+                // directly above it the new tip so the strand keeps its tapered end.
+                if (overwroteHangingMoss) {
+                    fixHangingMossTipAbove(chunk, abovePos);
+                }
+                // The layer took a stacked carpet's bottom segment; clear the now-unsupported run above.
+                if (overwroteMossCarpet) {
+                    clearStackedMossCarpetAbove(chunk, abovePos);
+                }
 
                 if (LayerConfig.REPLACE_DIRT_PATH && surfaceBlock == Blocks.DIRT_PATH) {
                     Block fullBlock = getFullBlock(layerBlock);

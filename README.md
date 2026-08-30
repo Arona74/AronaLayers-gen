@@ -2,7 +2,7 @@
 
 A Fabric mod that automatically generates terrain layer blocks during worldgen, turning vanilla grass, dirt and sand surfaces into multi-block layer stacks.
 
-Supports **Minecraft 1.20.1, 1.21.1, 1.21.11 and 26.2** from a single shared codebase.
+Supports **Minecraft 1.20.1, 1.21.1, 1.21.11, 26.1.2 and 26.2** from a single shared codebase.
 
 ## Overview
 
@@ -54,6 +54,7 @@ Columns where a carver cut into the surface after the noise stage (cave mouths, 
 | 1.20.1 | 0.15.11+ | 0.92.2+ | 17 |
 | 1.21.1 | 0.16.0+ | 0.104.0+ | 21 |
 | 1.21.11 | 0.19.3+ | 0.141.5+ | 21 |
+| 26.1.2 | 0.19.3+ | 0.154.2+ | 25 |
 | 26.2 | 0.19.3+ | 0.156.0+ | 25 |
 
 Plus a layer block provider:

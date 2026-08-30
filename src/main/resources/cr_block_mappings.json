@@ -32,6 +32,7 @@
     "minecraft:netherrack": "conquest:netherrack_layer",
     "minecraft:orange_terracotta": "conquest:orange_mudstone_slab",
     "minecraft:packed_mud": "conquest:packed_mud_slab",
+    "minecraft:pale_moss_block": "conquest:pale_moss_slab",
     "minecraft:pink_terracotta": "conquest:pink_clay_tile_slab",
     "minecraft:podzol": "conquest:vibrant_autumnal_forest_floor_layer",
     "minecraft:powder_snow": "aronalayersgen:powder_snow_layer",

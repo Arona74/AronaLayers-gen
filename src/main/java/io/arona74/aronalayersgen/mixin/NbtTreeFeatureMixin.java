@@ -13,11 +13,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Safety-net for vanilla (non-RTF) worlds: intercepts TreeFeature.generate()
- * and places a CR NBT tree before vanilla gets a chance to.
- *
- * With RTF active, TreeFeature.generate() is never called — tree replacement
- * is handled instead by NbtTreeInjector.scanAndReplace() via the server-tick queue.
+ * Intercepts vanilla TreeFeature.generate() and places a CR NBT tree before vanilla gets a chance
+ * to. This is the interception path for vanilla worldgen and sapling growth; Tellus's custom-tree
+ * generator, which bypasses TreeFeature, is intercepted separately by TellusProceduralTreeMixin.
  */
 @Mixin(TreeFeature.class)
 public class NbtTreeFeatureMixin {

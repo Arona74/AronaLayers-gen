@@ -110,6 +110,26 @@
       "trees": [
         { "species": "oak", "weight": 1 }
       ]
+    },
+
+    "minecraft:meadow": {
+      "chance": 1.00,
+      "attempts_per_chunk": 2,
+      "surface_blocks": [ "minecraft:grass_block", "minecraft:dirt" ],
+      "trees": [
+        { "species": "oak",   "weight": 2 },
+        { "species": "aspen", "weight": 1 }
+      ]
+    },
+
+    "minecraft:stony_peaks": {
+      "chance": 1.00,
+      "attempts_per_chunk": 2,
+      "surface_blocks": [ "minecraft:stone", "minecraft:gravel", "minecraft:grass_block", "minecraft:dirt", "minecraft:coarse_dirt" ],
+      "trees": [
+        { "species": "norway_spruce", "weight": 2 },
+        { "species": "larch",         "weight": 1 }
+      ]
     }
 
   }
