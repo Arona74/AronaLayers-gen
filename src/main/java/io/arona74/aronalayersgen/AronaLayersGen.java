@@ -58,6 +58,9 @@ public class AronaLayersGen implements ModInitializer {
         }
 
         Compat.registerChunkLoad(NbtTreeInjector::onChunkLoad);
+        // Re-map layers whose RTF surface was swapped to beach/river sand after POST_FEATURES
+        // injection; runs at chunk-load so it catches spawn/cross-border chunks the in-init pass misses.
+        Compat.registerChunkLoad(io.arona74.aronalayersgen.injection.RTFLayerInjector::onChunkLoadRemap);
         ServerTickEvents.END_SERVER_TICK.register(server -> NbtTreeInjector.flushReadyChunks());
 
         LOGGER.info("Arona Layers Generator initialized successfully");

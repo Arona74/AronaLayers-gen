@@ -29,7 +29,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * fails to match RTF's bytecode. Using the intermediary form directly sidesteps this.
  */
 @Pseudo
-@Mixin(targets = "raccoonman.reterraforged.world.worldgen.feature.template.TemplateFeature", remap = false)
+@Mixin(targets = {
+    "etcodehome.freeterraforged.world.worldgen.feature.template.TemplateFeature", // FreeTerraForged
+    "raccoonman.reterraforged.world.worldgen.feature.template.TemplateFeature"    // ReTerraForged
+}, remap = false)
 public class NbtTreeTemplateFeatureMixin {
 
     @Inject(

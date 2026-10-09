@@ -213,6 +213,24 @@ public class RTFLayerInjector {
         LayerPlacementHelper.correctMismatchedLayers(chunk);
     }
 
+    public static void correctMismatchedLayers(ChunkAccess chunk, boolean remapOnly) {
+        LayerPlacementHelper.correctMismatchedLayers(chunk, remapOnly);
+    }
+
+    /**
+     * CHUNK_LOAD re-map. Fixes layers whose RTF surface was swapped to beach/river sand after our
+     * POST_FEATURES injection (grass_block_layer on sand → sand_layer). Runs once the chunk is fully
+     * in the world, so it catches spawn-chunk and cross-chunk-border cases that the LevelChunk.&lt;init&gt;
+     * pass misses (there the run is gated on the RTF random state and can fire before the sand lands).
+     * Re-map only, so correctly-mapped layers are untouched; RTF-POST_FEATURES-gated to stay a no-op
+     * elsewhere.
+     */
+    public static void onChunkLoadRemap(net.minecraft.server.level.ServerLevel world, LevelChunk chunk) {
+        if (!LayerConfig.LAYER_INJECTION || !LayerConfig.RTF_LAYER_INJECTION) return;
+        if (LayerConfig.INJECTION_MODE != LayerConfig.InjectionMode.POST_FEATURES) return;
+        LayerPlacementHelper.correctMismatchedLayers(chunk, true);
+    }
+
     public static void removeLayersAtColumns(ChunkAccess chunk, Set<Integer> changedColumns) {
         LayerPlacementHelper.removeLayersAtColumns(chunk, changedColumns);
     }

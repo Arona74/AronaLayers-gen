@@ -95,6 +95,12 @@ public class NoiseBasedChunkGeneratorMixin {
                         // ChunkGeneratorFeaturesMixin already placed RTF layers (or its own vanilla
                         // fallback). Calling vanilla here would overwrite correct RTF layers.
                         RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
+                        // Re-map only: by LevelChunk.<init> the chunk is fully generated, so any
+                        // surface RTF swapped after our POST_FEATURES injection (grass → beach/river
+                        // sand) is now final. Re-point each layer's block at the current surface below
+                        // it (grass_block_layer on sand → sand_layer) without running the removal
+                        // steps, which have never applied in this mode.
+                        RTFLayerInjector.correctMismatchedLayers(chunk, true);
                     } else {
                         // CARVERS mode: layers placed earlier, run correction pass
                         RTFLayerInjector.correctMismatchedLayers(chunk);

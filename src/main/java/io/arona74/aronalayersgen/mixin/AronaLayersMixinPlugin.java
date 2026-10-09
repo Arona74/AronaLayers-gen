@@ -18,7 +18,9 @@ public class AronaLayersMixinPlugin implements IMixinConfigPlugin {
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (RTF_MIXIN.equals(mixinClassName)) {
-            return FabricLoader.getInstance().isModLoaded("reterraforged");
+            // ReTerraForged or its community fork FreeTerraForged (same TemplateFeature, new package).
+            return FabricLoader.getInstance().isModLoaded("freeterraforged")
+                || FabricLoader.getInstance().isModLoaded("reterraforged");
         }
         if (TELLUS_TREE_MIXIN.equals(mixinClassName)) {
             return FabricLoader.getInstance().isModLoaded("tellus");

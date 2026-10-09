@@ -1116,6 +1116,8 @@ public class LayerPlacementHelper {
             // structure ceiling, so it must not suppress or (via the correction pass) remove the
             // layer below it, which left bare air under pale_garden moss.
             if (isOverwritablePaleVegetation(state.getBlock())) continue;
+            // Nor are vines draped from a decoration log.
+            if (state.getBlock() == Blocks.VINE) continue;
 
             return true;
         }
@@ -1853,6 +1855,12 @@ public class LayerPlacementHelper {
                     // it unlayered.
                     boolean isOverwritablePaleMoss = isOverwritablePaleVegetation(existingState.getBlock());
 
+                    // Vines draped over a decoration log ("fake stump") hang into the placement
+                    // position. They are decoration, not terrain, so overwrite the lowest vine with
+                    // the layer (any vines still attached to the log above stay) instead of the
+                    // not-air guard skipping the column.
+                    boolean isOverwritableVine = existingState.getBlock() == Blocks.VINE;
+
                     boolean isSeagrass = existingState.getBlock() == Blocks.SEAGRASS
                         || existingState.getBlock() == Blocks.TALL_SEAGRASS;
                     boolean isReplaceablePlant = isPostFeaturesContext
@@ -1875,6 +1883,8 @@ public class LayerPlacementHelper {
                         // A stacked carpet strand has its floating remainder cleared below.
                         overwroteHangingMoss = existingState.getBlock() == paleHangingMoss();
                         overwroteMossCarpet = existingState.getBlock() == paleMossCarpet();
+                    } else if (isOverwritableVine) {
+                        // Overwritten by the layer; vines above stay attached to the log.
                     } else if (canReplacePlant) {
                         replacedTallPlant = isTallPlant(existingState);
                         if (isSeagrass) {
@@ -2189,6 +2199,18 @@ public class LayerPlacementHelper {
     // ========== Correction Passes ==========
 
     public static void correctMismatchedLayers(ChunkAccess chunk) {
+        correctMismatchedLayers(chunk, false);
+    }
+
+    /**
+     * @param remapOnly when true, only re-map a layer's block to match the (possibly changed) surface
+     *     below it, and fix waterlogging — skipping the structure / enclosed / underwater REMOVAL
+     *     steps. Used in POST_FEATURES mode, where RTF can swap a surface after our layer was placed
+     *     (e.g. grass → beach/river sand, leaving a grass_block_layer on sand). The removal steps have
+     *     never run in that mode, so applying them here would change layer coverage; only the harmless
+     *     re-map is wanted.
+     */
+    public static void correctMismatchedLayers(ChunkAccess chunk, boolean remapOnly) {
         BlockMappingRegistry registry = getMappingRegistry();
         int corrected = 0;
         int removed = 0;
@@ -2229,13 +2251,13 @@ public class LayerPlacementHelper {
 
                 if (layerPos == null || surfacePos == null) continue;
 
-                if (LayerConfig.STRUCTURE_INJECTION && isInsideStructure(chunk, layerPos)) {
+                if (!remapOnly && LayerConfig.STRUCTURE_INJECTION && isInsideStructure(chunk, layerPos)) {
                     setBlockStateSafe(chunk, layerPos, Blocks.AIR.defaultBlockState());
                     removed++;
                     continue;
                 }
 
-                if (LayerConfig.STRUCTURE_INJECTION && LayerConfig.STRUCTURE_CLEANUP) {
+                if (!remapOnly && LayerConfig.STRUCTURE_INJECTION && LayerConfig.STRUCTURE_CLEANUP) {
                     boolean shouldRemove = false;
 
                     BlockState aboveState = chunk.getBlockState(layerPos.above());
@@ -2264,7 +2286,7 @@ public class LayerPlacementHelper {
                 }
 
                 boolean waterAbove = isWaterAt(chunk, layerPos.above());
-                if (waterAbove && !LayerConfig.UNDERWATER_LAYERS) {
+                if (!remapOnly && waterAbove && !LayerConfig.UNDERWATER_LAYERS) {
                     // Layer was placed underwater (e.g. during CARVERS before water filled in)
                     // but underwater layers are disabled; remove it
                     setBlockStateSafe(chunk, layerPos, Blocks.AIR.defaultBlockState());
@@ -2292,9 +2314,26 @@ public class LayerPlacementHelper {
                 Block currentLayerBlock = layerState.getBlock();
                 boolean changed = false;
 
+                // Light POST_FEATURES re-map: only touch genuine fractional layers (1..7). A maxed
+                // block reads as layers=8 — and so does a full conquest terrain block that exposes a
+                // CR layers property at its full value — so re-mapping those would rewrite full blocks
+                // into layers=8 layer blocks. The surface-swap mismatches this pass exists to fix are
+                // always fractional, so skipping maxed columns is safe.
+                if (remapOnly && readLayerCount(layerState) >= 8) continue;
+
                 if (registry.hasMapping(surfaceBlock)) {
                     int currentLayers = readLayerCount(layerState);
                     Block correctLayerBlock = registry.getLayerBlock(surfaceBlock, currentLayers);
+
+                    // Placement substitutes sand_layer -> wet_sand_layer on wet columns (PLACE_WET_SAND).
+                    // The base mapping returns the dry variant, so treat an in-place wet variant as
+                    // already-correct instead of reverting it back to sand_layer.
+                    if (correctLayerBlock != null && LayerConfig.PLACE_WET_SAND) {
+                        Block wetVariant = getWetSandSubstitute(correctLayerBlock);
+                        if (wetVariant != null && wetVariant == currentLayerBlock) {
+                            correctLayerBlock = currentLayerBlock;
+                        }
+                    }
 
                     if (correctLayerBlock != null && correctLayerBlock != currentLayerBlock) {
                         BlockState newState = correctLayerBlock.defaultBlockState();
@@ -2306,7 +2345,7 @@ public class LayerPlacementHelper {
                         corrected++;
                         changed = true;
                     }
-                } else {
+                } else if (!remapOnly) {
                     setBlockStateSafe(chunk, layerPos,
                         shouldBeWaterlogged ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState());
                     removed++;

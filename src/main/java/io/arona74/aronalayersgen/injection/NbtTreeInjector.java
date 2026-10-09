@@ -6,6 +6,7 @@ import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.NbtTreeRegistry;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -210,26 +211,42 @@ public class NbtTreeInjector {
             return false;
         }
 
-        // Clearance guard — the trunk base (surfacePos) must sit in open, replaceable space AND at
+        // Layer-aware trunk base. The layer injector runs earlier (during worldgen) and has already
+        // placed a layer at this column with the depth-correct count. CR NBT trees are authored with
+        // their stump's `down` property true so the trunk visually meets that layer, so when a layer
+        // is present here, sit the tree one block up ON TOP of it rather than overwriting it. Only
+        // when there is no layer to build on do we apply the buried/clearance guard.
+        //
+        // Clearance guard (no-layer case) — the trunk base must sit in open, replaceable space AND at
         // (not below) the live surface. Tellus's own place() aborts via hasTrunkClearance() when a
         // column has no room for the trunk (buried spots, overhangs, or a stale/low ground Y at
-        // extreme world scale), which is why disabling this feature leaves those columns bare. Our
-        // mixin cancels at HEAD, before that guard, so without this check we stamp the tree inside
-        // solid rock — its sparse conquest foliage replaces deepslate and reads as an "underground
-        // crater". A growing sapling's own position is already air, so this never blocks saplings.
-        // Logged at WARN so it is visible without debug flags while we confirm the cause.
+        // extreme world scale); our mixin cancels at HEAD, before that guard, so without this check we
+        // stamp the tree inside solid rock (the "underground crater"). A growing sapling's own
+        // position is already air, so this never blocks saplings.
         BlockState atOrigin = world.getBlockState(surfacePos);
-        int liveSurfaceY = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, surfacePos.getX(), surfacePos.getZ());
-        boolean solid  = !atOrigin.isAir() && !atOrigin.canBeReplaced();
-        boolean buried = surfacePos.getY() < liveSurfaceY - 2;
-        if (solid || buried) {
-            AronaLayersGen.LOGGER.warn("[NbtTrees] SKIP buried tryPlaceTree block={} origin={} originY={} liveSurfaceY={} (solid={} buried={})",
-                Compat.blockId(atOrigin.getBlock()), surfacePos, surfacePos.getY(), liveSurfaceY, solid, buried);
-            return false;
+        BlockPos treeBase = surfacePos;
+        if (LayerPlacementHelper.hasLayerProperty(atOrigin)) {
+            treeBase = surfacePos.above();
+            BlockState onLayer = world.getBlockState(treeBase);
+            if (!onLayer.isAir() && !onLayer.canBeReplaced()) {
+                if (LayerConfig.logNbtTrees())
+                    AronaLayersGen.LOGGER.info("[NbtTrees] SKIP no-room-above-layer block={} pos={}",
+                        Compat.blockId(onLayer.getBlock()), treeBase);
+                return false;
+            }
+        } else {
+            int liveSurfaceY = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, surfacePos.getX(), surfacePos.getZ());
+            boolean solid  = !atOrigin.isAir() && !atOrigin.canBeReplaced();
+            boolean buried = surfacePos.getY() < liveSurfaceY - 2;
+            if (solid || buried) {
+                AronaLayersGen.LOGGER.warn("[NbtTrees] SKIP buried tryPlaceTree block={} origin={} originY={} liveSurfaceY={} (solid={} buried={})",
+                    Compat.blockId(atOrigin.getBlock()), surfacePos, surfacePos.getY(), liveSurfaceY, solid, buried);
+                return false;
+            }
         }
 
         // ArdaTrees-style placement: rotate the trunk anchor around ORIGIN, then subtract
-        // from the sapling position so the anchor block lands exactly at surfacePos.
+        // from the base position so the anchor block lands exactly at treeBase.
         BlockPos anchor = ANCHOR_CACHE.getOrDefault(nbtPath, BlockPos.ZERO);
         Rotation rotation = ROTATIONS[random.nextInt(ROTATIONS.length)];
 
@@ -245,18 +262,56 @@ public class NbtTreeInjector {
             .addProcessor(BlockIgnoreProcessor.STRUCTURE_AND_AIR);
 
         BlockPos rotatedAnchor = StructureTemplate.transform(anchor, Mirror.NONE, rotation, BlockPos.ZERO);
-        BlockPos placePos = surfacePos.subtract(rotatedAnchor);
+        BlockPos placePos = treeBase.subtract(rotatedAnchor);
+
+        // The tree stamps non-destructively (STRUCTURE_AND_AIR skips its own air cells), so it never
+        // clears anything sitting in those cells. Pre-placed extra_foliage / loose plants at the trunk
+        // base would be left trapped inside it. Clear loose vegetation around the anchor only — a 3x3x3
+        // box centred on the trunk base. Keep anything that blocks motion (solid terrain, logs) AND any
+        // registered layer block (grass_block_layer etc. — a low-count layer does NOT block motion, so
+        // blocksMotion() alone would wrongly clear the terrace under the trunk). What's left to clear is
+        // loose foliage like conquest:grass, which has a layer PROPERTY but is not a layer block and
+        // does not block motion. Water/lava kept via the fluid check.
+        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    m.set(treeBase.getX() + dx, treeBase.getY() + dy, treeBase.getZ() + dz);
+                    BlockState s = world.getBlockState(m);
+                    if (s.isAir()) continue;
+                    if (!s.getFluidState().isEmpty()) continue;
+                    if (s.blocksMotion()) continue;
+                    if (LayerPlacementHelper.getMappingRegistry().isLayerBlock(s.getBlock())) continue;
+                    world.setBlock(m, Blocks.AIR.defaultBlockState(),
+                        Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
+                }
+            }
+        }
 
         try {
             template.placeInWorld(world, placePos, placePos, settings, random, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
         } catch (RuntimeException e) {
-            AronaLayersGen.LOGGER.warn("[NbtTrees] Placement aborted at {} — {}", surfacePos, e.getMessage());
+            AronaLayersGen.LOGGER.warn("[NbtTrees] Placement aborted at {} — {}", treeBase, e.getMessage());
             return false;
         }
 
+        // When the tree sits on a layer, its stump is meant to carry a `down` property so it visually
+        // meets the partial layer. Some trees use plain logs that lack it — for those, swap the layer
+        // below the stump for its full block so the trunk has a solid, seamless base instead of a step.
+        if (treeBase != surfacePos) {
+            BlockState stump = world.getBlockState(treeBase);
+            if (stump.getBlock().getStateDefinition().getProperty("down") == null) {
+                Block full = LayerPlacementHelper.getFullBlock(atOrigin.getBlock());
+                if (full != null) {
+                    world.setBlock(surfacePos, full.defaultBlockState(),
+                        Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
+                }
+            }
+        }
+
         if (LayerConfig.logNbtTrees()) {
-            AronaLayersGen.LOGGER.info("[NbtTrees] Placed '{}' rotation={} at {}",
-                nbtPath.getFileName(), rotation, surfacePos);
+            AronaLayersGen.LOGGER.info("[NbtTrees] Placed '{}' rotation={} at {} (onLayer={})",
+                nbtPath.getFileName(), rotation, treeBase, treeBase != surfacePos);
         }
         return true;
     }
@@ -282,8 +337,15 @@ public class NbtTreeInjector {
         }
     }
 
-    // Finds the lowest log/stem/trunk/hyphae block in the NBT palette — used as the
-    // anchor so the trunk base aligns exactly with the sapling position (ArdaTrees approach).
+    // Finds the lowest trunk block in the NBT palette — used as the anchor so the trunk base aligns
+    // exactly with the sapling/surface position (ArdaTrees approach). "wood" covers the 6-sided
+    // *_wood (and stripped_*_wood) blocks some templates use for the stump.
+    //
+    // A trunk base is often a solid center block ringed by partial *_log_vertical_slab / _quarter /
+    // stair pieces that also match the trunk keywords. Those partials sit at the same Y as the center,
+    // so taking the first match would anchor the tree off-centre on a slab. We therefore prefer a FULL
+    // trunk block (no slab/quarter/stair) and only fall back to a partial one if a template's whole
+    // trunk is built from partials.
     private static BlockPos computeAnchor(CompoundTag nbt) {
         if (!nbt.contains("blocks") || !nbt.contains("palette")) return BlockPos.ZERO;
 
@@ -291,24 +353,41 @@ public class NbtTreeInjector {
         ListTag blocks  = Compat.nbtList(nbt, "blocks");
 
         boolean[] isLog = new boolean[palette.size()];
+        boolean[] isFullLog = new boolean[palette.size()];
         for (int i = 0; i < palette.size(); i++) {
             String name = Compat.nbtString(Compat.nbtCompound(palette, i), "Name");
-            isLog[i] = name.contains("log") || name.contains("stem")
-                    || name.contains("trunk") || name.contains("hyphae");
+            boolean trunk = name.contains("log") || name.contains("stem")
+                    || name.contains("trunk") || name.contains("hyphae")
+                    || name.contains("wood");
+            isLog[i] = trunk;
+            isFullLog[i] = trunk && !name.contains("slab") && !name.contains("quarter")
+                    && !name.contains("stair") && !name.contains("fence") && !name.contains("wall");
         }
 
-        BlockPos best = null;
-        int bestY = Integer.MAX_VALUE;
+        // Anchor at the LOWEST trunk Y (so the base sits on the surface, never mid-trunk), and among
+        // the trunk blocks at that Y prefer a full one (the solid centre) over the partial slab/quarter
+        // buttress pieces. Preferring a full block globally would wrongly pick a full log higher up when
+        // a template's base row is built from partials, placing the tree partly underground.
+        int lowestY = Integer.MAX_VALUE;
         for (int i = 0; i < blocks.size(); i++) {
             CompoundTag block = Compat.nbtCompound(blocks, i);
             if (!isLog[Compat.nbtInt(block, "state")]) continue;
-            ListTag pos = Compat.nbtIntList(block, "pos");
-            int y = Compat.nbtInt(pos, 1);
-            if (y < bestY) {
-                bestY = y;
-                best = new BlockPos(Compat.nbtInt(pos, 0), y, Compat.nbtInt(pos, 2));
-            }
+            int y = Compat.nbtInt(Compat.nbtIntList(block, "pos"), 1);
+            if (y < lowestY) lowestY = y;
         }
-        return best != null ? best : BlockPos.ZERO;
+        if (lowestY == Integer.MAX_VALUE) return BlockPos.ZERO;
+
+        BlockPos full = null, any = null;
+        for (int i = 0; i < blocks.size(); i++) {
+            CompoundTag block = Compat.nbtCompound(blocks, i);
+            int state = Compat.nbtInt(block, "state");
+            if (!isLog[state]) continue;
+            ListTag pos = Compat.nbtIntList(block, "pos");
+            if (Compat.nbtInt(pos, 1) != lowestY) continue;
+            BlockPos p = new BlockPos(Compat.nbtInt(pos, 0), lowestY, Compat.nbtInt(pos, 2));
+            if (any == null) any = p;
+            if (isFullLog[state] && full == null) full = p;
+        }
+        return full != null ? full : any;
     }
 }

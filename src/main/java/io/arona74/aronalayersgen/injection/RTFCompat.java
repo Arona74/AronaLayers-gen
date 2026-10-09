@@ -18,6 +18,44 @@ public class RTFCompat {
     private static boolean rtfChecked = false;
     private static boolean rtfAvailable = false;
 
+    /**
+     * The TerraForged lineage forks we can drive. FreeTerraForged (ETcodehome's community fork) is a
+     * rename of ReTerraForged: same class layout under a new package root, a new mod id, and the
+     * RandomState duck interface renamed RTFRandomState -> FTFRandomState. The two declare each other
+     * incompatible, so at most one is ever present; the first loaded one wins.
+     */
+    public record Flavor(String modId, String displayName, String packageRoot, String randomStateIface) {
+        String cls(String relative) { return packageRoot + "." + relative; }
+    }
+
+    public static final Flavor FREE_TERRAFORGED =
+        new Flavor("freeterraforged", "FreeTerraForged", "etcodehome.freeterraforged", "FTFRandomState");
+    public static final Flavor RE_TERRAFORGED =
+        new Flavor("reterraforged", "ReTerraForged", "raccoonman.reterraforged", "RTFRandomState");
+    private static final Flavor[] FLAVORS = { FREE_TERRAFORGED, RE_TERRAFORGED };
+
+    private static volatile Flavor detectedFlavor;
+    private static volatile boolean flavorChecked = false;
+
+    /** The installed TerraForged fork, or null if none is loaded. */
+    public static Flavor flavor() {
+        if (!flavorChecked) {
+            for (Flavor f : FLAVORS) {
+                if (FabricLoader.getInstance().isModLoaded(f.modId())) { detectedFlavor = f; break; }
+            }
+            flavorChecked = true;
+        }
+        return detectedFlavor;
+    }
+
+    /** True if any supported TerraForged fork is loaded (used for mixin gating). */
+    public static boolean isAnyTerraForgedLoaded() {
+        for (Flavor f : FLAVORS) {
+            if (FabricLoader.getInstance().isModLoaded(f.modId())) return true;
+        }
+        return false;
+    }
+
     private static Class<?> rtfRandomStateClass;
     private static Class<?> generatorContextClass;
     private static Class<?> cellClass;
@@ -30,6 +68,10 @@ public class RTFCompat {
     private static Method cacheProvideMethod;
     private static Method cachePeekMethod;
     private static boolean cachePeekReturnsOptional = false;
+    // FreeTerraForged dropped the chunk-coordinate non-blocking accessors; its only non-blocking
+    // lookup is provideIfPresent(tileX, tileZ), so we convert chunk -> tile via chunkToTile.
+    private static boolean cachePeekTakesTileCoords = false;
+    private static Method chunkToTileMethod;
     private static Method getChunkReaderMethod;
     private static Method getCellMethod;
     private static Method isSubmergedMethod;
@@ -64,22 +106,23 @@ public class RTFCompat {
     }
 
     private static boolean checkRTF() {
-        if (!FabricLoader.getInstance().isModLoaded("reterraforged")) {
-            AronaLayersGen.LOGGER.info("ReTerraForged not detected, RTF layer injection disabled");
+        Flavor fl = flavor();
+        if (fl == null) {
+            AronaLayersGen.LOGGER.info("No TerraForged fork (FreeTerraForged / ReTerraForged) detected, RTF layer injection disabled");
             return false;
         }
 
-        AronaLayersGen.LOGGER.info("ReTerraForged detected, initializing RTF compatibility...");
+        AronaLayersGen.LOGGER.info("{} detected, initializing TerraForged compatibility...", fl.displayName());
 
         try {
-            rtfRandomStateClass = Class.forName("raccoonman.reterraforged.world.worldgen.RTFRandomState");
-            AronaLayersGen.LOGGER.info("Loaded RTFRandomState class");
-            generatorContextClass = Class.forName("raccoonman.reterraforged.world.worldgen.GeneratorContext");
-            cellClass = Class.forName("raccoonman.reterraforged.world.worldgen.cell.Cell");
-            tileCacheClass = Class.forName("raccoonman.reterraforged.world.worldgen.densityfunction.tile.TileCache");
-            tileClass = Class.forName("raccoonman.reterraforged.world.worldgen.densityfunction.tile.Tile");
-            tileChunkClass = Class.forName("raccoonman.reterraforged.world.worldgen.densityfunction.tile.Tile$Chunk");
-            terrainClass = Class.forName("raccoonman.reterraforged.world.worldgen.cell.terrain.Terrain");
+            rtfRandomStateClass = Class.forName(fl.cls("world.worldgen." + fl.randomStateIface()));
+            AronaLayersGen.LOGGER.info("Loaded {} class", fl.randomStateIface());
+            generatorContextClass = Class.forName(fl.cls("world.worldgen.GeneratorContext"));
+            cellClass = Class.forName(fl.cls("world.worldgen.cell.Cell"));
+            tileCacheClass = Class.forName(fl.cls("world.worldgen.densityfunction.tile.TileCache"));
+            tileClass = Class.forName(fl.cls("world.worldgen.densityfunction.tile.Tile"));
+            tileChunkClass = Class.forName(fl.cls("world.worldgen.densityfunction.tile.Tile$Chunk"));
+            terrainClass = Class.forName(fl.cls("world.worldgen.cell.terrain.Terrain"));
 
             generatorContextMethod = rtfRandomStateClass.getMethod("generatorContext");
             cacheField = generatorContextClass.getField("cache");
@@ -97,7 +140,17 @@ public class RTFCompat {
                     cachePeekReturnsOptional = true;
                     AronaLayersGen.LOGGER.info("[RTF] Found TileCache.peek() - will use non-blocking tile access");
                 } catch (NoSuchMethodException e2) {
-                    AronaLayersGen.LOGGER.warn("[RTF] No non-blocking tile accessor found, falling back to provideAtChunk (may cause deadlocks)");
+                    try {
+                        // FreeTerraForged: provideIfPresent works in tile coordinates.
+                        cachePeekMethod = tileCacheClass.getMethod("provideIfPresent", int.class, int.class);
+                        chunkToTileMethod = tileCacheClass.getMethod("chunkToTile", int.class);
+                        cachePeekReturnsOptional = false;
+                        cachePeekTakesTileCoords = true;
+                        AronaLayersGen.LOGGER.info("[RTF] Found TileCache.provideIfPresent() + chunkToTile() - will use non-blocking tile access");
+                    } catch (NoSuchMethodException e3) {
+                        cachePeekMethod = null;
+                        AronaLayersGen.LOGGER.warn("[RTF] No non-blocking tile accessor found, falling back to provideAtChunk (may cause deadlocks)");
+                    }
                 }
             }
             getChunkReaderMethod = tileClass.getMethod("getChunkReader", int.class, int.class);
@@ -110,10 +163,20 @@ public class RTFCompat {
             isRiverMethod = terrainClass.getMethod("isRiver");
 
             generatorField = generatorContextClass.getField("generator");
-            Class<?> heightmapClass = Class.forName("raccoonman.reterraforged.world.worldgen.cell.heightmap.Heightmap");
+            Class<?> heightmapClass = Class.forName(fl.cls("world.worldgen.cell.heightmap.Heightmap"));
             getHeightmapMethod = heightmapClass.getMethod("levels");
-            Class<?> levelsClass = Class.forName("raccoonman.reterraforged.world.worldgen.cell.heightmap.Levels");
-            worldHeightField = levelsClass.getField("worldHeight");
+            Class<?> levelsClass = Class.forName(fl.cls("world.worldgen.cell.heightmap.Levels"));
+            // Vertical scale that maps a normalised cell height to a block Y (Levels.scale()).
+            // ReTerraForged: scale(h) = h * worldHeight. FreeTerraForged split the two: worldHeight
+            // is now the world's vertical extent and scale(h) = h * terrainScaleFactor. Using
+            // worldHeight on FTF puts every predicted surface hundreds of blocks too high, so the
+            // conservative guard rejects it and stamps the fallback count everywhere.
+            try {
+                worldHeightField = levelsClass.getField("terrainScaleFactor");
+                AronaLayersGen.LOGGER.info("[RTF] Using Levels.terrainScaleFactor as the height scale (FreeTerraForged)");
+            } catch (NoSuchFieldException e) {
+                worldHeightField = levelsClass.getField("worldHeight");
+            }
 
             Class<?> generatorType = generatorField.getType();
             if (!heightmapClass.isAssignableFrom(generatorType)) {
@@ -139,7 +202,7 @@ public class RTFCompat {
                 }
             }
 
-            AronaLayersGen.LOGGER.info("ReTerraForged detected, RTF layer injection available");
+            AronaLayersGen.LOGGER.info("{} bound, RTF layer injection available", fl.displayName());
             return true;
         } catch (Exception e) {
             AronaLayersGen.LOGGER.warn("Failed to initialize RTF compatibility: {}", e.getMessage());
@@ -205,7 +268,7 @@ public class RTFCompat {
                             Object levels = getHeightmapMethod.invoke(heightmap);
                             if (levels != null) {
                                 cachedWorldHeight = worldHeightField.getInt(levels);
-                                AronaLayersGen.LOGGER.info("[RTF] Resolved worldHeight from Levels: {}", cachedWorldHeight);
+                                AronaLayersGen.LOGGER.info("[RTF] Resolved height scale from Levels.{}: {}", worldHeightField.getName(), cachedWorldHeight);
                             }
                         }
                     }
@@ -272,7 +335,15 @@ public class RTFCompat {
      */
     private static Object getTileNonBlocking(Object tileCache, int chunkX, int chunkZ) throws Exception {
         if (cachePeekMethod != null) {
-            Object result = cachePeekMethod.invoke(tileCache, chunkX, chunkZ);
+            Object result;
+            if (cachePeekTakesTileCoords) {
+                // FreeTerraForged provideIfPresent(tileX, tileZ): convert chunk -> tile first.
+                int tileX = (int) chunkToTileMethod.invoke(tileCache, chunkX);
+                int tileZ = (int) chunkToTileMethod.invoke(tileCache, chunkZ);
+                result = cachePeekMethod.invoke(tileCache, tileX, tileZ);
+            } else {
+                result = cachePeekMethod.invoke(tileCache, chunkX, chunkZ);
+            }
             if (cachePeekReturnsOptional) {
                 // peek() returns Optional<Tile>; unwrap it
                 if (result == null) return null;

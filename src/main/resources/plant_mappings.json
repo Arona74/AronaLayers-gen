@@ -24,19 +24,19 @@
     "minecraft:orange_tulip": "conquest:orange_tulip",
     "minecraft:oxeye_daisy": "conquest:oxeye_daisy",
     "minecraft:peony": "conquest:peony",
-    "minecraft:pink_petals": "minecraft:pink_petals",
+    "minecraft:pink_petals": "conquest:pink_petals",
     "minecraft:pink_tulip": "conquest:pink_tulip",
     "minecraft:poppy": "conquest:poppy",
     "minecraft:red_mushroom": "conquest:red_mushroom",
     "minecraft:red_tulip": "conquest:red_tulip",
     "minecraft:rose_bush": "conquest:rose_bush",
     "minecraft:seagrass": "conquest:seagrass",
-    "minecraft:short_dry_grass": "minecraft:short_dry_grass",
+    "minecraft:short_dry_grass": "conquest:short_dry_grass",
     "minecraft:sunflower": "conquest:sunflower",
-    "minecraft:tall_dry_grass": "minecraft:tall_dry_grass",
+    "minecraft:tall_dry_grass": "conquest:tall_dry_grass",
     "minecraft:tall_grass": "conquest:tall_grass",
     "minecraft:tall_seagrass": "conquest:tall_seagrass",
     "minecraft:white_tulip": "conquest:white_tulip",
-    "minecraft:wildflowers": "minecraft:wildflowers"
+    "minecraft:wildflowers": "conquest:wildflowers"
   }
 }

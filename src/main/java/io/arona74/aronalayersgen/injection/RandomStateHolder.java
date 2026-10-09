@@ -97,17 +97,23 @@ public class RandomStateHolder {
         worldSeed = Long.MIN_VALUE;
     }
 
+    /** RTFRandomState (ReTerraForged) or FTFRandomState (FreeTerraForged) duck interface. */
+    private static boolean isTerraForgedRandomStateIface(Class<?> iface) {
+        String n = iface.getName();
+        return n.endsWith(".RTFRandomState") || n.endsWith(".FTFRandomState");
+    }
+
     private static boolean isRTFRandomState(Object obj) {
         if (obj == null) return false;
 
         for (Class<?> iface : obj.getClass().getInterfaces()) {
-            if (iface.getName().contains("RTFRandomState")) return true;
+            if (isTerraForgedRandomStateIface(iface)) return true;
         }
 
         Class<?> superClass = obj.getClass().getSuperclass();
         while (superClass != null && superClass != Object.class) {
             for (Class<?> iface : superClass.getInterfaces()) {
-                if (iface.getName().contains("RTFRandomState")) return true;
+                if (isTerraForgedRandomStateIface(iface)) return true;
             }
             superClass = superClass.getSuperclass();
         }
