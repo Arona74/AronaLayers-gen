@@ -72,6 +72,13 @@ public class RTFCompat {
     // lookup is provideIfPresent(tileX, tileZ), so we convert chunk -> tile via chunkToTile.
     private static boolean cachePeekTakesTileCoords = false;
     private static Method chunkToTileMethod;
+    // FreeTerraForged (2026-10+): tiles are reference-counted. acquireIfPresent(tileX, tileZ) returns a
+    // Lease that must stay open while cells are read and be closed afterwards, or the tile can be
+    // recycled under us (and leaked leases pin the cache).
+    private static boolean leaseMode = false;
+    private static Method leaseTileMethod;
+    private static Method leaseCloseMethod;
+    private static Method leaseAcquireBlockingMethod; // TileCache.acquire(tileX, tileZ), regenerates on miss
     private static Method getChunkReaderMethod;
     private static Method getCellMethod;
     private static Method isSubmergedMethod;
@@ -127,7 +134,11 @@ public class RTFCompat {
             generatorContextMethod = rtfRandomStateClass.getMethod("generatorContext");
             cacheField = generatorContextClass.getField("cache");
 
-            cacheProvideMethod = tileCacheClass.getMethod("provideAtChunk", int.class, int.class);
+            try {
+                cacheProvideMethod = tileCacheClass.getMethod("provideAtChunk", int.class, int.class);
+            } catch (NoSuchMethodException noProvide) {
+                cacheProvideMethod = null; // lease-based FreeTerraForged has no blocking provideAtChunk
+            }
             // Prefer a non-blocking "if present" accessor to avoid deadlocks during chunk gen.
             // Try provideAtChunkIfPresent (returns Tile directly), then peek (returns Optional<Tile>).
             try {
@@ -148,8 +159,27 @@ public class RTFCompat {
                         cachePeekTakesTileCoords = true;
                         AronaLayersGen.LOGGER.info("[RTF] Found TileCache.provideIfPresent() + chunkToTile() - will use non-blocking tile access");
                     } catch (NoSuchMethodException e3) {
+                      try {
+                        // FreeTerraForged lease API: acquireIfPresent(tileX, tileZ) -> Lease{tile(), close()}
+                        cachePeekMethod = tileCacheClass.getMethod("acquireIfPresent", int.class, int.class);
+                        chunkToTileMethod = tileCacheClass.getMethod("chunkToTile", int.class);
+                        Class<?> leaseClass = cachePeekMethod.getReturnType();
+                        leaseTileMethod = leaseClass.getMethod("tile");
+                        leaseCloseMethod = leaseClass.getMethod("close");
+                        try {
+                            leaseAcquireBlockingMethod = tileCacheClass.getMethod("acquire", int.class, int.class);
+                        } catch (NoSuchMethodException noAcquire) {
+                            leaseAcquireBlockingMethod = null;
+                        }
+                        cachePeekReturnsOptional = false;
+                        cachePeekTakesTileCoords = true;
+                        leaseMode = true;
+                        AronaLayersGen.LOGGER.info("[RTF] Found TileCache.acquireIfPresent() lease API - will use non-blocking leased tile access");
+                      } catch (NoSuchMethodException e4) {
                         cachePeekMethod = null;
                         AronaLayersGen.LOGGER.warn("[RTF] No non-blocking tile accessor found, falling back to provideAtChunk (may cause deadlocks)");
+                        if (cacheProvideMethod == null) throw e4;
+                      }
                     }
                 }
             }
@@ -282,8 +312,11 @@ public class RTFCompat {
             int chunkX = Compat.chunkX(chunk.getPos());
             int chunkZ = Compat.chunkZ(chunk.getPos());
 
-            Object tile = getTileNonBlocking(tileCache, chunkX, chunkZ);
-            if (tile == null) return false;
+            Object handle = getTileNonBlocking(tileCache, chunkX, chunkZ);
+            if (handle == null) return false;
+            // In lease mode `handle` is a Lease: keep it open for the whole pass, close in finally.
+            try {
+            Object tile = leaseMode ? leaseTileMethod.invoke(handle) : handle;
 
             Object tileChunk = getChunkReaderMethod.invoke(tile, chunkX, chunkZ);
             if (tileChunk == null) return false;
@@ -315,6 +348,13 @@ public class RTFCompat {
             });
 
             return true;
+            } finally {
+                if (leaseMode) {
+                    try { leaseCloseMethod.invoke(handle); } catch (Exception closeFail) {
+                        AronaLayersGen.LOGGER.warn("[RTF] Failed to release tile lease at {},{}: {}", chunkX, chunkZ, closeFail.toString());
+                    }
+                }
+            }
         } catch (Exception e) {
             AronaLayersGen.LOGGER.warn("[RTF] Layer injection failed at {},{}: {}: {}",
                 Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()),
@@ -341,6 +381,17 @@ public class RTFCompat {
                 int tileX = (int) chunkToTileMethod.invoke(tileCache, chunkX);
                 int tileZ = (int) chunkToTileMethod.invoke(tileCache, chunkZ);
                 result = cachePeekMethod.invoke(tileCache, tileX, tileZ);
+                // FreeTerraForged's lease cache holds only 4-32 tiles with a short TTL, so under busy
+                // worldgen the chunk's tile is often already evicted by its feature step. A miss used
+                // to leave the chunk bare (the vanilla fallback is a no-op on RTF worlds). FTF's own
+                // worldgen uses the blocking acquire() on worker threads - it just regenerates the
+                // tile - so do the same, but never on the server thread.
+                if (result == null && leaseMode && leaseAcquireBlockingMethod != null && !isServerThread()) {
+                    result = leaseAcquireBlockingMethod.invoke(tileCache, tileX, tileZ);
+                    if (LayerConfig.logRtf()) {
+                        AronaLayersGen.LOGGER.info("[RTF] Tile {},{} evicted from FTF cache - regenerated via acquire()", tileX, tileZ);
+                    }
+                }
             } else {
                 result = cachePeekMethod.invoke(tileCache, chunkX, chunkZ);
             }
@@ -354,5 +405,9 @@ public class RTFCompat {
         }
         // Fallback: provideAtChunk blocks — only reached if no non-blocking accessor was found
         return cacheProvideMethod.invoke(tileCache, chunkX, chunkZ);
+    }
+
+    private static boolean isServerThread() {
+        return "Server thread".equals(Thread.currentThread().getName());
     }
 }
