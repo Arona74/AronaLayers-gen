@@ -1,0 +1,80 @@
+plugins {
+    // 26.x ships deobfuscated: this is the non-remapping Loom plugin, and there
+    // is no mappings dependency because there is nothing to map to.
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    id 'maven-publish'
+}
+
+version = rootProject.mod_version + "+mc${minecraft_version}"
+group = rootProject.maven_group
+
+base {
+    archivesName = rootProject.archives_base_name
+}
+
+// Pull shared Java source and resources from the root src/ tree.
+// Version-specific overrides (mixins that differ across versions) go in this subproject's own src/.
+//
+// 26.3 rewrote worldgen (density functions moved to a compiled-sampler API, Feature became an
+// interface with TreeFeature.place(level, generator, random, origin), FeaturePlaceContext and
+// TreeConfiguration removed). The shared files built on the old API are therefore replaced here
+// rather than patched for every version: they are left out of the staged shared source and this
+// subproject's own src/ supplies the 26.3 versions (the TerraForged template mixin is dropped
+// outright - FreeTerraForged only exists for 1.21.1).
+def sharedOverridden = [
+    'io/arona74/aronalayersgen/injection/FractionalSurfaceSampler.java',
+    'io/arona74/aronalayersgen/mixin/NbtTreeFeatureMixin.java',
+    'io/arona74/aronalayersgen/mixin/TreeSoilMixin.java',
+    'io/arona74/aronalayersgen/mixin/NbtTreeTemplateFeatureMixin.java',
+]
+def stagedSharedJava = layout.buildDirectory.dir('sharedJava')
+def stageSharedJava = tasks.register('stageSharedJava', Sync) {
+    from(rootProject.file('src/main/java')) {
+        exclude sharedOverridden
+    }
+    into stagedSharedJava
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir(stageSharedJava)
+        }
+        resources {
+            srcDirs += rootProject.file('src/main/resources')
+        }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    // Nothing is remapped here, so these are plain implementation dependencies.
+    implementation "net.fabricmc:fabric-loader:${loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 25
+}
+
+java {
+    // 26.3 needs Java 25. Declared as a toolchain rather than relying on JAVA_HOME,
+    // because the other modules still target 17 and 21 in the same build.
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+    withSourcesJar()
+}
+
+jar {
+    from(rootProject.file('LICENSE')) {
+        rename { "${it}_${rootProject.archives_base_name}" }
+    }
+}

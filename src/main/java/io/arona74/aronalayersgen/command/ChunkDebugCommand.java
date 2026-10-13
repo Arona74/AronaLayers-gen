@@ -574,7 +574,7 @@ public class ChunkDebugCommand {
                 detail = " layers=" + st.getValue(BlockStateProperties.LAYERS);
             }
             send(source, String.format("    Y=%d  %s%s%s", y, Compat.blockId(st.getBlock()), detail,
-                    st.blocksMotion() ? "  [blocksMotion]" : ""));
+                    Compat.blocksMotion(st) ? "  [blocksMotion]" : ""));
         }
         send(source, "  surfIceOrWater=" + surfIceOrWater + "  surfPowderSnow=" + surfPowderSnow);
         send(source, "  isSnowyBiome=" + isSnowyBiome + "  vanillaSnowAtPlacement=" + vanillaSnowAtPlacement

@@ -237,7 +237,7 @@ public class TellusCompat {
      * the submerged/bathymetry readings this probe depends on.
      */
     private static boolean isNaturalGround(BlockState state) {
-        return state.blocksMotion()
+        return Compat.blocksMotion(state)
             && !LayerPlacementHelper.hasLayerProperty(state)
             && !state.is(BlockTags.LEAVES)
             && !state.is(BlockTags.LOGS);

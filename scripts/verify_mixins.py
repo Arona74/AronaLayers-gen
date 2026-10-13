@@ -15,7 +15,7 @@ Deobfuscated versions (26.x)
     mixin targets, looked up in the Minecraft jar.
 
 Usage:
-    python scripts/verify_mixins.py <module_dir> [<module_dir> ...]
+    python scripts/verify_mixins.py [<module_dir> ...]     (no arguments: every v* module)
 
 Exits non-zero if any target fails to resolve.
 """
@@ -93,6 +93,12 @@ def check(jar, mc_jar, deobf):
             checked += 1
             bare = name.split("(")[0]
             if not deobf:
+                # A @Pseudo mixin aimed at another mod by string (e.g. Tellus) has no net/minecraft
+                # target class, and that mod's own methods are never obfuscated, so the
+                # intermediary rule does not apply. (Foreign mixins overriding a vanilla method,
+                # like the TerraForged TemplateFeature one, still use method_NNNN and pass anyway.)
+                if not tgt_classes:
+                    continue
                 if not INTERMEDIARY.match(name) and bare not in NEVER_OBFUSCATED:
                     problems.append((cls, f'method="{name}" not remapped'))
                 continue
@@ -113,7 +119,9 @@ def check(jar, mc_jar, deobf):
 
 def main():
     bad = 0
-    for mod in sys.argv[1:]:
+    # No arguments used to check nothing and exit 0 - a silent pass. Default to every module.
+    mods = sys.argv[1:] or sorted(d for d in glob.glob("v*") if os.path.isdir(d))
+    for mod in mods:
         jars = [x for x in glob.glob(os.path.join(mod, "build/libs/*.jar")) if "sources" not in x]
         if not jars:
             print(f"{mod}: no jar built")

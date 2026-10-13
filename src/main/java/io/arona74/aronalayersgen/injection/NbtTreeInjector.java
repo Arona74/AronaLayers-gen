@@ -280,7 +280,7 @@ public class NbtTreeInjector {
                     BlockState s = world.getBlockState(m);
                     if (s.isAir()) continue;
                     if (!s.getFluidState().isEmpty()) continue;
-                    if (s.blocksMotion()) continue;
+                    if (Compat.blocksMotion(s)) continue;
                     if (LayerPlacementHelper.getMappingRegistry().isLayerBlock(s.getBlock())) continue;
                     world.setBlock(m, Blocks.AIR.defaultBlockState(),
                         Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);

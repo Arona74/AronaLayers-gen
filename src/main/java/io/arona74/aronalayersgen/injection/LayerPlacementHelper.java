@@ -147,7 +147,7 @@ public class LayerPlacementHelper {
      */
     public static boolean isGroundBlock(BlockState state) {
         if (state.is(Blocks.POWDER_SNOW)) return true;
-        if (!state.blocksMotion()) return false;
+        if (!Compat.blocksMotion(state)) return false;
         if (getMappingRegistry().isLayerBlock(state.getBlock())) return false;
         return !state.is(BlockTags.LEAVES) && !state.is(BlockTags.LOGS);
     }
@@ -1368,7 +1368,7 @@ public class LayerPlacementHelper {
             int foliageGuard = 0;
             while (probeY > Compat.minY(chunk) && foliageGuard++ < 64) {
                 BlockState s = chunk.getBlockState(new BlockPos(worldX, probeY, worldZ));
-                if (s.blocksMotion() && !s.is(BlockTags.LEAVES) && !s.is(BlockTags.LOGS)) break;
+                if (Compat.blocksMotion(s) && !s.is(BlockTags.LEAVES) && !s.is(BlockTags.LOGS)) break;
                 probeY--;
             }
             surfaceY = probeY + 1;

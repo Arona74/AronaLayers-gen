@@ -178,4 +178,9 @@ public final class Compat {
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents.CHUNK_LOAD.register(
                 (world, chunk) -> handler.accept(world, chunk));
     }
+
+    /** Whether a state blocks motion (the legacy "solid material" test OCEAN_FLOOR uses). */
+    public static boolean blocksMotion(net.minecraft.world.level.block.state.BlockState state) {
+        return state.blocksMotion();
+    }
 }
