@@ -14,6 +14,9 @@
   "entrypoints": {
     "main": [
       "io.arona74.aronalayersgen.AronaLayersGen"
+    ],
+    "client": [
+      "io.arona74.aronalayersgen.client.AronaLayersGenClient"
     ]
   },
   "mixins": [
@@ -24,5 +27,8 @@
     "minecraft": "1.21.1",
     "java": ">=21",
     "fabric-api": "*"
+  },
+  "breaks": {
+    "aronalayersextras": "<1.3.0"
   }
 }

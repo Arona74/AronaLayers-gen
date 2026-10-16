@@ -2,6 +2,7 @@ package io.arona74.aronalayersgen;
 
 import io.arona74.aronalayersgen.block.LayerBlock;
 import io.arona74.aronalayersgen.block.PowderSnowLayerBlock;
+import io.arona74.aronalayersgen.grounding.GroundingFlags;
 import io.arona74.aronalayersgen.command.ChunkDebugCommand;
 import io.arona74.aronalayersgen.command.TellusDebugCommand;
 import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
@@ -62,6 +63,10 @@ public class AronaLayersGen implements ModInitializer {
         // injection; runs at chunk-load so it catches spawn/cross-border chunks the in-init pass misses.
         Compat.registerChunkLoad(io.arona74.aronalayersgen.injection.RTFLayerInjector::onChunkLoadRemap);
         ServerTickEvents.END_SERVER_TICK.register(server -> NbtTreeInjector.flushReadyChunks());
+
+        // Plant grounding answers "not grounded" until now: shapes are queried during vanilla's
+        // block bootstrap, before the config can safely load (see GroundingFlags).
+        GroundingFlags.ready = true;
 
         LOGGER.info("Arona Layers Generator initialized successfully");
         LOGGER.info("[Config] cr_nbt_trees={} vanilla_fallback={} layer_injection={} rtf_layer_injection={} plant_injection={} tree_injection={}",

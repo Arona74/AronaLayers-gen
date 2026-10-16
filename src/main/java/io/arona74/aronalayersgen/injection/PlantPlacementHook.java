@@ -1,6 +1,8 @@
 package io.arona74.aronalayersgen.injection;
 
 import io.arona74.aronalayersgen.LayerConfig;
+import io.arona74.aronalayersgen.grounding.GroundingFlags;
+import io.arona74.aronalayersgen.grounding.PlantGrounding;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
@@ -43,6 +45,25 @@ public final class PlantPlacementHook {
             return check.mayPlaceOn(world.getBlockState(surfacePos), world, surfacePos);
         }
         return null;
+    }
+
+    /**
+     * The look-through for column plants (cactus, sugar cane), which do not extend the plant base
+     * class and so never reach {@link #lookThroughLayers}.
+     *
+     * <p>Rather than re-implementing their survival rules (the soil tags changed between versions:
+     * SAND/DIRT up to 1.21.11, SUPPORTS_CACTUS / SUPPORTS_SUGAR_CANE in 26.x), vanilla's own check
+     * runs with every read at the soil level moved one block down when a layer block is the soil.
+     * The soil test then sees the block under the layer, and sugar cane's water test looks beside
+     * that block, where the water actually is; the plant's own level (cactus neighbours, the block
+     * above) is untouched.
+     *
+     * @return the position vanilla should read instead of {@code query}
+     */
+    public static BlockPos lookThroughLayerForColumnPlant(LevelReader world, BlockPos pos, BlockPos query) {
+        if (query.getY() != pos.getY() - 1) return query;
+        if (!GroundingFlags.ready || !(LayerConfig.PLANT_GROUNDING || LayerConfig.PLANT_INJECTION)) return query;
+        return PlantGrounding.isLayerSoil(world.getBlockState(pos.below())) ? query.below() : query;
     }
 
     /**

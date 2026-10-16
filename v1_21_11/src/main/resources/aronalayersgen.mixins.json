@@ -18,7 +18,13 @@
     "SaplingBlockGrowMixin",
     "TreeSoilMixin",
     "SnowBlockMixin",
-    "EntityTouchingPowderSnowAccessor"
+    "EntityTouchingPowderSnowAccessor",
+    "PlantGroundingStateMixin",
+    "PlantGroundingClipMixin",
+    "ClipContextAccessor",
+    "ColumnPlantSurviveMixin",
+    "BambooSurviveMixin",
+    "BambooPlacementMixin"
   ],
   "client": [],
   "injectors": {

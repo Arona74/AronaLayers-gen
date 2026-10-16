@@ -40,6 +40,7 @@ Columns where a carver cut into the surface after the noise stage (cave mouths, 
 - **Tellus-based layer injection** — layers driven by real-world elevation data, with land-cover-aware water and snow handling
 - **Dual backend** — Conquest Reforged or VanillaLayerPlus
 - **Plant handling** — converts vanilla plants to CR equivalents, or shifts them up for VLP
+- **Plant grounding** — plants standing on a layer block are drawn, outlined and collided with on the layer's surface instead of floating above it; plants are detected automatically, vanilla and modded alike
 - **Underwater layers** — waterlogged layer blocks on ocean and river floors
 - **Rocks & foliage** — biome-weighted CR rock and foliage placement above layers
 - **Structure awareness** — skip or clean up layers inside, around and beneath structures
@@ -56,6 +57,7 @@ Columns where a carver cut into the surface after the noise stage (cave mouths, 
 | 1.21.11 | 0.19.3+ | 0.141.5+ | 21 |
 | 26.1.2 | 0.19.3+ | 0.154.2+ | 25 |
 | 26.2 | 0.19.3+ | 0.156.0+ | 25 |
+| 26.3 | 0.19.5+ | 0.162.0+ | 25 |
 
 Plus a layer block provider:
 
@@ -69,12 +71,16 @@ A terrain source is **optional** — vanilla worldgen, including worldgen mods b
 
 > Availability differs per Minecraft version. Conquest Reforged and ReTerraForged do not exist on every supported version; check before planning a setup. Without a layer block provider installed the mod loads but layer injection stays inactive, and says so in the log.
 
+Install the mod on **both client and server**: plant grounding moves plants' outline and collision boxes, which both sides must agree on. The lowered plant model is drawn through the Fabric Rendering API, which vanilla's renderer and Sodium 0.6+ provide; on 1.20.1 with Sodium 0.5 you also need [Indium](https://modrinth.com/mod/indium), otherwise plants are drawn unlowered (the log says so).
+
+> **AronaLayers-extras before 1.3.0 is incompatible** and the loader will refuse to start with it: it had its own copy of the plant offset, and the two together lower plants twice. Update Extras to 1.3.0.
+
 ## Installation
 
 1. Install Fabric Loader and Fabric API for your Minecraft version (see the table above)
 2. Install Conquest Reforged **or** VanillaLayerPlus
 3. Optionally install ReTerraForged or Tellus — vanilla worldgen works without either
-4. Optional but strongly recommended, install my [AronaLayers-extras mod](https://github.com/Arona74/AronaLayers-extras) for plant visual offset and few layer mechanics
+4. Optional but strongly recommended, install my [AronaLayers-extras mod](https://github.com/Arona74/AronaLayers-extras) (1.3.0+) for a few layer mechanics: grass spreading, layers falling with sand, wet sand
 5. Place the mod JAR for your Minecraft version in your mods folder
 6. Launch once to generate config files in `config/aronalayersgen/`
 
@@ -166,6 +172,26 @@ These are the fastest way to work out why a particular column did or did not get
 | `underwater_layers` | `true` | Place waterlogged layers on underwater surfaces |
 | `replace_dirt_path` | `true` | Replace dirt_path with the mapped solid block when placing a layer on it |
 | `place_wet_sand` | `true` | Use CR wet_sand_layer instead of sand_layer when the position is waterlogged or below sea level |
+
+---
+
+### Plant Grounding
+
+Plants standing on a partial-height layer block are lowered onto its surface. This happens at runtime, not at generation: it applies to generated and hand-placed plants alike, follows the layer when its count changes, and needs no world edit.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `plant_grounding` | `true` | Lower plants onto the layer block below them |
+| `plant_grounding_shapes` | `true` | Also lower their selection outline and collision box, so they are targeted where they are drawn. `false` = visual only |
+| `plant_grounding_force_blocks` | `["minecraft:light_gray_petals"]` | Block ids to ground even though detection rejects them |
+| `plant_grounding_exclude_blocks` | `[]` | Block ids never to ground, even though detection accepts them |
+
+Plants are **detected, not listed**. A block is grounded when it extends the plant base class (flowers, grass, ferns, saplings, mushrooms, crops, seagrass… on any version, modded subclasses included), is a column plant (sugar cane, bamboo, cactus, kelp, lowered from their base), or has a random ground offset and no collision (how most modded plants that don't extend the base class are built). Skipped automatically:
+
+- blocks that already sit on layers by themselves: a `layers`/`layer` property or Conquest Reforged's `offset_toggle` — this is why converted CR plants are never lowered twice
+- lily pads, and hanging states (mangrove propagules under leaves)
+
+A plant only moves when the block under it is a layer block (a `layers` or `layer` property), so a wrong match on ordinary ground, farmland or soul sand stays put. The two lists are only for the cases detection gets wrong. Changes need a restart.
 
 ---
 

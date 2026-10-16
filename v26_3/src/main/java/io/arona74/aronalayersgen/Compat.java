@@ -200,4 +200,13 @@ public final class Compat {
             && block != net.minecraft.world.level.block.Blocks.BAMBOO_SAPLING
             && state.isSolid();
     }
+
+    /**
+     * The plant base class every ground plant extends. 1.21.11 renamed the old BushBlock to
+     * VegetationBlock and reused BushBlock for a narrow subclass, so testing BushBlock here would
+     * compile and silently match only a handful of plants.
+     */
+    public static boolean isPlantBase(net.minecraft.world.level.block.Block block) {
+        return block instanceof net.minecraft.world.level.block.VegetationBlock;
+    }
 }

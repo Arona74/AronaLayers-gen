@@ -183,4 +183,9 @@ public final class Compat {
     public static boolean blocksMotion(net.minecraft.world.level.block.state.BlockState state) {
         return state.blocksMotion();
     }
+
+    /** The plant base class every ground plant extends. Up to 1.21.1 that is BushBlock. */
+    public static boolean isPlantBase(net.minecraft.world.level.block.Block block) {
+        return block instanceof net.minecraft.world.level.block.BushBlock;
+    }
 }

@@ -8,6 +8,8 @@ import io.arona74.aronalayersgen.FoliageMappingRegistry;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.PlantMappingRegistry;
 import io.arona74.aronalayersgen.RockMappingRegistry;
+import io.arona74.aronalayersgen.grounding.GroundingFlags;
+import io.arona74.aronalayersgen.grounding.PlantGrounding;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.tags.BlockTags;
@@ -1118,6 +1120,10 @@ public class LayerPlacementHelper {
             if (isOverwritablePaleVegetation(state.getBlock())) continue;
             // Nor are vines draped from a decoration log.
             if (state.getBlock() == Blocks.VINE) continue;
+            // Nor is a plant standing on this column. A 2+ block cactus or sugar cane (or the
+            // upper half of a tall plant) is neither air nor replaceable, so its upper blocks
+            // read as a roof and the column under it was skipped as "inside a structure".
+            if (GroundingFlags.ready && PlantGrounding.isGroundedBlock(state.getBlock())) continue;
 
             return true;
         }
@@ -1813,6 +1819,7 @@ public class LayerPlacementHelper {
 
         Block replacedPlant = null;
         BlockState replacedPlantState = null;
+        boolean liftedPlant = false;
         if (layerCount > 0) {
             Block layerBlock = useSnowLayers ? Blocks.SNOW : getMappingRegistry().getLayerBlock(surfaceBlock, layerCount);
             // A native layer block at 8 (powder_snow_layer, deepslate_layer, moss_layer) converts to
@@ -1936,6 +1943,11 @@ public class LayerPlacementHelper {
                                 setBlockStateSafe(chunk, abovePos.above(), Blocks.AIR.defaultBlockState());
                             }
                         }
+                    } else if (liftGroundedPlant(chunk, abovePos)) {
+                        // Plant with no CR conversion (cactus, sugar cane, unmapped or modded plants):
+                        // lifted one block, so the layer goes under it and plant grounding lowers it
+                        // back onto the layer surface.
+                        liftedPlant = true;
                     } else {
                         debugSkipNotAir.incrementAndGet();
                         return false;
@@ -2080,23 +2092,63 @@ public class LayerPlacementHelper {
         BlockPos placedLayerPos = layerPlaced ? abovePos : null;
 
         boolean enhancedRockHandled = false;
-        if (replacedPlant == null && LayerConfig.CONQUEST_ENHANCED_ROCKS) {
+        if (replacedPlant == null && !liftedPlant && LayerConfig.CONQUEST_ENHANCED_ROCKS) {
             enhancedRockHandled = tryPlaceEnhancedRock(chunk, decorPos, surfaceBlock, worldX, worldZ, placedLayerPos);
         }
 
-        if (replacedPlant == null && LayerConfig.PLACE_ROCKS && !enhancedRockHandled) {
+        if (replacedPlant == null && !liftedPlant && LayerConfig.PLACE_ROCKS && !enhancedRockHandled) {
             tryPlaceRock(chunk, decorPos, surfaceBlock, worldX, worldZ, placedLayerPos);
         }
 
-        if (replacedPlant == null && LayerConfig.CONQUEST_ENHANCED_EXTRA_FOLIAGE) {
+        if (replacedPlant == null && !liftedPlant && LayerConfig.CONQUEST_ENHANCED_EXTRA_FOLIAGE) {
             tryPlaceEnhancedFoliage(chunk, decorPos, surfaceBlock, worldX, worldZ, placedLayerPos);
         }
 
-        if (replacedPlant == null && LayerConfig.PLACE_EXTRA_FOLIAGE) {
+        if (replacedPlant == null && !liftedPlant && LayerConfig.PLACE_EXTRA_FOLIAGE) {
             tryPlaceExtraFoliage(chunk, decorPos, surfaceBlock, worldX, worldZ, placedLayerPos);
         }
 
         return layerPlaced;
+    }
+
+    /** Tallest plant stack {@link #liftGroundedPlant} will move. */
+    private static final int MAX_LIFTED_PLANT = 32;
+
+    /**
+     * Moves a grounded plant standing at {@code pos} up one block, so a layer can take its place.
+     *
+     * <p>The whole plant moves: every grounded block stacked from {@code pos} upward (a cactus or
+     * sugar cane column, the upper half of a double plant, a flower on a cactus). Plant grounding
+     * then draws and outlines it on the layer's surface, so it ends up where it stood, sitting on
+     * the layer instead of under it. Refused, leaving the column unlayered as before, when grounding
+     * is off, the block is not a grounded plant, the plant holds water (seagrass, kelp: a waterlogged
+     * stack cannot be shifted into air), or there is no air above the stack to move into.
+     *
+     * @return true if the plant was lifted and {@code pos} is free for the layer
+     */
+    private static boolean liftGroundedPlant(ChunkAccess chunk, BlockPos pos) {
+        if (!LayerConfig.PLANT_GROUNDING || !GroundingFlags.ready) return false;
+
+        int top = pos.getY();
+        while (true) {
+            BlockState state = chunk.getBlockState(new BlockPos(pos.getX(), top, pos.getZ()));
+            if (!PlantGrounding.isGroundedBlock(state.getBlock()) || !state.getFluidState().isEmpty()) break;
+            top++;
+            if (top - pos.getY() > MAX_LIFTED_PLANT) return false;
+        }
+        if (top == pos.getY()) return false;                    // not a grounded plant at all
+        if (top >= Compat.maxY(chunk)) return false;
+        if (!chunk.getBlockState(new BlockPos(pos.getX(), top, pos.getZ())).isAir()) return false;
+
+        for (int y = top - 1; y >= pos.getY(); y--) {
+            BlockPos from = new BlockPos(pos.getX(), y, pos.getZ());
+            setBlockStateSafe(chunk, from.above(), chunk.getBlockState(from));
+        }
+        if (LayerConfig.logPlants()) {
+            AronaLayersGen.LOGGER.info("[Plant Debug] Lifted {} ({} blocks) at {} for a layer",
+                Compat.blockId(chunk.getBlockState(pos.above()).getBlock()), top - pos.getY(), pos);
+        }
+        return true;
     }
 
     /**

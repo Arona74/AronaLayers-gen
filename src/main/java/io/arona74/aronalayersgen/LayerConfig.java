@@ -1,12 +1,16 @@
 package io.arona74.aronalayersgen;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Configuration for layer generation.
@@ -433,6 +437,26 @@ public class LayerConfig {
      */
     public static boolean CR_NBT_TREES_VANILLA_FALLBACK = true;
 
+    /**
+     * Lower plants standing on a partial-height layer block so they sit on its surface instead of
+     * floating at the top of the block. Applies at runtime to every plant, generated or placed by
+     * hand. Which blocks count as plants is detected automatically (see PlantGrounding); the two
+     * lists below only override that detection. Must match on client and server.
+     */
+    public static boolean PLANT_GROUNDING = true;
+
+    /**
+     * Also lower the selection outline and collision box of grounded plants, so they can be
+     * targeted where they are drawn. false = visual offset only.
+     */
+    public static boolean PLANT_GROUNDING_SHAPES = true;
+
+    /** Block ids grounded even though auto-detection rejects them. */
+    public static List<String> PLANT_GROUNDING_FORCE_BLOCKS = new ArrayList<>(List.of("minecraft:light_gray_petals"));
+
+    /** Block ids never grounded, even though auto-detection accepts them. */
+    public static List<String> PLANT_GROUNDING_EXCLUDE_BLOCKS = new ArrayList<>();
+
     static {
         loadConfig();
     }
@@ -557,6 +581,26 @@ public class LayerConfig {
         if (config.has("second_pass_cleanup")) SECOND_PASS_CLEANUP = config.get("second_pass_cleanup").getAsBoolean();
         if (config.has("cr_nbt_trees")) CR_NBT_TREES = config.get("cr_nbt_trees").getAsBoolean();
         if (config.has("cr_nbt_trees_vanilla_fallback")) CR_NBT_TREES_VANILLA_FALLBACK = config.get("cr_nbt_trees_vanilla_fallback").getAsBoolean();
+        if (config.has("plant_grounding")) PLANT_GROUNDING = config.get("plant_grounding").getAsBoolean();
+        if (config.has("plant_grounding_shapes")) PLANT_GROUNDING_SHAPES = config.get("plant_grounding_shapes").getAsBoolean();
+        if (config.has("plant_grounding_force_blocks")) PLANT_GROUNDING_FORCE_BLOCKS = stringList(config.get("plant_grounding_force_blocks"));
+        if (config.has("plant_grounding_exclude_blocks")) PLANT_GROUNDING_EXCLUDE_BLOCKS = stringList(config.get("plant_grounding_exclude_blocks"));
+    }
+
+    private static List<String> stringList(JsonElement element) {
+        List<String> list = new ArrayList<>();
+        if (element.isJsonArray()) {
+            for (JsonElement entry : element.getAsJsonArray()) {
+                list.add(entry.getAsString());
+            }
+        }
+        return list;
+    }
+
+    private static JsonArray jsonArray(List<String> list) {
+        JsonArray array = new JsonArray();
+        list.forEach(array::add);
+        return array;
     }
 
     private static void createExternalConfig() {
@@ -580,6 +624,7 @@ public class LayerConfig {
 
     public static void reload() {
         loadConfig();
+        io.arona74.aronalayersgen.grounding.PlantGrounding.invalidate();
     }
 
     public static void save() {
@@ -660,6 +705,10 @@ public class LayerConfig {
             config.addProperty("cr_nbt_trees_vanilla_fallback", CR_NBT_TREES_VANILLA_FALLBACK);
             config.addProperty("debug_log_nbt_trees", DEBUG_LOG_NBT_TREES);
             config.addProperty("debug_log_tellus", DEBUG_LOG_TELLUS);
+            config.addProperty("plant_grounding", PLANT_GROUNDING);
+            config.addProperty("plant_grounding_shapes", PLANT_GROUNDING_SHAPES);
+            config.add("plant_grounding_force_blocks", jsonArray(PLANT_GROUNDING_FORCE_BLOCKS));
+            config.add("plant_grounding_exclude_blocks", jsonArray(PLANT_GROUNDING_EXCLUDE_BLOCKS));
 
             try (Writer writer = Files.newBufferedWriter(configPath)) {
                 GSON.newBuilder().setPrettyPrinting().create().toJson(config, writer);
