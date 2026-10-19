@@ -13,6 +13,7 @@ import io.arona74.aronalayersgen.grounding.PlantGrounding;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.Holder;
@@ -20,6 +21,7 @@ import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.ArrayList;
@@ -151,6 +153,7 @@ public class LayerPlacementHelper {
         if (state.is(Blocks.POWDER_SNOW)) return true;
         if (!Compat.blocksMotion(state)) return false;
         if (getMappingRegistry().isLayerBlock(state.getBlock())) return false;
+        if (isCoralBlock(state)) return false;
         return !state.is(BlockTags.LEAVES) && !state.is(BlockTags.LOGS);
     }
 
@@ -216,6 +219,37 @@ public class LayerPlacementHelper {
             }
         }
         return heights;
+    }
+
+    /**
+     * A surface puddle: water in the cell above the column's top solid block, with no water above it.
+     *
+     * <p>Vanilla's swamp and mangrove-swamp surface rules replace the top terrain block at Y=62 with
+     * water to make shallow puddles. The density field still describes ground there, so the column
+     * reads as overfull and used to receive a near-full waterlogged layer inside the puddle, sitting
+     * half a block to a block below the layered ground around it with the lily pads floating over
+     * it. Puddles are left as water instead. Requiring dry above keeps this to one-block pockets:
+     * rivers, lakes and the sea floor have water above their layer cell and are layered as before.
+     * Reads the cell's fluid, so a waterlogged layer already placed there still counts (/algdebug).
+     */
+    public static boolean isSurfacePuddle(net.minecraft.world.level.BlockGetter level, int x, int topSolidY, int z) {
+        return LayerConfig.SWAMP_PUDDLES_AS_WATER
+            && level.getBlockState(new BlockPos(x, topSolidY + 1, z)).getFluidState().is(FluidTags.WATER)
+            && !level.getBlockState(new BlockPos(x, topSolidY + 2, z)).getFluidState().is(FluidTags.WATER);
+    }
+
+    /** Biome -> is a swamp, by id ("swamp" anywhere in it). */
+    private static final ConcurrentHashMap<Biome, Boolean> swampBiomeCache = new ConcurrentHashMap<>();
+
+    /**
+     * The layer count lowered by {@code reduce_swamp_layers_value} in a swamp biome, when
+     * {@code reduce_swamp_layers} is on; unchanged otherwise. Never below 0 (no layer).
+     */
+    public static int applySwampReduction(int layerCount, Holder<Biome> biome) {
+        if (!LayerConfig.REDUCE_SWAMP_LAYERS || layerCount <= 0) return layerCount;
+        boolean swamp = swampBiomeCache.computeIfAbsent(biome.value(), b ->
+            biome.unwrapKey().map(key -> Compat.keyId(key).contains("swamp")).orElse(false));
+        return swamp ? Math.max(0, layerCount - LayerConfig.REDUCE_SWAMP_LAYERS_VALUE) : layerCount;
     }
 
     public static boolean hasMappingFor(Block surfaceBlock) {
@@ -335,6 +369,31 @@ public class LayerPlacementHelper {
         return getCRLayerProperty(state.getBlock()) != null;
     }
 
+    private static final ConcurrentHashMap<Block, java.util.Optional<Property<?>>> facingPropertyCache = new ConcurrentHashMap<>();
+
+    /**
+     * A layer standing against a wall rather than lying on the ground: a layer property and a
+     * horizontal {@code facing} (VanillaLayer+ wall layers, Conquest Reforged vertical slabs; see
+     * WallLayers). Its count is a thickness, not a height, and the block under it is usually air,
+     * so every pass that reads a column's top layer as a floor must leave it alone: remapping it
+     * by "the block below" would turn it into the wrong material or delete it.
+     */
+    public static boolean isWallPiece(BlockState state) {
+        if (!hasLayerProperty(state)) return false;
+        Property<?> facing = facingPropertyCache.computeIfAbsent(state.getBlock(), b -> {
+            for (Property<?> p : b.getStateDefinition().getProperties()) {
+                if (p.getName().equals("facing")) return java.util.Optional.of(p);
+            }
+            return java.util.Optional.empty();
+        }).orElse(null);
+        return facing != null && state.getValue(facing) instanceof Direction d && d.getAxis().isHorizontal();
+    }
+
+    /** A layer lying on the ground: has a layer property and is not a wall piece. */
+    public static boolean isFloorLayer(BlockState state) {
+        return hasLayerProperty(state) && !isWallPiece(state);
+    }
+
     // ========== Block Utilities ==========
 
     public static boolean isTallPlant(BlockState state) {
@@ -375,7 +434,10 @@ public class LayerPlacementHelper {
     private static Block resolveMaxedLayerBlock(Block layerBlock, int layerCount) {
         if (layerCount < 8) return layerBlock;
         if (layerBlock == AronaLayersGen.POWDER_SNOW_LAYER) return Blocks.POWDER_SNOW;
-        if (layerBlock instanceof io.arona74.aronalayersgen.block.LayerBlock lb) return lb.getFullBlock();
+        if (layerBlock instanceof io.arona74.aronalayersgen.block.LayerBlock lb) {
+            Block full = lb.getFullBlock();
+            return full == Blocks.AIR ? layerBlock : full;
+        }
         return layerBlock;
     }
 
@@ -1071,7 +1133,7 @@ public class LayerPlacementHelper {
                     for (int dy = -2; dy <= 2; dy++) {
                         BlockPos layerPos = new BlockPos(nx, targetY + dy, nz);
                         BlockState state = chunk.getBlockState(layerPos);
-                        if (!hasLayerProperty(state) || state.getBlock() == Blocks.SNOW) continue;
+                        if (!isFloorLayer(state) || state.getBlock() == Blocks.SNOW) continue;
 
                         int currentCount = readLayerCount(state);
                         int newCount = currentCount > 4 ? 4 : currentCount - 1;
@@ -1120,14 +1182,48 @@ public class LayerPlacementHelper {
             if (isOverwritablePaleVegetation(state.getBlock())) continue;
             // Nor are vines draped from a decoration log.
             if (state.getBlock() == Blocks.VINE) continue;
-            // Nor is a plant standing on this column. A 2+ block cactus or sugar cane (or the
-            // upper half of a tall plant) is neither air nor replaceable, so its upper blocks
-            // read as a roof and the column under it was skipped as "inside a structure".
-            if (GroundingFlags.ready && PlantGrounding.isGroundedBlock(state.getBlock())) continue;
+            // Nor is a plant or coral standing on this column (see isPlantCover).
+            if (isPlantCover(state)) continue;
 
             return true;
         }
         return false;
+    }
+
+    /**
+     * A plant or coral: neither air nor replaceable, but not a structure either, so it must not
+     * read as a roof or as something built on top of a layer.
+     *
+     * <ul>
+     *   <li>Coral plants and fans, live or dead, floor or wall: coral fans read as solid and kept
+     *       layers from being placed (or left) under them on reefs. Coral blocks too: a reef is
+     *       not a building.</li>
+     *   <li>Lily pads and frogspawn floating on the water above a column: the water is not air,
+     *       so the scan reached them and read the pad as a roof over the riverbed.</li>
+     *   <li>Anything plant grounding treats as a plant: a 2+ block cactus, sugar cane or kelp (or
+     *       the upper half of a tall plant) read as a roof over its own column, and a plant lifted
+     *       onto a layer read as a block built on it.</li>
+     * </ul>
+     */
+    public static boolean isPlantCover(BlockState state) {
+        Block block = state.getBlock();
+        if (block instanceof net.minecraft.world.level.block.BaseCoralPlantTypeBlock) return true;
+        if (isCoralBlock(state)) return true;
+        if (block == Blocks.LILY_PAD || block == Blocks.FROGSPAWN) return true;
+        return GroundingFlags.ready && PlantGrounding.isGroundedBlock(block);
+    }
+
+    private static final ConcurrentHashMap<Block, Boolean> coralBlockCache = new ConcurrentHashMap<>();
+
+    /**
+     * A full coral block, live or dead ({@code *_coral_block}). Dead coral blocks have no class or
+     * tag of their own (they are plain blocks), so they are matched by id.
+     */
+    public static boolean isCoralBlock(BlockState state) {
+        return coralBlockCache.computeIfAbsent(state.getBlock(), b -> {
+            String id = Compat.blockId(b);
+            return id != null && id.endsWith("_coral_block");
+        });
     }
 
     public static boolean isInsideStructure(ChunkAccess chunk, BlockPos pos) {
@@ -1368,13 +1464,18 @@ public class LayerPlacementHelper {
         // Only engages when the top block really is foliage, so ordinary columns are
         // untouched. The descent passes over the canopy's air gaps as well as its leaves
         // and trunk, stopping at the first block that genuinely blocks motion.
+        //
+        // Coral blocks get the same treatment: a reef is not ground, so the column's surface is the
+        // sea floor under it. Where a coral block rests directly on that floor (the base of the
+        // reef), the layer position is the coral itself and the not-air guard leaves the column
+        // alone; where water separates them, the floor gets its layer.
         BlockState heightmapTop = chunk.getBlockState(new BlockPos(worldX, surfaceY - 1, worldZ));
-        if (heightmapTop.is(BlockTags.LEAVES) || heightmapTop.is(BlockTags.LOGS)) {
+        if (heightmapTop.is(BlockTags.LEAVES) || heightmapTop.is(BlockTags.LOGS) || isCoralBlock(heightmapTop)) {
             int probeY = surfaceY - 1;
             int foliageGuard = 0;
             while (probeY > Compat.minY(chunk) && foliageGuard++ < 64) {
                 BlockState s = chunk.getBlockState(new BlockPos(worldX, probeY, worldZ));
-                if (Compat.blocksMotion(s) && !s.is(BlockTags.LEAVES) && !s.is(BlockTags.LOGS)) break;
+                if (Compat.blocksMotion(s) && !s.is(BlockTags.LEAVES) && !s.is(BlockTags.LOGS) && !isCoralBlock(s)) break;
                 probeY--;
             }
             surfaceY = probeY + 1;
@@ -1483,6 +1584,7 @@ public class LayerPlacementHelper {
             int coldY = tellusOverSnow ? Math.min(surfaceY - 1, 80) : surfaceY - 1;
             BlockPos biomePos = new BlockPos(worldX, coldY, worldZ);
             isSnowyBiome = Compat.coldEnoughToSnow(biome.value(), biomePos);
+            layerCount = applySwampReduction(layerCount, biome);
         }
 
         // Peek ahead to detect powder_snow before the snowy-biome skip.
@@ -1820,6 +1922,8 @@ public class LayerPlacementHelper {
         Block replacedPlant = null;
         BlockState replacedPlantState = null;
         boolean liftedPlant = false;
+        boolean liftedWet = false;
+        int liftResult;
         if (layerCount > 0) {
             Block layerBlock = useSnowLayers ? Blocks.SNOW : getMappingRegistry().getLayerBlock(surfaceBlock, layerCount);
             // A native layer block at 8 (powder_snow_layer, deepslate_layer, moss_layer) converts to
@@ -1943,11 +2047,12 @@ public class LayerPlacementHelper {
                                 setBlockStateSafe(chunk, abovePos.above(), Blocks.AIR.defaultBlockState());
                             }
                         }
-                    } else if (liftGroundedPlant(chunk, abovePos)) {
-                        // Plant with no CR conversion (cactus, sugar cane, unmapped or modded plants):
-                        // lifted one block, so the layer goes under it and plant grounding lowers it
-                        // back onto the layer surface.
+                    } else if ((liftResult = liftGroundedPlant(chunk, abovePos)) != LIFT_REFUSED) {
+                        // Plant with no CR conversion (cactus, sugar cane, kelp, unmapped or modded
+                        // plants): lifted one block, so the layer goes under it and plant grounding
+                        // lowers it back onto the layer surface.
                         liftedPlant = true;
+                        liftedWet = liftResult == LIFT_WET;
                     } else {
                         debugSkipNotAir.incrementAndGet();
                         return false;
@@ -1977,6 +2082,12 @@ public class LayerPlacementHelper {
                 if ((seagrassAtSurface
                         || (seagrassCheck != null && (seagrassCheck == Blocks.SEAGRASS || seagrassCheck == Blocks.TALL_SEAGRASS)))
                         && layerState.hasProperty(BlockStateProperties.WATERLOGGED)) {
+                    layerState = layerState.setValue(BlockStateProperties.WATERLOGGED, true);
+                }
+
+                // An underwater plant (kelp, sea pickles) was lifted off this cell: it stood in water,
+                // so the layer that takes its place does too.
+                if (liftedWet && layerState.hasProperty(BlockStateProperties.WATERLOGGED)) {
                     layerState = layerState.setValue(BlockStateProperties.WATERLOGGED, true);
                 }
 
@@ -2014,6 +2125,14 @@ public class LayerPlacementHelper {
 
                 setBlockStateSafe(chunk, abovePos, layerState);
                 layerPlaced = true;
+
+                // A lily pad floated on the water this layer replaced. If the layer holds no water
+                // (a layer block that cannot be waterlogged), the pad would rest on dry ground: drop it.
+                BlockPos padPos = abovePos.above();
+                if (chunk.getBlockState(padPos).getBlock() == Blocks.LILY_PAD
+                        && !layerState.getFluidState().is(FluidTags.WATER)) {
+                    setBlockStateSafe(chunk, padPos, Blocks.AIR.defaultBlockState());
+                }
 
                 // The layer took the moss strand's old bottom (tip) segment; make the segment now
                 // directly above it the new tip so the strand keeps its tapered end.
@@ -2120,36 +2239,74 @@ public class LayerPlacementHelper {
      * <p>The whole plant moves: every grounded block stacked from {@code pos} upward (a cactus or
      * sugar cane column, the upper half of a double plant, a flower on a cactus). Plant grounding
      * then draws and outlines it on the layer's surface, so it ends up where it stood, sitting on
-     * the layer instead of under it. Refused, leaving the column unlayered as before, when grounding
-     * is off, the block is not a grounded plant, the plant holds water (seagrass, kelp: a waterlogged
-     * stack cannot be shifted into air), or there is no air above the stack to move into.
+     * the layer instead of under it.
      *
-     * @return true if the plant was lifted and {@code pos} is free for the layer
+     * <p>Water stays where it was; the plant moves through it. Each moved block takes the water of
+     * the cell it lands in: a waterloggable plant (small dripleaf, sea pickle) is waterlogged or
+     * dried to match, so a swamp dripleaf whose lower half stood in water and upper half in air comes
+     * out the same way one block up. A plant that only exists in water (kelp, seagrass) must land in
+     * water, and a plant that cannot hold water must land in air; otherwise nothing moves. The
+     * caller waterlogs the layer when the plant's bottom cell held water ({@link #LIFT_WET}). A sea
+     * pickle that would land out of water is removed instead of moved.
+     *
+     * <p>Refused, leaving the column unlayered as before, when grounding is off, the block is not a
+     * grounded plant, a block would land somewhere it cannot exist, or the cell above the plant is
+     * neither air nor a water source.
+     *
+     * @return {@link #LIFT_DRY}, {@link #LIFT_WET}, or {@link #LIFT_REFUSED} if nothing moved
      */
-    private static boolean liftGroundedPlant(ChunkAccess chunk, BlockPos pos) {
-        if (!LayerConfig.PLANT_GROUNDING || !GroundingFlags.ready) return false;
+    private static int liftGroundedPlant(ChunkAccess chunk, BlockPos pos) {
+        if (!LayerConfig.PLANT_GROUNDING || !GroundingFlags.ready) return LIFT_REFUSED;
 
-        int top = pos.getY();
-        while (true) {
-            BlockState state = chunk.getBlockState(new BlockPos(pos.getX(), top, pos.getZ()));
-            if (!PlantGrounding.isGroundedBlock(state.getBlock()) || !state.getFluidState().isEmpty()) break;
+        int x = pos.getX(), z = pos.getZ(), bottom = pos.getY();
+        int top = bottom;
+        while (PlantGrounding.isGroundedBlock(chunk.getBlockState(new BlockPos(x, top, z)).getBlock())) {
             top++;
-            if (top - pos.getY() > MAX_LIFTED_PLANT) return false;
+            if (top - bottom > MAX_LIFTED_PLANT) return LIFT_REFUSED;
         }
-        if (top == pos.getY()) return false;                    // not a grounded plant at all
-        if (top >= Compat.maxY(chunk)) return false;
-        if (!chunk.getBlockState(new BlockPos(pos.getX(), top, pos.getZ())).isAir()) return false;
+        if (top == bottom) return LIFT_REFUSED;                 // not a grounded plant at all
+        if (top >= Compat.maxY(chunk)) return LIFT_REFUSED;
+        BlockState into = chunk.getBlockState(new BlockPos(x, top, z));
+        boolean intoWater = into.getBlock() == Blocks.WATER && into.getFluidState().isSource();
+        if (!into.isAir() && !intoWater) return LIFT_REFUSED;
 
-        for (int y = top - 1; y >= pos.getY(); y--) {
-            BlockPos from = new BlockPos(pos.getX(), y, pos.getZ());
-            setBlockStateSafe(chunk, from.above(), chunk.getBlockState(from));
+        // Water in each cell before the move: index i is the cell at bottom + i.
+        int height = top - bottom;
+        boolean[] wet = new boolean[height + 1];
+        for (int i = 0; i < height; i++) {
+            wet[i] = chunk.getBlockState(new BlockPos(x, bottom + i, z)).getFluidState().is(FluidTags.WATER);
+        }
+        wet[height] = intoWater;
+
+        // Each block, adjusted to the water of the cell it lands in; refuse if it cannot exist there.
+        BlockState[] moved = new BlockState[height];
+        for (int i = 0; i < height; i++) {
+            BlockState state = chunk.getBlockState(new BlockPos(x, bottom + i, z));
+            boolean landsWet = wet[i + 1];
+            if (state.getBlock() instanceof net.minecraft.world.level.block.SeaPickleBlock && !landsWet) {
+                // A sea pickle belongs in water: rather than leave it stranded on the layer, drop it.
+                state = Blocks.AIR.defaultBlockState();
+            } else if (state.hasProperty(BlockStateProperties.WATERLOGGED)) {
+                state = state.setValue(BlockStateProperties.WATERLOGGED, landsWet);
+            } else if (state.getFluidState().is(FluidTags.WATER) != landsWet) {
+                return LIFT_REFUSED;    // kelp into air, or a dry-only plant into water
+            }
+            moved[i] = state;
+        }
+
+        for (int i = height - 1; i >= 0; i--) {
+            setBlockStateSafe(chunk, new BlockPos(x, bottom + i + 1, z), moved[i]);
         }
         if (LayerConfig.logPlants()) {
             AronaLayersGen.LOGGER.info("[Plant Debug] Lifted {} ({} blocks) at {} for a layer",
-                Compat.blockId(chunk.getBlockState(pos.above()).getBlock()), top - pos.getY(), pos);
+                Compat.blockId(moved[0].getBlock()), height, pos);
         }
-        return true;
+        return wet[0] ? LIFT_WET : LIFT_DRY;
     }
+
+    private static final int LIFT_REFUSED = 0;
+    private static final int LIFT_DRY = 1;
+    private static final int LIFT_WET = 2;
 
     /**
      * Sets a block state in the chunk without triggering Block.onBlockAdded notifications.
@@ -2206,7 +2363,7 @@ public class LayerPlacementHelper {
         }
     }
 
-    private static void setBlockStateSafe(ChunkAccess chunk, BlockPos pos, BlockState state) {
+    static void setBlockStateSafe(ChunkAccess chunk, BlockPos pos, BlockState state) {
         if (chunk instanceof LevelChunk levelChunk) {
             int y = pos.getY();
             int sectionIdx = chunk.getSectionIndex(y);
@@ -2287,14 +2444,14 @@ public class LayerPlacementHelper {
                 BlockPos pos1 = new BlockPos(worldX, heightmapY - 1, worldZ);
                 BlockState state1 = chunk.getBlockState(pos1);
 
-                if (hasLayerProperty(state1) && state1.getBlock() != Blocks.SNOW) {
+                if (isFloorLayer(state1) && state1.getBlock() != Blocks.SNOW) {
                     layerPos = pos1;
                     layerState = state1;
                     surfacePos = pos1.below();
                 } else {
                     BlockPos pos2 = new BlockPos(worldX, heightmapY, worldZ);
                     BlockState state2 = chunk.getBlockState(pos2);
-                    if (hasLayerProperty(state2) && state2.getBlock() != Blocks.SNOW) {
+                    if (isFloorLayer(state2) && state2.getBlock() != Blocks.SNOW) {
                         layerPos = pos2;
                         layerState = state2;
                         surfacePos = pos1;
@@ -2313,7 +2470,7 @@ public class LayerPlacementHelper {
                     boolean shouldRemove = false;
 
                     BlockState aboveState = chunk.getBlockState(layerPos.above());
-                    if (!aboveState.canBeReplaced()) {
+                    if (!aboveState.canBeReplaced() && !isPlantCover(aboveState)) {
                         shouldRemove = true;
                     }
 
@@ -2438,7 +2595,7 @@ public class LayerPlacementHelper {
                 BlockPos pos = new BlockPos(worldX, heightmapY + dy, worldZ);
                 BlockState state = chunk.getBlockState(pos);
 
-                if (hasLayerProperty(state) && state.getBlock() != Blocks.SNOW) {
+                if (isFloorLayer(state) && state.getBlock() != Blocks.SNOW) {
                     BlockState aboveState = chunk.getBlockState(pos.above());
                     if (!aboveState.isAir() && aboveState.getBlock() != Blocks.WATER) {
                         preserved++;

@@ -1,5 +1,7 @@
 {
   "block.aronalayersgen.powder_snow_layer": "Powder Snow Layer",
   "block.aronalayersgen.deepslate_layer": "Deepslate Layer",
-  "block.aronalayersgen.moss_layer": "Moss Layer"
+  "block.aronalayersgen.moss_layer": "Moss Layer",
+  "block.aronalayersgen.zinc_ore_layer": "Zinc Ore Layer",
+  "block.aronalayersgen.deepslate_zinc_ore_layer": "Deepslate Zinc Ore Layer"
 }

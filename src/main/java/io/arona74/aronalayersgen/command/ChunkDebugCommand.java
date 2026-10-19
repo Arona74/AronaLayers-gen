@@ -41,6 +41,8 @@ import java.util.Map;
  *
  * Usage (requires permission level 2):
  *   /algdebug
+ *   /algdebug wall    (wall layer diagnostic for the side face you look at, see WallDebugCommand)
+ *   /algdebug walls   (wall layer verdicts for every open-air side face of the chunk)
  */
 public class ChunkDebugCommand {
 
@@ -50,6 +52,9 @@ public class ChunkDebugCommand {
                 Commands.literal("algdebug")
                     .requires(src -> Compat.hasPermission(src, 2))
                     .executes(ChunkDebugCommand::execute)
+                    .then(Commands.literal("wall").executes(WallDebugCommand::lookedAt))
+                    .then(Commands.literal("walls").executes(WallDebugCommand::chunkScan))
+                    .then(Commands.literal("plant").executes(PlantDebugCommand::lookedAt))
             )
         );
     }
@@ -122,6 +127,7 @@ public class ChunkDebugCommand {
         int flatGradientColumns = 0;
         int[] gradientHist = new int[FractionalSurfaceSampler.GRADIENT_BUCKETS.length + 1];
         int overfullColumns = 0;
+        int puddleColumns = 0;
         int[] noCrossingRun = new int[FractionalSurfaceSampler.FIELD_RUN_PROBE + 1];
 
         for (int lx = 0; lx < 16; lx++) {
@@ -176,6 +182,12 @@ public class ChunkDebugCommand {
                         // Mirrors the injector.
                         lc = 0;
                         flatGradientColumns++;
+                    } else if (fracSampler.isOverfull(wx, wz, groundHeights[lx][lz] - 1)
+                            && LayerPlacementHelper.isSurfacePuddle(chunk, wx, groundHeights[lx][lz] - 1, wz)) {
+                        // Overfull because the top block is a swamp puddle: left as water.
+                        // Mirrors the injector.
+                        lc = 0;
+                        puddleColumns++;
                     } else if (fracSampler.isOverfull(wx, wz, groundHeights[lx][lz] - 1)) {
                         // Field overshoots the world's ground by one block: the block is full,
                         // not carved. Mirrors the injector.
@@ -192,6 +204,11 @@ public class ChunkDebugCommand {
                 } else {
                     // No density field available: the injector places nothing.
                     lc = 0;
+                }
+                if (lc > 0 && groundHeights[lx][lz] > bottomY) {
+                    // reduce_swamp_layers, applied by the placement step. Mirrors the injector.
+                    lc = LayerPlacementHelper.applySwampReduction(lc,
+                        chunk.getNoiseBiome(lx >> 2, groundHeights[lx][lz] >> 2, lz >> 2));
                 }
 
                 fractions[lx][lz]   = fraction;
@@ -310,6 +327,7 @@ public class ChunkDebugCommand {
             send(source, "  flat-gradient columns (field too flat to locate surface, left to vanilla)="
                     + flatGradientColumns + "/256  (threshold " + LayerConfig.FRACTIONAL_SURFACE_MIN_GRADIENT + ")");
             send(source, "  overfull columns (field surface a block above ground, given full count)=" + overfullColumns + "/256");
+            send(source, "  puddle columns (overfull, but the top block is a swamp puddle: left as water)=" + puddleColumns + "/256");
             send(source, "  no-crossing solid-run above ground (index=blocks, last=8+): "
                     + java.util.Arrays.toString(noCrossingRun));
         } else {

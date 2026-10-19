@@ -83,6 +83,7 @@ public class VanillaLayerInjector {
         int mismatchColumns = 0;
         int flatGradientColumns = 0;
         int overfullColumns = 0;
+        int puddleColumns = 0;
         // How far the field stays solid above the world's ground on columns with no crossing.
         // Index = run length, last bucket = "at least that deep". Distinguishes a field that
         // merely disagrees by a block or two from one describing terrain a carver removed.
@@ -169,6 +170,12 @@ public class VanillaLayerInjector {
                     // uniform slab. No honest depth is recoverable, so the column is left to vanilla.
                     layerCount = 0;
                     flatGradientColumns++;
+                } else if (sampler.isOverfull(worldX, worldZ, topSolidY)
+                        && LayerPlacementHelper.isSurfacePuddle(chunk, worldX, topSolidY, worldZ)) {
+                    // Overfull because a surface rule turned the top block into a swamp puddle:
+                    // keep the puddle as water (see isSurfacePuddle).
+                    layerCount = 0;
+                    puddleColumns++;
                 } else if (sampler.isOverfull(worldX, worldZ, topSolidY)) {
                     // The mirror of the mismatch above: the field puts the surface a block higher
                     // than the world's ground rather than a block lower. There is no partial fill
@@ -206,9 +213,15 @@ public class VanillaLayerInjector {
             }
         }
 
+        // Wall layers go last: a face's cell is only free for a wall piece once the floor pass has
+        // claimed the cells that sit on ground.
+        if (LayerConfig.WALL_LAYERS) {
+            WallLayers.placeInChunk(chunk, sampler, surfaceHmType);
+        }
+
         if (LayerConfig.logVanilla()) {
             AronaLayersGen.LOGGER.info("[FractionalSurface] ChunkAccess {},{}: layers={} noCrossing={}/256 blockMismatch={}/256 flatGradient={}/256 overfull={}/256 noCrossingRun={} | skips: snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}, structElev={}, conservSurf={} | markersReplaced={}",
-                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), layersPlaced, noCrossingColumns, mismatchColumns, flatGradientColumns, overfullColumns, java.util.Arrays.toString(noCrossingRun),
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), layersPlaced, noCrossingColumns, mismatchColumns, flatGradientColumns, overfullColumns + "(puddles=" + puddleColumns + ")", java.util.Arrays.toString(noCrossingRun),
                 LayerPlacementHelper.debugSkipSnowy.get(), LayerPlacementHelper.debugSkipNoSurface.get(),
                 LayerPlacementHelper.debugSkipNoMapping.get(), LayerPlacementHelper.debugSkipLayerZero.get(),
                 LayerPlacementHelper.debugSkipNoLayerBlock.get(), LayerPlacementHelper.debugSkipNotAir.get(),

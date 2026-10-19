@@ -33,7 +33,7 @@ public final class PlantPlacementHook {
      * @return the value canSurvive should return, or null to leave vanilla alone
      */
     public static Boolean lookThroughLayers(LevelReader world, BlockPos pos, FloorCheck check) {
-        if (!LayerConfig.PLANT_INJECTION) {
+        if (!LayerConfig.PLANT_INJECTION && !LayerConfig.PLANT_GROUNDING) {
             return null;
         }
 
@@ -82,7 +82,7 @@ public final class PlantPlacementHook {
      * @return the value canSurvive should return, or null to leave vanilla alone
      */
     public static Boolean lookThroughLayersForSturdyFace(LevelReader world, BlockPos pos) {
-        if (!LayerConfig.PLANT_INJECTION) {
+        if (!LayerConfig.PLANT_INJECTION && !LayerConfig.PLANT_GROUNDING) {
             return null;
         }
 

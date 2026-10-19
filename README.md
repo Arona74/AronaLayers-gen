@@ -46,7 +46,7 @@ Columns where a carver cut into the surface after the noise stage (cave mouths, 
 - **Structure awareness** — skip or clean up layers inside, around and beneath structures
 - **NBT tree placement** — replaces vanilla worldgen trees with hand-crafted CR NBT structures
 - **Snowy biome handling** — skip, improve, or convert snow layers to mapped equivalents
-- **Native layer blocks** — `deepslate_layer`, `moss_layer` and `powder_snow_layer` for surfaces the backend has no layer block for
+- **Native layer blocks** — `deepslate_layer`, `moss_layer`, `powder_snow_layer`, and `zinc_ore_layer` / `deepslate_zinc_ore_layer` for Create's zinc ore, for surfaces the backend has no layer block for
 
 ## Requirements
 
@@ -175,6 +175,20 @@ These are the fastest way to work out why a particular column did or did not get
 
 ---
 
+### Wall Layers (experimental)
+
+Layers placed against cliffs and steep terrain faces, so a cliff gets the same sub-block shaping as the ground. The density field vanilla terrain is generated from is three-dimensional: the same zero crossing that gives a floor layer its height, measured sideways between a solid block and the open air beside it, gives a wall layer its thickness.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `wall_layers` | `false` | Place wall layers during generation (vanilla worldgen, VanillaLayer+ for now) |
+
+Only real walls get a piece: the surface must face mostly sideways, the cell beside it must be open air (not a cave or overhang) and not a cell that sits on ground, where the floor layer belongs. Falling materials (sand, gravel…) are skipped. Faces on a chunk border are skipped too, since a generating chunk cannot read its neighbours.
+
+`/algdebug wall` shows the measurement for the side face you look at; `/algdebug walls` tallies every open-air side face of your chunk. Neither places anything.
+
+---
+
 ### Plant Grounding
 
 Plants standing on a partial-height layer block are lowered onto its surface. This happens at runtime, not at generation: it applies to generated and hand-placed plants alike, follows the layer when its count changes, and needs no world edit.
@@ -186,7 +200,7 @@ Plants standing on a partial-height layer block are lowered onto its surface. Th
 | `plant_grounding_force_blocks` | `["minecraft:light_gray_petals"]` | Block ids to ground even though detection rejects them |
 | `plant_grounding_exclude_blocks` | `[]` | Block ids never to ground, even though detection accepts them |
 
-Plants are **detected, not listed**. A block is grounded when it extends the plant base class (flowers, grass, ferns, saplings, mushrooms, crops, seagrass… on any version, modded subclasses included), is a column plant (sugar cane, bamboo, cactus, kelp, lowered from their base), or has a random ground offset and no collision (how most modded plants that don't extend the base class are built). Skipped automatically:
+Plants are **detected, not listed**. A block is grounded when it extends the plant base class (flowers, grass, ferns, saplings, mushrooms, crops, seagrass… on any version, modded subclasses included), is a column plant (sugar cane, bamboo, cactus, kelp, big dripleaf, lowered from their base), or has a random ground offset and no collision (how most modded plants that don't extend the base class are built). Skipped automatically:
 
 - blocks that already sit on layers by themselves: a `layers`/`layer` property or Conquest Reforged's `offset_toggle` — this is why converted CR plants are never lowered twice
 - lily pads, and hanging states (mangrove propagules under leaves)

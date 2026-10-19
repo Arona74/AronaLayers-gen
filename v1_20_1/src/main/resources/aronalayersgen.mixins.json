@@ -23,7 +23,9 @@
     "ClipContextAccessor",
     "ColumnPlantSurviveMixin",
     "BambooSurviveMixin",
-    "BambooPlacementMixin"
+    "BambooPlacementMixin",
+    "PlantSoilSurviveMixin",
+    "DripstoneSurviveMixin"
   ],
   "client": [],
   "injectors": {

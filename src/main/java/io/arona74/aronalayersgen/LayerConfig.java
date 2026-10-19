@@ -446,6 +446,27 @@ public class LayerConfig {
     public static boolean PLANT_GROUNDING = true;
 
     /**
+     * Wall layers: VanillaLayer+ layers placed against cliffs and steep faces, sized from the
+     * sideways crossing of the density field (see WallLayers). Vanilla worldgen only.
+     */
+    public static boolean WALL_LAYERS = false;
+
+    /**
+     * Lower the layer count in swamp biomes (any biome whose id contains "swamp": vanilla swamp and
+     * mangrove swamp, and modded ones) by REDUCE_SWAMP_LAYERS_VALUE. Swamp ground sits around the
+     * water line with puddles cut into it, and full-height layers there stand proud of the water.
+     */
+    public static boolean REDUCE_SWAMP_LAYERS = false;
+    public static int REDUCE_SWAMP_LAYERS_VALUE = 2;
+
+    /**
+     * Leave swamp puddles as water: a column whose top block a surface rule turned into a one-block
+     * puddle gets no layer (see LayerPlacementHelper.isSurfacePuddle). false = the puddle receives
+     * the near-full waterlogged layer the density field asks for.
+     */
+    public static boolean SWAMP_PUDDLES_AS_WATER = true;
+
+    /**
      * Also lower the selection outline and collision box of grounded plants, so they can be
      * targeted where they are drawn. false = visual offset only.
      */
@@ -582,6 +603,10 @@ public class LayerConfig {
         if (config.has("cr_nbt_trees")) CR_NBT_TREES = config.get("cr_nbt_trees").getAsBoolean();
         if (config.has("cr_nbt_trees_vanilla_fallback")) CR_NBT_TREES_VANILLA_FALLBACK = config.get("cr_nbt_trees_vanilla_fallback").getAsBoolean();
         if (config.has("plant_grounding")) PLANT_GROUNDING = config.get("plant_grounding").getAsBoolean();
+        if (config.has("wall_layers")) WALL_LAYERS = config.get("wall_layers").getAsBoolean();
+        if (config.has("reduce_swamp_layers")) REDUCE_SWAMP_LAYERS = config.get("reduce_swamp_layers").getAsBoolean();
+        if (config.has("reduce_swamp_layers_value")) REDUCE_SWAMP_LAYERS_VALUE = config.get("reduce_swamp_layers_value").getAsInt();
+        if (config.has("swamp_puddles_as_water")) SWAMP_PUDDLES_AS_WATER = config.get("swamp_puddles_as_water").getAsBoolean();
         if (config.has("plant_grounding_shapes")) PLANT_GROUNDING_SHAPES = config.get("plant_grounding_shapes").getAsBoolean();
         if (config.has("plant_grounding_force_blocks")) PLANT_GROUNDING_FORCE_BLOCKS = stringList(config.get("plant_grounding_force_blocks"));
         if (config.has("plant_grounding_exclude_blocks")) PLANT_GROUNDING_EXCLUDE_BLOCKS = stringList(config.get("plant_grounding_exclude_blocks"));
@@ -706,6 +731,10 @@ public class LayerConfig {
             config.addProperty("debug_log_nbt_trees", DEBUG_LOG_NBT_TREES);
             config.addProperty("debug_log_tellus", DEBUG_LOG_TELLUS);
             config.addProperty("plant_grounding", PLANT_GROUNDING);
+            config.addProperty("wall_layers", WALL_LAYERS);
+            config.addProperty("reduce_swamp_layers", REDUCE_SWAMP_LAYERS);
+            config.addProperty("reduce_swamp_layers_value", REDUCE_SWAMP_LAYERS_VALUE);
+            config.addProperty("swamp_puddles_as_water", SWAMP_PUDDLES_AS_WATER);
             config.addProperty("plant_grounding_shapes", PLANT_GROUNDING_SHAPES);
             config.add("plant_grounding_force_blocks", jsonArray(PLANT_GROUNDING_FORCE_BLOCKS));
             config.add("plant_grounding_exclude_blocks", jsonArray(PLANT_GROUNDING_EXCLUDE_BLOCKS));

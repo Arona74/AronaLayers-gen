@@ -1,6 +1,8 @@
 {
   "_comment": "Block to Vanilla+ Layers layer mappings. Format: 'minecraft:block_name': 'vanillalayerplus:layer_block_name'",
   "mappings": {
+    "create:deepslate_zinc_ore": "aronalayersgen:deepslate_zinc_ore_layer",
+    "create:zinc_ore": "aronalayersgen:zinc_ore_layer",
     "minecraft:andesite": "vanillalayerplus:andesite_layer",
     "minecraft:basalt": "vanillalayerplus:basalt_layer",
     "minecraft:black_terracotta": "vanillalayerplus:black_terracotta_layer",
@@ -27,6 +29,7 @@
     "minecraft:diorite": "vanillalayerplus:diorite_layer",
     "minecraft:dirt": "vanillalayerplus:dirt_layer",
     "minecraft:dirt_path": "vanillalayerplus:dirt_path_layer",
+    "minecraft:dripstone_block": "vanillalayerplus:dripstone_layer",
     "minecraft:emerald_ore": "vanillalayerplus:emerald_ore_layer",
     "minecraft:end_stone": "vanillalayerplus:end_stone_layer",
     "minecraft:gold_ore": "vanillalayerplus:gold_ore_layer",

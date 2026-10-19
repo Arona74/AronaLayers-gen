@@ -27,6 +27,7 @@ public class GroundedPlantModelPlugin implements ModelLoadingPlugin {
             if (context.id() instanceof ModelResourceLocation id && !"inventory".equals(id.getVariant())) {
                 Block block = Compat.blockFromId(id.getNamespace() + ":" + id.getPath());
                 if (block != Blocks.AIR && PlantGrounding.isGroundedBlock(block)) {
+                    ForgeRenderTypeBridge.carryOver(original, block.defaultBlockState());
                     return new GroundedPlantModel(original);
                 }
             }

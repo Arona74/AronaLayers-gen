@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "aronalayersgen:deepslate_zinc_ore_layer"
+        }
+      ]
+    }
+  ]
+}

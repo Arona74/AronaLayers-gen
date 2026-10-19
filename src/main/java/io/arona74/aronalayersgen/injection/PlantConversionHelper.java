@@ -81,7 +81,7 @@ public class PlantConversionHelper {
                 BlockPos belowPlant = plantPos.below();
                 BlockState belowState = chunk.getBlockState(belowPlant);
 
-                if (!RTFLayerInjector.hasLayerProperty(belowState)) continue;
+                if (!LayerPlacementHelper.isFloorLayer(belowState)) continue;
                 // CR foliage/rock blocks also carry the "layer" property — verify the block
                 // is actually a registered layer block, not a decorator placed on top of the layer.
                 if (!LayerPlacementHelper.getMappingRegistry().isLayerBlock(belowState.getBlock())) {

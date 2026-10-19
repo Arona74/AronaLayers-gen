@@ -36,7 +36,13 @@ public class BlockMappingRegistry {
 
             Block vanillaBlock = Compat.blockFromId(vanillaId);
             if (vanillaBlock == Blocks.AIR) {
-                AronaLayersGen.LOGGER.warn("Vanilla block not found: {}", entry.getKey());
+                // Mappings for other mods' blocks (create:zinc_ore) ship by default; their mod being
+                // absent is normal, not a config error.
+                if (vanillaId.startsWith("minecraft:")) {
+                    AronaLayersGen.LOGGER.warn("Vanilla block not found: {}", entry.getKey());
+                } else {
+                    AronaLayersGen.LOGGER.debug("Skipping mapping for {} (its mod is not installed)", entry.getKey());
+                }
                 continue;
             }
 

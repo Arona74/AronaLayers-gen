@@ -6,21 +6,24 @@ import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.mixin.ClipContextAccessor;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.BambooSaplingBlock;
 import net.minecraft.world.level.block.BambooStalkBlock;
+import net.minecraft.world.level.block.BigDripleafBlock;
+import net.minecraft.world.level.block.BigDripleafStemBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CactusBlock;
 import net.minecraft.world.level.block.KelpBlock;
 import net.minecraft.world.level.block.KelpPlantBlock;
+import net.minecraft.world.level.block.PointedDripstoneBlock;
 import net.minecraft.world.level.block.SugarCaneBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
-import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.BlockHitResult;
@@ -44,7 +47,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Which blocks are plants is detected rather than listed. A block is grounded when it
  * <ul>
  *   <li>extends the plant base class (BushBlock / VegetationBlock, per version), or</li>
- *   <li>is a column plant (sugar cane, bamboo, cactus, kelp), or</li>
+ *   <li>is a column plant (sugar cane, bamboo, cactus, kelp, big dripleaf, upward-pointing dripstone), or</li>
  *   <li>has a native random ground offset and no collision, which is what Mojang gives small
  *       ground decoration and what modded plants copy when they don't extend the base class,</li>
  * </ul>
@@ -121,6 +124,7 @@ public final class PlantGrounding {
         if (state.hasProperty(BlockStateProperties.HANGING) && state.getValue(BlockStateProperties.HANGING)) {
             return NO;
         }
+        if (isHangingDripstone(state)) return NO;
         return isGroundedBlock(block) ? YES : NO;
     }
 
@@ -181,15 +185,31 @@ public final class PlantGrounding {
     private static boolean isColumnPlant(Block block) {
         return block instanceof SugarCaneBlock || block instanceof CactusBlock
             || block instanceof BambooStalkBlock || block instanceof BambooSaplingBlock
-            || block instanceof KelpBlock || block instanceof KelpPlantBlock;
+            || block instanceof KelpBlock || block instanceof KelpPlantBlock
+            || block instanceof BigDripleafBlock || block instanceof BigDripleafStemBlock
+            || block instanceof PointedDripstoneBlock;
     }
 
-    private static boolean sameColumn(Block plant, Block below) {
+    /** A stalactite: pointed dripstone hanging from above, which must not be grounded. */
+    private static boolean isHangingDripstone(BlockState state) {
+        return state.getBlock() instanceof PointedDripstoneBlock
+            && state.hasProperty(BlockStateProperties.VERTICAL_DIRECTION)
+            && state.getValue(BlockStateProperties.VERTICAL_DIRECTION) == Direction.DOWN;
+    }
+
+    private static boolean sameColumn(Block plant, BlockState belowState) {
+        Block below = belowState.getBlock();
+        if (plant instanceof PointedDripstoneBlock) {
+            return below instanceof PointedDripstoneBlock && !isHangingDripstone(belowState);
+        }
         if (plant instanceof KelpBlock || plant instanceof KelpPlantBlock) {
             return below instanceof KelpPlantBlock;
         }
         if (plant instanceof BambooStalkBlock || plant instanceof BambooSaplingBlock) {
             return below instanceof BambooStalkBlock || below instanceof BambooSaplingBlock;
+        }
+        if (plant instanceof BigDripleafBlock || plant instanceof BigDripleafStemBlock) {
+            return below instanceof BigDripleafStemBlock;
         }
         return below == plant;
     }
@@ -231,18 +251,28 @@ public final class PlantGrounding {
      */
     public static float offset(BlockState state, BlockGetter level, BlockGetter columnLevel, BlockPos pos) {
         if (!isGrounded(state)) return 0f;
+        level = nonBlocking(level, pos);
+        columnLevel = nonBlocking(columnLevel, pos);
+        if (level == null || columnLevel == null) return 0f;
 
         Block block = state.getBlock();
         BlockPos soil = pos.below();
         BlockGetter soilLevel = level;
         if (isColumnPlant(block)) {
             soilLevel = columnLevel;
-            for (int i = 0; i < MAX_COLUMN && sameColumn(block, soilLevel.getBlockState(soil).getBlock()); i++) {
+            for (int i = 0; i < MAX_COLUMN && sameColumn(block, soilLevel.getBlockState(soil)); i++) {
                 soil = soil.below();
             }
-        } else if (state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
-                && state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER) {
-            soil = soil.below();
+        } else if (state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)) {
+            // Walk down through the plant's own blocks: the lower half under an upper half, and the
+            // extra lower halves of a stacked plant. Terralith builds "tall" small dripleaf as a
+            // column (lower, 0-6 more lowers, upper); stopping one block down left every part above
+            // the bottom standing on the plant instead of the layer, drawn a layer-height too high.
+            // Such a stack can cross a section boundary, so it walks on the column view too.
+            soilLevel = columnLevel;
+            for (int i = 0; i < MAX_COLUMN && soilLevel.getBlockState(soil).getBlock() == block; i++) {
+                soil = soil.below();
+            }
         }
 
         BlockState soilState = soilLevel.getBlockState(soil);
@@ -271,6 +301,27 @@ public final class PlantGrounding {
         return -(float) (1.0 - top);
     }
 
+    /**
+     * A view of the world that never waits for a chunk.
+     *
+     * <p>Shapes are asked for from many threads, not just the server thread: Starlight / ScalableLux
+     * light chunks on worker threads and query block shapes with the real ServerLevel. Reading the
+     * block below a plant through {@code ServerLevel.getBlockState} from such a thread waits for the
+     * server thread to provide the chunk, while the server thread waits for that worker: generation
+     * stopped dead (seen with Terralith + C2ME). The light engine reads blocks through
+     * {@code getChunkForLighting}, which returns only what is already loaded, and so does this.
+     * Every read the offset makes stays in the plant's own column, so that one chunk serves them all.
+     *
+     * @return the level itself, the loaded chunk of {@code pos} on a server level, or null when that
+     *         chunk is not loaded (then the plant is simply not lowered)
+     */
+    private static BlockGetter nonBlocking(BlockGetter level, BlockPos pos) {
+        if (level instanceof ServerLevel server) {
+            return server.getChunkSource().getChunkForLighting(pos.getX() >> 4, pos.getZ() >> 4);
+        }
+        return level;
+    }
+
     // ========== Shapes and ray traces ==========
 
     /** The outline or collision shape of a grounded plant, moved down with it. */
@@ -297,7 +348,9 @@ public final class PlantGrounding {
 
         BlockHitResult plantHit = BlockGetter.traverseBlocks(context.getFrom(), context.getTo(), context, (ctx, cell) -> {
             BlockPos plantPos = cell.above();
-            BlockState plant = level.getBlockState(plantPos);
+            BlockGetter view = nonBlocking(level, plantPos);
+            if (view == null) return null;
+            BlockState plant = view.getBlockState(plantPos);
             if (!isGrounded(plant) || offset(plant, level, plantPos) == 0f) return null;
             return ctx.getBlockShape(plant, level, plantPos).clip(ctx.getFrom(), ctx.getTo(), plantPos);
         }, ctx -> null);

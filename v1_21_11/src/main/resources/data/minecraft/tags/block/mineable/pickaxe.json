@@ -1,6 +1,8 @@
 {
   "replace": false,
   "values": [
-    "aronalayersgen:deepslate_layer"
+    "aronalayersgen:deepslate_layer",
+    "aronalayersgen:zinc_ore_layer",
+    "aronalayersgen:deepslate_zinc_ore_layer"
   ]
 }

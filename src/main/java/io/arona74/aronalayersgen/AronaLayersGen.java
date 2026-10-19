@@ -31,6 +31,14 @@ public class AronaLayersGen implements ModInitializer {
     public static final Block DEEPSLATE_LAYER = new LayerBlock(Compat.blockSettings(Blocks.DEEPSLATE, "deepslate_layer"), Blocks.DEEPSLATE);
     public static final Block MOSS_LAYER = new LayerBlock(Compat.blockSettings(Blocks.MOSS_BLOCK, "moss_layer"), Blocks.MOSS_BLOCK);
 
+    // Create's zinc ores. Registered whether or not Create is installed (block registries are synced,
+    // and the mappings simply skip create:* ids when it is absent). Properties come from the iron ores,
+    // which zinc ore matches in hardness; Create's own blocks may not exist yet at this point.
+    public static final Block ZINC_ORE_LAYER = new LayerBlock(Compat.blockSettings(Blocks.IRON_ORE, "zinc_ore_layer"),
+            () -> Compat.blockFromId("create:zinc_ore"));
+    public static final Block DEEPSLATE_ZINC_ORE_LAYER = new LayerBlock(Compat.blockSettings(Blocks.DEEPSLATE_IRON_ORE, "deepslate_zinc_ore_layer"),
+            () -> Compat.blockFromId("create:deepslate_zinc_ore"));
+
     @Override
     public void onInitialize() {
         LOGGER.info("Initializing Arona Layers Generator");
@@ -46,6 +54,14 @@ public class AronaLayersGen implements ModInitializer {
         Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "moss_layer"), MOSS_LAYER);
         Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "moss_layer"),
                 new BlockItem(MOSS_LAYER, Compat.itemSettings("moss_layer")));
+
+        Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "zinc_ore_layer"), ZINC_ORE_LAYER);
+        Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "zinc_ore_layer"),
+                new BlockItem(ZINC_ORE_LAYER, Compat.itemSettings("zinc_ore_layer")));
+
+        Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "deepslate_zinc_ore_layer"), DEEPSLATE_ZINC_ORE_LAYER);
+        Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "deepslate_zinc_ore_layer"),
+                new BlockItem(DEEPSLATE_ZINC_ORE_LAYER, Compat.itemSettings("deepslate_zinc_ore_layer")));
 
         ChunkDebugCommand.register();
         TellusDebugCommand.register();

@@ -1,6 +1,8 @@
 {
   "_comment": "Block to Conquest Reforged layer mappings. Format: 'minecraft:block_name': 'conquest:layer_block_name'",
   "mappings": {
+    "create:deepslate_zinc_ore": "aronalayersgen:deepslate_zinc_ore_layer",
+    "create:zinc_ore": "aronalayersgen:zinc_ore_layer",
     "minecraft:andesite": "conquest:andesite_slab",
     "minecraft:basalt": "conquest:basalt_slab",
     "minecraft:black_terracotta": "conquest:black_harden_clay_slab",
