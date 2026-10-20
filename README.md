@@ -175,6 +175,22 @@ These are the fastest way to work out why a particular column did or did not get
 
 ---
 
+### Distant Horizons
+
+With [Distant Horizons](https://modrinth.com/mod/distanthorizons) installed, layers show in its LODs.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `dh_exact_layers` | `true` | Draw layers in LODs at their exact height (eighths of a block). Only switches on for DH versions it was checked against (3.3.2 to 3.3.4); needs a restart |
+| `dh_layer_rounding` | `true` | Fallback when exact heights are off or unavailable: show layers rounded to whole blocks |
+| `dh_layer_rounding_threshold` | `4` | In the fallback, the layer count from which a layer shows as its full block (thinner layers show the ground under them) |
+
+Exact heights reach into DH's internals (its LOD data, mesh builder and terrain shader, and Iris's DH shader when a shader pack is on), which is why they are tied to specific DH versions; the rounding uses DH's public API only and works on any recent DH. Existing LODs keep their old look until DH's LOD data is cleared (or in a new world). DH's own distant generation only gets layers with `injection_mode` set to `POST_FEATURES`: DH skips the carver step that `CARVERS` mode hooks into.
+
+The exact-height technique is adapted from [Geostep](https://modrinth.com/mod/geostep) (MIT), see `THIRD_PARTY_NOTICES.md`.
+
+---
+
 ### Wall Layers (experimental)
 
 Layers placed against cliffs and steep terrain faces, so a cliff gets the same sub-block shaping as the ground. The density field vanilla terrain is generated from is three-dimensional: the same zero crossing that gives a floor layer its height, measured sideways between a solid block and the open air beside it, gives a wall layer its thickness.

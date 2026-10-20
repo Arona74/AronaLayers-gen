@@ -1,0 +1,21 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "io.arona74.aronalayersgen.mixin.dh",
+  "compatibilityLevel": "JAVA_17",
+  "plugin": "io.arona74.aronalayersgen.mixin.dh.DhMixinPlugin",
+  "mixins": [
+    "RenderTransformMixin",
+    "RenderSourceMixin",
+    "ColumnBufferMixin",
+    "ColumnBoxMixin",
+    "LodVertexMixin"
+  ],
+  "client": [
+    "DhShaderMixin",
+    "IrisDhShaderMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

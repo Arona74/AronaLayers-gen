@@ -95,6 +95,29 @@ public class BlockMappingRegistry {
         return blockToLayerMapping.containsKey(block);
     }
 
+    /** Layer block -> the block it was mapped from (first mapping wins), built on first use. */
+    private volatile Map<Block, Block> layerToSource;
+
+    /**
+     * The block a layer block stands in for: the surface block mapped to it ({@code mud} for
+     * {@code vanillalayerplus:mud_layer}). Null if no mapping produces this layer block. Used where
+     * a layer has to be shown as a whole block, e.g. Distant Horizons LODs.
+     */
+    public Block getSourceBlock(Block layerBlock) {
+        Map<Block, Block> map = layerToSource;
+        if (map == null) {
+            map = new HashMap<>();
+            for (Map.Entry<Block, String> entry : blockToLayerMapping.entrySet()) {
+                String id = Compat.normalizeId(entry.getValue());
+                if (id == null) continue;
+                Block layer = Compat.blockFromId(id);
+                if (layer != Blocks.AIR) map.putIfAbsent(layer, entry.getKey());
+            }
+            layerToSource = map;
+        }
+        return map.get(layerBlock);
+    }
+
     /**
      * Returns true if the given block is a known layer block (i.e. appears as a value
      * in the surface→layer mapping). Used to distinguish layer blocks from other blocks

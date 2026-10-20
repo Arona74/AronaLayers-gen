@@ -28,6 +28,9 @@ dependencies {
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    // Distant Horizons api + core classes (extracted from the DH 3.3.3 jar; no Minecraft classes).
+    // Compile-only: DH stays an optional runtime mod, see compat/DistantHorizonsCompat.
+    compileOnly files(rootProject.file('libs/distanthorizons-3.3.3-compile.jar'))
     // No RTF dependency — no RTF port exists for 1.21.x yet
 }
 

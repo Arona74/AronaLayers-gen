@@ -20,7 +20,8 @@
     ]
   },
   "mixins": [
-    "aronalayersgen.mixins.json"
+    "aronalayersgen.mixins.json",
+    "aronalayersgen.dh.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.15.0",

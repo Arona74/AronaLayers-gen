@@ -467,6 +467,23 @@ public class LayerConfig {
     public static boolean SWAMP_PUDDLES_AS_WATER = true;
 
     /**
+     * Distant Horizons: show layers in LODs rounded to whole blocks (DH stores whole blocks only).
+     * A layer with DH_LAYER_ROUNDING_THRESHOLD layers or more becomes its full block, a thinner
+     * one disappears (or becomes water when waterlogged). See compat.DistantHorizonsCompat.
+     */
+    public static boolean DH_LAYER_ROUNDING = true;
+    public static int DH_LAYER_ROUNDING_THRESHOLD = 4;
+
+    /**
+     * Distant Horizons: exact layer heights in LODs (eighths of a block), through mixins into DH's
+     * internals; only for DH versions they were checked against (3.3.2-3.3.4). Other versions, or
+     * false here, fall back to the rounding above. Read at startup by mixin.dh.DhMixinPlugin
+     * straight from the file (mixins load before this class may be touched), so changes need a
+     * restart.
+     */
+    public static boolean DH_EXACT_LAYERS = true;
+
+    /**
      * Also lower the selection outline and collision box of grounded plants, so they can be
      * targeted where they are drawn. false = visual offset only.
      */
@@ -607,6 +624,9 @@ public class LayerConfig {
         if (config.has("reduce_swamp_layers")) REDUCE_SWAMP_LAYERS = config.get("reduce_swamp_layers").getAsBoolean();
         if (config.has("reduce_swamp_layers_value")) REDUCE_SWAMP_LAYERS_VALUE = config.get("reduce_swamp_layers_value").getAsInt();
         if (config.has("swamp_puddles_as_water")) SWAMP_PUDDLES_AS_WATER = config.get("swamp_puddles_as_water").getAsBoolean();
+        if (config.has("dh_layer_rounding")) DH_LAYER_ROUNDING = config.get("dh_layer_rounding").getAsBoolean();
+        if (config.has("dh_layer_rounding_threshold")) DH_LAYER_ROUNDING_THRESHOLD = config.get("dh_layer_rounding_threshold").getAsInt();
+        if (config.has("dh_exact_layers")) DH_EXACT_LAYERS = config.get("dh_exact_layers").getAsBoolean();
         if (config.has("plant_grounding_shapes")) PLANT_GROUNDING_SHAPES = config.get("plant_grounding_shapes").getAsBoolean();
         if (config.has("plant_grounding_force_blocks")) PLANT_GROUNDING_FORCE_BLOCKS = stringList(config.get("plant_grounding_force_blocks"));
         if (config.has("plant_grounding_exclude_blocks")) PLANT_GROUNDING_EXCLUDE_BLOCKS = stringList(config.get("plant_grounding_exclude_blocks"));
@@ -735,6 +755,9 @@ public class LayerConfig {
             config.addProperty("reduce_swamp_layers", REDUCE_SWAMP_LAYERS);
             config.addProperty("reduce_swamp_layers_value", REDUCE_SWAMP_LAYERS_VALUE);
             config.addProperty("swamp_puddles_as_water", SWAMP_PUDDLES_AS_WATER);
+            config.addProperty("dh_layer_rounding", DH_LAYER_ROUNDING);
+            config.addProperty("dh_layer_rounding_threshold", DH_LAYER_ROUNDING_THRESHOLD);
+            config.addProperty("dh_exact_layers", DH_EXACT_LAYERS);
             config.addProperty("plant_grounding_shapes", PLANT_GROUNDING_SHAPES);
             config.add("plant_grounding_force_blocks", jsonArray(PLANT_GROUNDING_FORCE_BLOCKS));
             config.add("plant_grounding_exclude_blocks", jsonArray(PLANT_GROUNDING_EXCLUDE_BLOCKS));

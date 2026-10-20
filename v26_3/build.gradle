@@ -51,6 +51,9 @@ dependencies {
     // Nothing is remapped here, so these are plain implementation dependencies.
     implementation "net.fabricmc:fabric-loader:${loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    // Distant Horizons api + core classes (extracted from the DH 3.3.3 jar; no Minecraft classes).
+    // Compile-only: DH stays an optional runtime mod, see compat/DistantHorizonsCompat.
+    compileOnly files(rootProject.file('libs/distanthorizons-3.3.3-compile.jar'))
 }
 
 processResources {

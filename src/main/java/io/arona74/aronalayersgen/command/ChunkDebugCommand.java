@@ -43,6 +43,7 @@ import java.util.Map;
  *   /algdebug
  *   /algdebug wall    (wall layer diagnostic for the side face you look at, see WallDebugCommand)
  *   /algdebug walls   (wall layer verdicts for every open-air side face of the chunk)
+ *   /algdebug dh      (Distant Horizons exact-height timings, see DhDebugCommand)
  */
 public class ChunkDebugCommand {
 
@@ -55,6 +56,12 @@ public class ChunkDebugCommand {
                     .then(Commands.literal("wall").executes(WallDebugCommand::lookedAt))
                     .then(Commands.literal("walls").executes(WallDebugCommand::chunkScan))
                     .then(Commands.literal("plant").executes(PlantDebugCommand::lookedAt))
+                    .then(Commands.literal("dh").executes(DhDebugCommand::report)
+                        .then(Commands.literal("reset").executes(DhDebugCommand::reset))
+                        .then(Commands.literal("skip")
+                            .then(Commands.literal("none").executes(ctx -> DhDebugCommand.skip(ctx, false)))
+                            .then(Commands.literal("refine").executes(ctx -> DhDebugCommand.skip(ctx, true)))
+                            .then(Commands.literal("trim").executes(DhDebugCommand::skipTrim))))
             )
         );
     }
