@@ -9,7 +9,9 @@
     "RenderSourceMixin",
     "ColumnBufferMixin",
     "ColumnBoxMixin",
-    "LodVertexMixin"
+    "LodVertexMixin",
+    "ColumnBoxDecodeMixin",
+    "ColumnBufferDecodeMixin"
   ],
   "client": [
     "DhShaderMixin",

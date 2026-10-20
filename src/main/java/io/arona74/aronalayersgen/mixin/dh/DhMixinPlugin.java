@@ -26,7 +26,7 @@ import java.util.Set;
  *
  * <p>This runs while mixins load, before Minecraft's blocks exist. It must not touch LayerConfig:
  * that class logs through AronaLayersGen, whose static fields build blocks, and building them now
- * would initialise Blocks far too early. The one key needed is read straight from the file.
+ * would initialise Blocks far too early. The keys needed are read straight from the file.
  */
 public final class DhMixinPlugin implements IMixinConfigPlugin {
 
@@ -37,13 +37,16 @@ public final class DhMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public void onLoad(String mixinPackage) {
-        enabled = FabricLoader.getInstance().isModLoaded("distanthorizons") && configEnabled() && supportedVersion();
+        enabled = FabricLoader.getInstance().isModLoaded("distanthorizons") && configFlag("dh_exact_layers", true) && supportedVersion();
         DhExactFlags.active = enabled;
+        DhExactFlags.colorBits = enabled && configFlag("dh_exact_layers_color_bits", true);
     }
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (!enabled) return false;
+        // The height decoding only exists for the colour-bit encoding.
+        if (mixinClassName.endsWith("DecodeMixin") && !DhExactFlags.colorBits) return false;
         try {
             // Optional targets (Iris) are skipped when their mod is absent.
             return MixinService.getService().getBytecodeProvider().getClassNode(targetClassName) != null;
@@ -67,16 +70,16 @@ public final class DhMixinPlugin implements IMixinConfigPlugin {
         return false;
     }
 
-    /** dh_exact_layers from config/aronalayersgen/layer_config.json; on when absent. */
-    private static boolean configEnabled() {
+    /** A boolean key of config/aronalayersgen/layer_config.json, or its default when absent. */
+    private static boolean configFlag(String key, boolean fallback) {
         Path file = FabricLoader.getInstance().getConfigDir().resolve("aronalayersgen").resolve("layer_config.json");
-        if (!Files.exists(file)) return true;
+        if (!Files.exists(file)) return fallback;
         try (Reader reader = Files.newBufferedReader(file)) {
             JsonObject config = JsonParser.parseReader(reader).getAsJsonObject();
-            JsonElement value = config.get("dh_exact_layers");
-            return value == null || value.getAsBoolean();
+            JsonElement value = config.get(key);
+            return value == null ? fallback : value.getAsBoolean();
         } catch (Exception e) {
-            return true;
+            return fallback;
         }
     }
 

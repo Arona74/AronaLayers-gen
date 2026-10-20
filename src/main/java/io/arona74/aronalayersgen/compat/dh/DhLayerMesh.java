@@ -64,7 +64,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   <li>DH's terrain vertex shader, and Iris's when shaders are on, decode the packed Y
  *       ({@link #patchShader}, IrisLayerShader).</li>
  * </ul>
- * 12 bits of eighths is 512 blocks, so dimensions taller than that keep DH's own geometry.
+ * Where the eighths are kept in the render data depends on dh_exact_layers_color_bits:
+ * <ul>
+ *   <li>Off: in DH's 12-bit min and max Y themselves, in eighth units. 12 bits of eighths is 512
+ *       blocks, so dimensions taller than that keep DH's own geometry.</li>
+ *   <li>On: the Y fields stay whole blocks, as DH writes them, and the eighths of min and max Y
+ *       (3 bits each) take the two lowest bits of each colour channel, a colour shift of at most
+ *       3/255. ColumnBoxDecodeMixin and ColumnBufferDecodeMixin read {@code whole * 8 + eighths}
+ *       at each height read of DH's mesh builder ({@link #meshYMin}), so the mesh code sees the
+ *       same eighth units as above, up to DH's own 4096-block limit. Only those call sites: a hook
+ *       on DH's global getters slowed every DH thread (mesh builds 7.6 -> 21.6 ms). The same trick
+ *       the Tellus fork of DH uses to widen its Y fields, without changing DH's layout.</li>
+ * </ul>
  */
 public final class DhLayerMesh {
     private DhLayerMesh() {}
@@ -73,17 +84,19 @@ public final class DhLayerMesh {
     public static final ThreadLocal<Boolean> BUILDING_EIGHTHS = ThreadLocal.withInitial(() -> false);
 
     private static final int WIDTH = 64;
+    /** Highest eighth-unit Y: 12 bits of eighths, or 12 bits of whole blocks + 3 bits of eighths. */
     private static final int MAX_EIGHTH_Y = 4095;
+    private static final int MAX_COLOR_BITS_Y = 4095 * 8 + 7;
     private static final Set<String> WARNED_DIMENSIONS = ConcurrentHashMap.newKeySet();
     private static final AtomicBoolean ANNOUNCED = new AtomicBoolean();
 
     public static boolean supportedHeight(int minY, int maxY) {
-        return maxY > minY && maxY - minY <= 511;
+        return maxY > minY && maxY - minY <= (DhExactFlags.colorBits ? 4095 : 511);
     }
 
     /** Eighth-unit Y -> whole block in the low 12 bits, eighths in bits 13-15. */
     public static short packVertexY(int eighthY) {
-        if (eighthY < 0 || eighthY > MAX_EIGHTH_Y) {
+        if (eighthY < 0 || eighthY > MAX_COLOR_BITS_Y) {
             throw new IllegalArgumentException("DH eighth Y outside 12-bit render bounds: " + eighthY);
         }
         return (short) (eighthY >>> 3 | (eighthY & 7) << 13);
@@ -91,20 +104,73 @@ public final class DhLayerMesh {
 
     /** Render data point with its min and max Y replaced (both in eighth units). */
     static long withBounds(long data, int min, int max) {
-        if (min < 0 || max > MAX_EIGHTH_Y || max < min) {
+        boolean colorBits = DhExactFlags.colorBits;
+        if (min < 0 || max > (colorBits ? MAX_COLOR_BITS_Y : MAX_EIGHTH_Y) || max < min) {
             throw new IllegalArgumentException("Invalid DH eighth bounds " + min + ".." + max);
         }
         long cleared = data & ~(RenderDataPointUtil.MIN_Y_SHIFTED_MASK | RenderDataPointUtil.MAX_Y_SHIFTED_MASK);
-        return cleared | (long) min << RenderDataPointUtil.MIN_Y_SHIFT | (long) max << RenderDataPointUtil.MAX_Y_SHIFT;
+        if (!colorBits) {
+            return cleared | (long) min << RenderDataPointUtil.MIN_Y_SHIFT | (long) max << RenderDataPointUtil.MAX_Y_SHIFT;
+        }
+        return withFractions(cleared | (long) (min >>> 3) << RenderDataPointUtil.MIN_Y_SHIFT
+            | (long) (max >>> 3) << RenderDataPointUtil.MAX_Y_SHIFT, min & 7, max & 7);
     }
 
-    /** A whole-block data point rescaled to eighths. */
+    /** A whole-block data point in eighth units: rescaled, or with zero eighths in its colour bits. */
     private static long scaled(long data) {
-        return data == 0L ? 0L : withBounds(data, RenderDataPointUtil.getYMin(data) * 8, RenderDataPointUtil.getYMax(data) * 8);
+        if (data == 0L) return 0L;
+        if (DhExactFlags.colorBits) return data & ~FRACTION_BITS;
+        return withBounds(data, RenderDataPointUtil.getYMin(data) * 8, RenderDataPointUtil.getYMax(data) * 8);
+    }
+
+    /** Min and max Y in eighths of a point this class wrote (outside mesh builds, where DH's getters are not decoded). */
+    private static int yMin8(long data) {
+        int y = RenderDataPointUtil.getYMin(data);
+        return DhExactFlags.colorBits ? y << 3 | minFraction(data) : y;
+    }
+
+    private static int yMax8(long data) {
+        int y = RenderDataPointUtil.getYMax(data);
+        return DhExactFlags.colorBits ? y << 3 | maxFraction(data) : y;
     }
 
     private static long point(int min, int max, int color, int sky, int light, byte material) {
-        return RenderDataPointUtil.createDataPoint(max, min, color, sky, light, material);
+        return withBounds(RenderDataPointUtil.createDataPoint(1, 0, color, sky, light, material), min, max);
+    }
+
+    // ========== Colour-bit encoding (dh_exact_layers_color_bits) ==========
+
+    /**
+     * The two lowest bits of blue, green and red (bits 32-33, 40-41, 48-49): min Y eighths in
+     * blue 0-1 + green 0, max Y eighths in green 1 + red 0-1.
+     */
+    private static final long FRACTION_BITS = 0b11L << 32 | 0b11L << 40 | 0b11L << 48;
+
+    private static long withFractions(long data, int min, int max) {
+        return (data & ~FRACTION_BITS)
+            | (long) (min & 3) << 32 | (long) (min >>> 2 & 1) << 40
+            | (long) (max & 1) << 41 | (long) (max >>> 1 & 3) << 48;
+    }
+
+    /** DH's height getters as the mesh builder reads them in colour-bit mode: eighth units. */
+    public static short meshYMin(long data) {
+        return (short) (RenderDataPointUtil.getYMin(data) << 3 | minFraction(data));
+    }
+
+    public static short meshYMax(long data) {
+        return (short) (RenderDataPointUtil.getYMax(data) << 3 | maxFraction(data));
+    }
+
+    public static boolean meshZeroHeight(long data) {
+        return RenderDataPointUtil.hasZeroHeight(data) && (!DhExactFlags.colorBits || minFraction(data) == 0 && maxFraction(data) == 0);
+    }
+
+    public static int minFraction(long data) {
+        return (int) (data >>> 32 & 3) | (int) (data >>> 40 & 1) << 2;
+    }
+
+    public static int maxFraction(long data) {
+        return (int) (data >>> 41 & 1) | (int) (data >>> 48 & 3) << 1;
     }
 
     // ========== Refining a section ==========
@@ -113,8 +179,9 @@ public final class DhLayerMesh {
         if (source == null || source.isEmpty() || ((DhEighths) source).aronalayersgen$eighths()) return source;
         if (!supportedHeight(level.getMinHeight(), level.getMaxHeight())) {
             if (WARNED_DIMENSIONS.add(level.getDhIdentifier())) {
-                AronaLayersGen.LOGGER.warn("[DistantHorizons] {} is taller than 512 blocks: exact layer heights unavailable there",
-                    level.getDhIdentifier());
+                AronaLayersGen.LOGGER.warn("[DistantHorizons] {} is taller than {} blocks: exact layer heights unavailable there{}",
+                    level.getDhIdentifier(), DhExactFlags.colorBits ? 4096 : 512,
+                    DhExactFlags.colorBits ? "" : " (dh_exact_layers_color_bits lifts this to 4096)");
             }
             return source;
         }
@@ -310,11 +377,11 @@ public final class DhLayerMesh {
         int a = 0, b = 0;
         while (a < remaining.size || b < caps.size) {
             boolean takeNative = b == caps.size
-                || a < remaining.size && RenderDataPointUtil.getYMax(remaining.data[a]) >= RenderDataPointUtil.getYMax(caps.data[b]);
+                || a < remaining.size && yMax8(remaining.data[a]) >= yMax8(caps.data[b]);
             LongColumn input = takeNative ? remaining : caps;
             int index = takeNative ? a++ : b++;
             long value = input.data[index];
-            result.add(value, input.textures[index], RenderDataPointUtil.getYMin(value), RenderDataPointUtil.getYMax(value));
+            result.add(value, input.textures[index], yMin8(value), yMax8(value));
         }
         return result;
     }

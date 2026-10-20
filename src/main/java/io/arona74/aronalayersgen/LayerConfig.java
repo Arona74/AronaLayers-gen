@@ -484,6 +484,15 @@ public class LayerConfig {
     public static boolean DH_EXACT_LAYERS = true;
 
     /**
+     * Distant Horizons exact heights: keep DH's render heights in whole blocks and carry the eighths
+     * in the two lowest bits of each colour channel (a colour shift of at most 3/255). Works in
+     * dimensions up to DH's own 4096-block limit, where the eighths-in-height-fields encoding stops
+     * at 512. Only affects DH's in-memory render data, never its saved LOD data. Read at startup by
+     * mixin.dh.DhMixinPlugin; changes need a restart.
+     */
+    public static boolean DH_EXACT_LAYERS_COLOR_BITS = true;
+
+    /**
      * Also lower the selection outline and collision box of grounded plants, so they can be
      * targeted where they are drawn. false = visual offset only.
      */
@@ -627,6 +636,7 @@ public class LayerConfig {
         if (config.has("dh_layer_rounding")) DH_LAYER_ROUNDING = config.get("dh_layer_rounding").getAsBoolean();
         if (config.has("dh_layer_rounding_threshold")) DH_LAYER_ROUNDING_THRESHOLD = config.get("dh_layer_rounding_threshold").getAsInt();
         if (config.has("dh_exact_layers")) DH_EXACT_LAYERS = config.get("dh_exact_layers").getAsBoolean();
+        if (config.has("dh_exact_layers_color_bits")) DH_EXACT_LAYERS_COLOR_BITS = config.get("dh_exact_layers_color_bits").getAsBoolean();
         if (config.has("plant_grounding_shapes")) PLANT_GROUNDING_SHAPES = config.get("plant_grounding_shapes").getAsBoolean();
         if (config.has("plant_grounding_force_blocks")) PLANT_GROUNDING_FORCE_BLOCKS = stringList(config.get("plant_grounding_force_blocks"));
         if (config.has("plant_grounding_exclude_blocks")) PLANT_GROUNDING_EXCLUDE_BLOCKS = stringList(config.get("plant_grounding_exclude_blocks"));
@@ -758,6 +768,7 @@ public class LayerConfig {
             config.addProperty("dh_layer_rounding", DH_LAYER_ROUNDING);
             config.addProperty("dh_layer_rounding_threshold", DH_LAYER_ROUNDING_THRESHOLD);
             config.addProperty("dh_exact_layers", DH_EXACT_LAYERS);
+            config.addProperty("dh_exact_layers_color_bits", DH_EXACT_LAYERS_COLOR_BITS);
             config.addProperty("plant_grounding_shapes", PLANT_GROUNDING_SHAPES);
             config.add("plant_grounding_force_blocks", jsonArray(PLANT_GROUNDING_FORCE_BLOCKS));
             config.add("plant_grounding_exclude_blocks", jsonArray(PLANT_GROUNDING_EXCLUDE_BLOCKS));

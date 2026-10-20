@@ -60,6 +60,8 @@
   "dh_layer_rounding_threshold": 4,
   "_comment_dh_exact_layers": "Distant Horizons only. Draw layers in LODs at their exact height (eighths of a block) instead of rounding them. Reaches into DH's internals, so it only switches on for the DH versions it was checked against (3.3.2 to 3.3.4); any other version uses the rounding above. Also patches DH's terrain shader and Iris's DH shader. Needs a restart, and DH's LOD data cleared (or a new world) for existing LODs. Default: true",
   "dh_exact_layers": true,
+  "_comment_dh_exact_layers_color_bits": "Distant Horizons only, with dh_exact_layers. Stores the eighths of a block in the lowest bits of the LOD colours instead of in DH's height fields, so exact heights also work in dimensions taller than 512 blocks (up to DH's own 4096 limit). Colours shift by at most 3/255. Only changes how LODs are drawn, never DH's saved data: needs a restart, no LOD reset. Default: true",
+  "dh_exact_layers_color_bits": true,
   "_comment_plant_grounding_shapes": "Also lower the selection outline and collision box of grounded plants, so they are targeted where they are drawn. false = visual offset only. Default: true",
   "plant_grounding_shapes": true,
   "_comment_plant_grounding_force_blocks": "Block ids to ground even though automatic detection rejects them.",

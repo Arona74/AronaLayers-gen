@@ -7,6 +7,7 @@ package io.arona74.aronalayersgen.mixin.dh;
 import com.seibel.distanthorizons.core.dataObjects.fullData.sources.FullDataSourceV2;
 import com.seibel.distanthorizons.core.dataObjects.render.ColumnRenderSource;
 import com.seibel.distanthorizons.core.wrapperInterfaces.world.IClientLevelWrapper;
+import io.arona74.aronalayersgen.compat.dh.DhExactFlags;
 import io.arona74.aronalayersgen.compat.dh.DhLayerMesh;
 import io.arona74.aronalayersgen.compat.dh.DhStats;
 import org.spongepowered.asm.mixin.Mixin;
@@ -34,7 +35,7 @@ public abstract class RenderTransformMixin {
                                               CallbackInfoReturnable<ColumnRenderSource> cir) {
         DhStats.DH_TRANSFORM.add(DhStats.STARTS.get()[DhStats.SLOT_TRANSFORM]);
         ColumnRenderSource source = cir.getReturnValue();
-        if (full == null || level == null || source == null || DhStats.skipRefine) return;
+        if (full == null || level == null || source == null || DhStats.skipRefine && !DhExactFlags.colorBits) return;
         long start = System.nanoTime();
         try {
             cir.setReturnValue(DhLayerMesh.refine(full, level, source));

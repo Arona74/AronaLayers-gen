@@ -84,7 +84,7 @@ public abstract class ColumnBufferMixin {
         int size = view.size;
         while (size > 0) {
             long point = view.get(size - 1);
-            if (RenderDataPointUtil.doesDataPointExist(point) && !RenderDataPointUtil.hasZeroHeight(point)) break;
+            if (RenderDataPointUtil.doesDataPointExist(point) && !DhLayerMesh.meshZeroHeight(point)) break;
             size--;
         }
         view.size = size;

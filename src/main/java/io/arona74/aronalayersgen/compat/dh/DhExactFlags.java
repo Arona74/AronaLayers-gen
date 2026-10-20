@@ -12,4 +12,10 @@ public final class DhExactFlags {
 
     /** DH is installed at a supported version and dh_exact_layers is on: the DH mixins apply. */
     public static volatile boolean active = false;
+
+    /**
+     * dh_exact_layers_color_bits: render heights stay whole blocks and the eighths ride in colour
+     * bits (DhLayerMesh), decoded in DH's mesh builder by the *DecodeMixin classes.
+     */
+    public static volatile boolean colorBits = false;
 }
