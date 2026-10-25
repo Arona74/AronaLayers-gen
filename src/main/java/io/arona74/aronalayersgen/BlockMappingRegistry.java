@@ -1,5 +1,6 @@
 package io.arona74.aronalayersgen;
 
+import io.arona74.aronalayersgen.injection.Layer3D;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -104,6 +105,8 @@ public class BlockMappingRegistry {
      * a layer has to be shown as a whole block, e.g. Distant Horizons LODs.
      */
     public Block getSourceBlock(Block layerBlock) {
+        Block base = Layer3D.baseLayerOf(layerBlock);
+        if (base != null) layerBlock = base;
         Map<Block, Block> map = layerToSource;
         if (map == null) {
             map = new HashMap<>();
@@ -124,6 +127,6 @@ public class BlockMappingRegistry {
      * (e.g. CR foliage) that also happen to carry a "layer" integer property.
      */
     public boolean isLayerBlock(Block block) {
-        return knownLayerBlocks.contains(block);
+        return knownLayerBlocks.contains(block) || Layer3D.is(block);
     }
 }

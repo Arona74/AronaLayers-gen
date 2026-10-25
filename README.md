@@ -192,17 +192,17 @@ The exact-height technique is adapted from [Geostep](https://modrinth.com/mod/ge
 
 ---
 
-### Wall Layers (experimental)
+### 3D Layers (experimental)
 
-Layers placed against cliffs and steep terrain faces, so a cliff gets the same sub-block shaping as the ground. The density field vanilla terrain is generated from is three-dimensional: the same zero crossing that gives a floor layer its height, measured sideways between a solid block and the open air beside it, gives a wall layer its thickness.
+VanillaLayer+ 5.0.0 adds 3D layers (`<name>_3d_layer`) for its hard materials (stone-like blocks and ores): a floor layer (`vertical_layers` high, 0 for none) and a wall layer (`horizontal_layers` thick, against the `horizontal_facing` side) merged into one block. At 4/4 it is a stair.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `wall_layers` | `false` | Place wall layers during generation (vanilla worldgen, VanillaLayer+ for now) |
+| `3D_layer_injection` | `false` | On TerraForged terrain, turn floor layers beside a step into 3D layers and place wall pieces on cliffs. Uses `vp_block_mappings.json`. Needs a restart |
 
-Only real walls get a piece: the surface must face mostly sideways, the cell beside it must be open air (not a cave or overhang) and not a cell that sits on ground, where the floor layer belongs. Falling materials (sand, gravel…) are skipped. Faces on a chunk border are skipped too, since a generating chunk cannot read its neighbours.
+TerraForged terrain (FreeTerraForged / ReTerraForged) is a heightfield, so a step is the difference between two neighbouring columns, and their surfaces (ground plus floor layer) say how far the slope between them reaches sideways at each level: that fraction becomes the wall thickness. A floor layer with a higher terrain block beside it becomes a 3D layer: the same floor height, merged with a wall toward the higher side. Floor layers on flat ground stay normal layers, since a 3D layer always has a wall part. On any step of a block or more, the open cells up the face also get a 3D layer of the wall's material with no floor part (`vertical_layers` 0), so only hard faces get one: grass, dirt and other soft layers look wrong on edge, so a soft face gets none. Where the lowest wall piece would stand on a floor layer, that floor layer becomes its full block (`grass_layer` → `grass_block`), so the piece does not stand on a partial floor. The row beside the floor layer on the cliff edge gets nothing, since a wall piece is full height and would stand above that surface. Falling materials (sand, gravel…) and faces on a chunk border are skipped.
 
-`/algdebug wall` shows the measurement for the side face you look at; `/algdebug walls` tallies every open-air side face of your chunk. Neither places anything.
+Only the four side neighbours count. When several qualify, the piece's open part faces open ground first: a side wins if the neighbour opposite it gets no piece at that level. Otherwise the wall faces uphill: the qualifying side the surface rises toward most, from the four neighbours' surfaces. At ground level, a cell with higher columns on two opposite sides (a trough), or on one side with the chunk border opposite (the next chunk cannot be read, so it may be a trough), gets a regular layer instead of a 3D layer, as high as its floor layer or the thickest wall, whichever is higher. The thickness is measured in the part of the cell above its floor layer. At ground level, a 3D layer's floor part never sits lower than the floor layer of the downhill neighbour (the one opposite the wall): it is raised to match, so the floor does not dip next to the wall. `/algdebug wall3d` shows that decision for the cell you look at (look at the layer itself, or at the face in front of the cell): the column's surface, cell height and ground, the uphill direction, the verdict, and each side neighbour with its surface, step, `t` and thickness, or the reason it does not qualify. `/algdebug walls3d` tallies the verdicts for every cell of your chunk. Neither places anything. The VanillaLayer+ mappings are used even when Conquest Reforged is also installed.
 
 ---
 

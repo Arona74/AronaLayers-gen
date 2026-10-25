@@ -94,6 +94,17 @@ public class RTFCompat {
     private static Method getHeightmapMethod;
     private static Field worldHeightField;
 
+    // FreeTerraForged after "deleteTiles" (PR #325, 2026-10-24): no Tile/TileCache any more. Each
+    // chunk carries its own 256 filtered cells (IChunkCellsHolder, mixed into ChunkAccess), rebuilt
+    // from GeneratorContext.filteredChunkCache when missing, and the context exposes Levels directly.
+    private static boolean chunkCellsMode = false;
+    private static Class<?> chunkCellsHolderClass;
+    private static Method getChunkCellsMethod;          // <modid>$getChunkCells(), null when not built yet
+    private static Method getOrCreateChunkCellsMethod;  // <modid>$getOrCreateChunkCells(GeneratorContext), may build the region
+    private static Field filteredChunkCacheField;
+    private static Method getExistingFilteredCellMethod; // FilteredChunkCache.getExistingFilteredCell(blockX, blockZ), non-blocking
+    private static Field levelsField;
+
     private static int cachedWorldHeight = -1;
     private static boolean nullContextWarned = false;
     private static boolean nullCacheWarned = false;
@@ -126,12 +137,24 @@ public class RTFCompat {
             AronaLayersGen.LOGGER.info("Loaded {} class", fl.randomStateIface());
             generatorContextClass = Class.forName(fl.cls("world.worldgen.GeneratorContext"));
             cellClass = Class.forName(fl.cls("world.worldgen.cell.Cell"));
+            terrainClass = Class.forName(fl.cls("world.worldgen.cell.terrain.Terrain"));
+            generatorContextMethod = rtfRandomStateClass.getMethod("generatorContext");
+            heightField = cellClass.getField("height");
+            terrainField = cellClass.getField("terrain");
+            isSubmergedMethod = terrainClass.getMethod("isSubmerged");
+            isRiverMethod = terrainClass.getMethod("isRiver");
+
+            if (!classExists(fl.cls("world.worldgen.densityfunction.tile.TileCache"))) {
+                bindChunkCells(fl);
+                chunkCellsMode = true;
+                AronaLayersGen.LOGGER.info("{} bound (per-chunk cells, no tile cache), RTF layer injection available", fl.displayName());
+                return true;
+            }
+
             tileCacheClass = Class.forName(fl.cls("world.worldgen.densityfunction.tile.TileCache"));
             tileClass = Class.forName(fl.cls("world.worldgen.densityfunction.tile.Tile"));
             tileChunkClass = Class.forName(fl.cls("world.worldgen.densityfunction.tile.Tile$Chunk"));
-            terrainClass = Class.forName(fl.cls("world.worldgen.cell.terrain.Terrain"));
 
-            generatorContextMethod = rtfRandomStateClass.getMethod("generatorContext");
             cacheField = generatorContextClass.getField("cache");
 
             try {
@@ -186,12 +209,6 @@ public class RTFCompat {
             getChunkReaderMethod = tileClass.getMethod("getChunkReader", int.class, int.class);
             getCellMethod = tileChunkClass.getMethod("getCell", int.class, int.class);
 
-            heightField = cellClass.getField("height");
-            terrainField = cellClass.getField("terrain");
-
-            isSubmergedMethod = terrainClass.getMethod("isSubmerged");
-            isRiverMethod = terrainClass.getMethod("isRiver");
-
             generatorField = generatorContextClass.getField("generator");
             Class<?> heightmapClass = Class.forName(fl.cls("world.worldgen.cell.heightmap.Heightmap"));
             getHeightmapMethod = heightmapClass.getMethod("levels");
@@ -240,6 +257,112 @@ public class RTFCompat {
         }
     }
 
+    private static boolean classExists(String name) {
+        try {
+            Class.forName(name);
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
+
+    /** Binds the per-chunk cell API of FreeTerraForged without tiles. Throws if any part is missing. */
+    private static void bindChunkCells(Flavor fl) throws ReflectiveOperationException {
+        chunkCellsHolderClass = Class.forName(fl.cls("world.worldgen.IChunkCellsHolder"));
+        String prefix = fl.modId() + "$";
+        getChunkCellsMethod = chunkCellsHolderClass.getMethod(prefix + "getChunkCells");
+        getOrCreateChunkCellsMethod = chunkCellsHolderClass.getMethod(prefix + "getOrCreateChunkCells", generatorContextClass);
+        filteredChunkCacheField = generatorContextClass.getField("filteredChunkCache");
+        getExistingFilteredCellMethod = filteredChunkCacheField.getType().getMethod("getExistingFilteredCell", int.class, int.class);
+        levelsField = generatorContextClass.getField("levels");
+        // Same height scale as the tile path below: terrainScaleFactor on FreeTerraForged.
+        Class<?> levelsClass = levelsField.getType();
+        try {
+            worldHeightField = levelsClass.getField("terrainScaleFactor");
+        } catch (NoSuchFieldException e) {
+            worldHeightField = levelsClass.getField("worldHeight");
+        }
+    }
+
+    /** A cell as the injector sees it, or null. */
+    private static RTFLayerInjector.CellData cellData(Object cell) {
+        if (cell == null) return null;
+        try {
+            float height = heightField.getFloat(cell);
+            Object terrain = terrainField.get(cell);
+            boolean isRiver = false;
+            boolean isSubmerged = false;
+            if (terrain != null) {
+                isRiver = (Boolean) isRiverMethod.invoke(terrain);
+                isSubmerged = (Boolean) isSubmergedMethod.invoke(terrain);
+            }
+            return new RTFLayerInjector.CellData(height, isRiver, isSubmerged);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Chunk-cells mode: reads the 256 cells FreeTerraForged keeps on the chunk. When the chunk has
+     * none (the LevelChunk.&lt;init&gt; pass runs on a new chunk object), they are rebuilt from the
+     * filtered chunk cache, except on the server thread: rebuilding can generate a whole region
+     * there, so it only takes cells that already exist, one at a time.
+     */
+    private static boolean withChunkCells(ChunkAccess chunk, Object generatorContext, CellsUser user) throws Exception {
+        if (cachedWorldHeight < 0) {
+            cachedWorldHeight = 256;
+            try {
+                Object levels = levelsField.get(generatorContext);
+                if (levels != null) {
+                    cachedWorldHeight = worldHeightField.getInt(levels);
+                    AronaLayersGen.LOGGER.info("[RTF] Resolved height scale from Levels.{}: {}", worldHeightField.getName(), cachedWorldHeight);
+                }
+            } catch (Exception e) {
+                AronaLayersGen.LOGGER.warn("[RTF] Could not get the height scale from Levels, using fallback 256: {}", e.getMessage());
+            }
+        }
+
+        Object[] cells = null;
+        if (chunkCellsHolderClass.isInstance(chunk)) {
+            cells = (Object[]) getChunkCellsMethod.invoke(chunk);
+            if (cells == null && !isServerThread()) {
+                cells = (Object[]) getOrCreateChunkCellsMethod.invoke(chunk, generatorContext);
+            }
+        }
+        Object filteredCache = cells == null ? filteredChunkCacheField.get(generatorContext) : null;
+        if (cells == null && filteredCache == null) {
+            if (!nullCacheWarned) {
+                nullCacheWarned = true;
+                AronaLayersGen.LOGGER.warn("[RTF] Neither chunk cells nor a filtered chunk cache - RTF injection skipped.");
+            }
+            return false;
+        }
+
+        if (LayerConfig.logRtf()) {
+            AronaLayersGen.LOGGER.info("[RTF] Processing chunk at {},{} with worldHeight={} ({})",
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), cachedWorldHeight,
+                cells != null ? "chunk cells" : "existing filtered cells");
+        }
+
+        final Object[] chunkCells = cells;
+        user.use(cachedWorldHeight, (worldX, worldZ) -> {
+            try {
+                return cellData(chunkCells != null
+                    ? chunkCells[(worldZ & 15) * 16 + (worldX & 15)]
+                    : getExistingFilteredCellMethod.invoke(filteredCache, worldX, worldZ));
+            } catch (Exception e) {
+                return null;
+            }
+        });
+        return true;
+    }
+
+    /** Receives a chunk's cells: the cell-height to block-Y scale and the cell data by world x and z. */
+    @FunctionalInterface
+    public interface CellsUser {
+        void use(int scale, RTFLayerInjector.CellAccessor cells);
+    }
+
     /**
      * Inject layers using RTF terrain data.
      *
@@ -248,6 +371,17 @@ public class RTFCompat {
      * @return true if RTF injection was performed
      */
     public static boolean injectLayersWithRTF(ChunkAccess chunk, Object randomState) {
+        return withCells(chunk, randomState, (scale, cells) -> RTFLayerInjector.injectLayersForChunk(chunk, scale, cells));
+    }
+
+    /**
+     * Opens the TerraForged cells of {@code chunk} and hands them to {@code user}, without blocking
+     * on the server thread. The cells are only valid inside the call (a tile lease is released
+     * after it).
+     *
+     * @return false if the cells could not be reached (reason logged once or under debug_log_rtf)
+     */
+    public static boolean withCells(ChunkAccess chunk, Object randomState, CellsUser user) {
         if (!isRTFAvailable() || randomState == null) {
             if (LayerConfig.logRtf()) {
                 AronaLayersGen.LOGGER.info("[RTF] Injection skipped: available={}, randomState={}", isRTFAvailable(), randomState != null);
@@ -272,6 +406,8 @@ public class RTFCompat {
                 }
                 return false;
             }
+
+            if (chunkCellsMode) return withChunkCells(chunk, generatorContext, user);
 
             Object tileCache = cacheField.get(generatorContext);
             if (tileCache == null) {
@@ -325,23 +461,9 @@ public class RTFCompat {
                 AronaLayersGen.LOGGER.info("[RTF] Processing chunk at {},{} with worldHeight={}", chunkX, chunkZ, finalWorldHeight);
             }
 
-            RTFLayerInjector.injectLayersForChunk(chunk, finalWorldHeight, (worldX, worldZ) -> {
+            user.use(finalWorldHeight, (worldX, worldZ) -> {
                 try {
-                    Object cell = getCellMethod.invoke(tileChunk, worldX, worldZ);
-                    if (cell == null) return null;
-
-                    float height = heightField.getFloat(cell);
-                    Object terrain = terrainField.get(cell);
-
-                    boolean isRiver = false;
-                    boolean isSubmerged = false;
-
-                    if (terrain != null) {
-                        isRiver = (Boolean) isRiverMethod.invoke(terrain);
-                        isSubmerged = (Boolean) isSubmergedMethod.invoke(terrain);
-                    }
-
-                    return new RTFLayerInjector.CellData(height, isRiver, isSubmerged);
+                    return cellData(getCellMethod.invoke(tileChunk, worldX, worldZ));
                 } catch (Exception e) {
                     return null;
                 }

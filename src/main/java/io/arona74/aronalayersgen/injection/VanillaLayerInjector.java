@@ -213,12 +213,6 @@ public class VanillaLayerInjector {
             }
         }
 
-        // Wall layers go last: a face's cell is only free for a wall piece once the floor pass has
-        // claimed the cells that sit on ground.
-        if (LayerConfig.WALL_LAYERS) {
-            WallLayers.placeInChunk(chunk, sampler, surfaceHmType);
-        }
-
         if (LayerConfig.logVanilla()) {
             AronaLayersGen.LOGGER.info("[FractionalSurface] ChunkAccess {},{}: layers={} noCrossing={}/256 blockMismatch={}/256 flatGradient={}/256 overfull={}/256 noCrossingRun={} | skips: snowy={}, noSurf={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}, structElev={}, conservSurf={} | markersReplaced={}",
                 Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), layersPlaced, noCrossingColumns, mismatchColumns, flatGradientColumns, overfullColumns + "(puddles=" + puddleColumns + ")", java.util.Arrays.toString(noCrossingRun),

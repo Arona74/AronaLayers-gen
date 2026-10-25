@@ -446,10 +446,14 @@ public class LayerConfig {
     public static boolean PLANT_GROUNDING = true;
 
     /**
-     * Wall layers: VanillaLayer+ layers placed against cliffs and steep faces, sized from the
-     * sideways crossing of the density field (see WallLayers). Vanilla worldgen only.
+     * VanillaLayer+ 3D layers on TerraForged terrain, measured from the surfaces on either side of
+     * each step (see Layer3DWalls): a floor layer beside a higher terrain block becomes a 3D layer
+     * (VLP 5.0.0+), the floor merged with a wall toward the step, and the open cells up the step
+     * get a 3D layer with no floor part (vertical_layers 0), so only hard materials (those with a 3D
+     * layer) get one. Uses vp_block_mappings.json, even when Conquest
+     * Reforged is also installed. Read once, at the first world load; changes need a restart.
      */
-    public static boolean WALL_LAYERS = false;
+    public static boolean THREE_D_LAYER_INJECTION = false;
 
     /**
      * Lower the layer count in swamp biomes (any biome whose id contains "swamp": vanilla swamp and
@@ -629,7 +633,7 @@ public class LayerConfig {
         if (config.has("cr_nbt_trees")) CR_NBT_TREES = config.get("cr_nbt_trees").getAsBoolean();
         if (config.has("cr_nbt_trees_vanilla_fallback")) CR_NBT_TREES_VANILLA_FALLBACK = config.get("cr_nbt_trees_vanilla_fallback").getAsBoolean();
         if (config.has("plant_grounding")) PLANT_GROUNDING = config.get("plant_grounding").getAsBoolean();
-        if (config.has("wall_layers")) WALL_LAYERS = config.get("wall_layers").getAsBoolean();
+        if (config.has("3D_layer_injection")) THREE_D_LAYER_INJECTION = config.get("3D_layer_injection").getAsBoolean();
         if (config.has("reduce_swamp_layers")) REDUCE_SWAMP_LAYERS = config.get("reduce_swamp_layers").getAsBoolean();
         if (config.has("reduce_swamp_layers_value")) REDUCE_SWAMP_LAYERS_VALUE = config.get("reduce_swamp_layers_value").getAsInt();
         if (config.has("swamp_puddles_as_water")) SWAMP_PUDDLES_AS_WATER = config.get("swamp_puddles_as_water").getAsBoolean();
@@ -761,7 +765,7 @@ public class LayerConfig {
             config.addProperty("debug_log_nbt_trees", DEBUG_LOG_NBT_TREES);
             config.addProperty("debug_log_tellus", DEBUG_LOG_TELLUS);
             config.addProperty("plant_grounding", PLANT_GROUNDING);
-            config.addProperty("wall_layers", WALL_LAYERS);
+            config.addProperty("3D_layer_injection", THREE_D_LAYER_INJECTION);
             config.addProperty("reduce_swamp_layers", REDUCE_SWAMP_LAYERS);
             config.addProperty("reduce_swamp_layers_value", REDUCE_SWAMP_LAYERS_VALUE);
             config.addProperty("swamp_puddles_as_water", SWAMP_PUDDLES_AS_WATER);

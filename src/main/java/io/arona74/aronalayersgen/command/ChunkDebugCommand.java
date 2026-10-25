@@ -41,8 +41,8 @@ import java.util.Map;
  *
  * Usage (requires permission level 2):
  *   /algdebug
- *   /algdebug wall    (wall layer diagnostic for the side face you look at, see WallDebugCommand)
- *   /algdebug walls   (wall layer verdicts for every open-air side face of the chunk)
+ *   /algdebug wall3d  (TerraForged 3D layer / wall piece decision for the cell you look at, see Wall3DDebugCommand)
+ *   /algdebug walls3d (the same, tallied for every cell of the chunk)
  *   /algdebug dh      (Distant Horizons exact-height timings, see DhDebugCommand)
  */
 public class ChunkDebugCommand {
@@ -53,8 +53,8 @@ public class ChunkDebugCommand {
                 Commands.literal("algdebug")
                     .requires(src -> Compat.hasPermission(src, 2))
                     .executes(ChunkDebugCommand::execute)
-                    .then(Commands.literal("wall").executes(WallDebugCommand::lookedAt))
-                    .then(Commands.literal("walls").executes(WallDebugCommand::chunkScan))
+                    .then(Commands.literal("wall3d").executes(Wall3DDebugCommand::lookedAt))
+                    .then(Commands.literal("walls3d").executes(Wall3DDebugCommand::chunkScan))
                     .then(Commands.literal("plant").executes(PlantDebugCommand::lookedAt))
                     .then(Commands.literal("dh").executes(DhDebugCommand::report)
                         .then(Commands.literal("reset").executes(DhDebugCommand::reset))

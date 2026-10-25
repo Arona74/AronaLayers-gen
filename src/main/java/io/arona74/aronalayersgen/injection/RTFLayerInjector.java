@@ -195,6 +195,10 @@ public class RTFLayerInjector {
             }
         }
 
+        if (LayerConfig.THREE_D_LAYER_INJECTION) {
+            Layer3DWalls.placeInChunk(chunk, worldHeight, cellAccessor);
+        }
+
         if (LayerConfig.logRtf()) {
             AronaLayersGen.LOGGER.info("[RTF] ChunkAccess {},{}: cells={}, null={}, layers={} | skips: river={}, submerged={}, snowy={}, noSurf={}, conserv={}, noMap={}, layerZero={}, noBlock={}, notAir={}, enclosed={}",
                 Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), cellsProcessed, cellsNull, layersPlaced,

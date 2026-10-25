@@ -70,7 +70,11 @@ public class LayerPlacementHelper {
     public static ModBackend getBackend() {
         if (detectedBackend == null) {
             FabricLoader loader = FabricLoader.getInstance();
-            if (loader.isModLoaded("conquest")) {
+            if (LayerConfig.THREE_D_LAYER_INJECTION && loader.isModLoaded("vanillalayerplus")) {
+                // 3D layers are VanillaLayer+ blocks: its mappings win even with Conquest installed.
+                detectedBackend = ModBackend.VANILLA_LAYER_PLUS;
+                AronaLayersGen.LOGGER.info("[AronaLayersGen] Detected backend: VanillaLayerPlus (3D_layer_injection)");
+            } else if (loader.isModLoaded("conquest")) {
                 detectedBackend = ModBackend.CONQUEST_REFORGED;
                 AronaLayersGen.LOGGER.info("[AronaLayersGen] Detected backend: Conquest Reforged");
             } else if (loader.isModLoaded("vanillalayerplus")) {
@@ -351,6 +355,8 @@ public class LayerPlacementHelper {
      * Handles both vanilla LAYERS and CR's custom "layer".
      */
     public static int readLayerCount(BlockState state) {
+        // A VanillaLayer+ 3D layer: its floor part (vertical_layers, 0 for a wall alone).
+        if (Layer3D.is(state.getBlock())) return Layer3D.verticalLayers(state);
         if (state.hasProperty(BlockStateProperties.LAYERS)) {
             return state.getValue(BlockStateProperties.LAYERS);
         }
@@ -366,20 +372,24 @@ public class LayerPlacementHelper {
      */
     public static boolean hasLayerProperty(BlockState state) {
         if (state.hasProperty(BlockStateProperties.LAYERS)) return true;
+        if (Layer3D.is(state.getBlock())) return true;   // vertical_layers / horizontal_layers
         return getCRLayerProperty(state.getBlock()) != null;
     }
 
     private static final ConcurrentHashMap<Block, java.util.Optional<Property<?>>> facingPropertyCache = new ConcurrentHashMap<>();
 
     /**
-     * A layer standing against a wall rather than lying on the ground: a layer property and a
-     * horizontal {@code facing} (VanillaLayer+ wall layers, Conquest Reforged vertical slabs; see
-     * WallLayers). Its count is a thickness, not a height, and the block under it is usually air,
+     * A layer standing against a wall rather than lying on the ground: a VanillaLayer+ 3D layer
+     * (see Layer3DWalls), or a layer property and a horizontal {@code facing} (VanillaLayer+ layers
+     * placed sideways by hand, Conquest Reforged vertical slabs). Its count is a thickness, not a
+     * height, and the block under it is usually air,
      * so every pass that reads a column's top layer as a floor must leave it alone: remapping it
      * by "the block below" would turn it into the wrong material or delete it.
      */
     public static boolean isWallPiece(BlockState state) {
         if (!hasLayerProperty(state)) return false;
+        // A 3D layer always carries a wall part (Layer3D); its floor part is not a plain floor layer.
+        if (Layer3D.is(state.getBlock())) return true;
         Property<?> facing = facingPropertyCache.computeIfAbsent(state.getBlock(), b -> {
             for (Property<?> p : b.getStateDefinition().getProperties()) {
                 if (p.getName().equals("facing")) return java.util.Optional.of(p);
