@@ -518,8 +518,7 @@ public final class Layer3DWalls {
     /** A block a wall piece can stand against: solid terrain, not a tree and not a layer. */
     public static boolean isTerrainCandidate(BlockState state) {
         return Compat.blocksMotion(state)
-            && !state.is(net.minecraft.tags.BlockTags.LEAVES)
-            && !state.is(net.minecraft.tags.BlockTags.LOGS)
+            && !LayerPlacementHelper.isTreePart(state)
             && !LayerPlacementHelper.hasLayerProperty(state)
             && !LayerPlacementHelper.isCoralBlock(state);
     }

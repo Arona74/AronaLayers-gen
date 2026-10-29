@@ -67,6 +67,18 @@ public final class PlantPlacementHook {
     }
 
     /**
+     * The look-through for chorus plants and flowers. Their survival reads the block below them
+     * and the block below each horizontal neighbour, all one level down; any of those that is a
+     * layer block is read through to the block under it, which is where the end stone is.
+     *
+     * @return the position vanilla should read instead of {@code query}
+     */
+    public static BlockPos lookThroughLayerForChorus(LevelReader world, BlockPos pos, BlockPos query) {
+        if (query.getY() != pos.getY() - 1) return query;
+        return PlantGrounding.isLayerSoil(world.getBlockState(query)) ? query.below() : query;
+    }
+
+    /**
      * The same look-through for blocks that demand a sturdy top face instead of a floor material.
      *
      * <p>{@code leaf_litter} is the case. It extends the plant base but overrides

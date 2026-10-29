@@ -17,6 +17,9 @@
     ],
     "client": [
       "io.arona74.aronalayersgen.client.AronaLayersGenClient"
+    ],
+    "modmenu": [
+      "io.arona74.aronalayersgen.client.config.ModMenuIntegration"
     ]
   },
   "mixins": [

@@ -55,4 +55,10 @@ jar {
     from(rootProject.file('LICENSE')) {
         rename { "${it}_${rootProject.archives_base_name}" }
     }
+    // Compile-only stand-ins for Mod Menu's API (see ModMenuApi): shipping them would shadow Mod Menu's own.
+    exclude 'com/terraformersmc/**'
+}
+
+sourcesJar {
+    exclude 'com/terraformersmc/**'
 }

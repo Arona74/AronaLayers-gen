@@ -30,4 +30,15 @@ public final class GroundedPlantRender {
             return PlantGrounding.offset(state, view, pos);
         }
     }
+
+    /** A lowered post's drop, walking a stacked column the same way. */
+    public static float postDrop(BlockState state, BlockGetter view, BlockPos pos) {
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return PlantGrounding.postDrop(state, view, pos);
+        try {
+            return PlantGrounding.postDrop(state, view, level, pos);
+        } catch (RuntimeException e) {
+            return PlantGrounding.postDrop(state, view, pos);
+        }
+    }
 }

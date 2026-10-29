@@ -10,25 +10,46 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.EmptyBlockGetter;
+import net.minecraft.world.level.block.AbstractCandleBlock;
 import net.minecraft.world.level.block.BambooSaplingBlock;
 import net.minecraft.world.level.block.BambooStalkBlock;
+import net.minecraft.world.level.block.BasePressurePlateBlock;
 import net.minecraft.world.level.block.BigDripleafBlock;
 import net.minecraft.world.level.block.BigDripleafStemBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.BrewingStandBlock;
 import net.minecraft.world.level.block.CactusBlock;
+import net.minecraft.world.level.block.CakeBlock;
+import net.minecraft.world.level.block.CarpetBlock;
+import net.minecraft.world.level.block.CrossCollisionBlock;
+import net.minecraft.world.level.block.FenceBlock;
+import net.minecraft.world.level.block.FlowerPotBlock;
+import net.minecraft.world.level.block.IronBarsBlock;
 import net.minecraft.world.level.block.KelpBlock;
 import net.minecraft.world.level.block.KelpPlantBlock;
+import net.minecraft.world.level.block.LanternBlock;
 import net.minecraft.world.level.block.PointedDripstoneBlock;
+import net.minecraft.world.level.block.RedstoneTorchBlock;
+import net.minecraft.world.level.block.RedstoneWallTorchBlock;
+import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.SugarCaneBlock;
+import net.minecraft.world.level.block.TorchBlock;
+import net.minecraft.world.level.block.WallBlock;
+import net.minecraft.world.level.block.WallTorchBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.block.state.properties.WallSide;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.shapes.BooleanOp;
+import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.minecraft.tags.BlockTags;
 
 import java.util.HashSet;
 import java.util.Map;
@@ -156,7 +177,21 @@ public final class PlantGrounding {
         if (block == Blocks.LILY_PAD) return false;
         if (positionsItself(block)) return false;
         if (Compat.isPlantBase(block) || isColumnPlant(block)) return true;
+        if (LayerConfig.GROUND_DECORATIONS && isStandingDecoration(block)) return true;
         return isOffsetDecoration(block);
+    }
+
+    /**
+     * A free-standing decoration placed on the floor: nothing connects to it, so it can be lowered
+     * whole like a plant. Wall torches are the wall-mounted variants of torches and stay put; a
+     * hanging lantern is caught per state by {@link #classify}. Block-entity-rendered blocks
+     * (chests, signs, skulls, banners, beds) are absent because only the baked model moves.
+     */
+    private static boolean isStandingDecoration(Block block) {
+        if (block instanceof WallTorchBlock || block instanceof RedstoneWallTorchBlock) return false;
+        return block instanceof LanternBlock || block instanceof TorchBlock || block instanceof RedstoneTorchBlock
+            || block instanceof AbstractCandleBlock || block instanceof FlowerPotBlock || block instanceof CarpetBlock
+            || block instanceof BasePressurePlateBlock || block instanceof BrewingStandBlock || block instanceof CakeBlock;
     }
 
     /** A block that already places itself on layer blocks: grounding it would double the drop. */
@@ -322,6 +357,372 @@ public final class PlantGrounding {
         return level;
     }
 
+    // ========== Standing trunks ==========
+
+    /**
+     * Set while a layer's own top is being measured, so the measurement sees the layer's real
+     * collision rather than the full cube {@link #trunkFooting} gives it under a trunk.
+     */
+    private static final ThreadLocal<Boolean> MEASURING_LAYER = ThreadLocal.withInitial(() -> false);
+
+    /** Per post state, the part of its collision that rests on the ground (see trunkFooting). */
+    private static final Map<BlockState, VoxelShape> POST_FOOTINGS = new ConcurrentHashMap<>();
+
+    /**
+     * A block a trunk is made of: an upright log, or a huge mushroom's stem.
+     */
+    public static boolean isTrunkBlock(BlockState state) {
+        if (state.getBlock() instanceof RotatedPillarBlock) {
+            return state.getValue(RotatedPillarBlock.AXIS) == Direction.Axis.Y && state.is(BlockTags.LOGS);
+        }
+        return state.is(Blocks.MUSHROOM_STEM);
+    }
+
+    /**
+     * An upright log (or a huge mushroom's stem) standing on a layer block. TrunkStemModel draws it down to the layer's top,
+     * and its outline reaches down with it, so a tree that grew on a layer (or was generated one
+     * block higher so its layer could go under it) reads as standing on the layer, not floating
+     * over it.
+     */
+    public static boolean isStandingTrunk(BlockState state, BlockGetter level, BlockPos pos) {
+        if (!LayerConfig.treesOnLayers() || !GroundingFlags.ready || level == null || pos == null) return false;
+        Block block = state.getBlock();
+        if (!(block instanceof RotatedPillarBlock) && block != Blocks.MUSHROOM_STEM) return false;
+        BlockGetter view = nonBlocking(level, pos);
+        if (view == null || !isLayerSoil(view.getBlockState(pos.below()))) return false;
+        // The tag test last: shapes are cached for every state while blocks register, before any
+        // tag is bound, and 26.x throws on an unbound tag where older versions answer false.
+        return isTrunkBlock(state);
+    }
+
+    /**
+     * A fence, wall, pane or iron bars: a post that connects to its neighbours. Fence gates are left
+     * out: a gate stands off the ground by design and is not drawn down.
+     */
+    public static boolean isPostBlock(Block block) {
+        return block instanceof FenceBlock || block instanceof WallBlock
+            || block instanceof IronBarsBlock;
+    }
+
+    /**
+     * A post standing on a layer block. It cannot be lowered (its rails would no longer meet a
+     * neighbour that is not on a layer), so like a trunk it is drawn down to the layer instead, and
+     * its outline and the layer's collision take its footprint.
+     */
+    public static boolean isStandingPost(BlockState state, BlockGetter level, BlockPos pos) {
+        if (!LayerConfig.postsOnLayers() || LayerConfig.postsLowered()) return false;
+        if (!GroundingFlags.ready || level == null || pos == null) return false;
+        if (!isPostBlock(state.getBlock())) return false;
+        BlockGetter view = nonBlocking(level, pos);
+        return view != null && isLayerSoil(view.getBlockState(pos.below()));
+    }
+
+    // ----- Posts joining across a step -----
+    //
+    // Vanilla joins posts only on the same level. A wall on a layer is drawn down into its layer's
+    // cell, so a wall next to that layer one level lower looks as if it should meet it, but neither
+    // has a side towards the other. These add the missing sides at draw and collision time, without
+    // touching the block states: the lower post gets a side towards the layer cell ("level"
+    // bridges), the standing post gets one in its extension, at the lower post's level ("step"
+    // bridges). Both are bit masks over Direction.get2DDataValue().
+
+    /** Whether two posts join the way vanilla joins them side by side. */
+    public static boolean sameFamily(BlockState a, BlockState b) {
+        Block x = a.getBlock();
+        Block y = b.getBlock();
+        if (x instanceof WallBlock) return y instanceof WallBlock;
+        if (x instanceof IronBarsBlock) return y instanceof IronBarsBlock;
+        if (x instanceof FenceBlock) {
+            return y instanceof FenceBlock && a.is(BlockTags.WOODEN_FENCES) == b.is(BlockTags.WOODEN_FENCES);
+        }
+        return false;
+    }
+
+    private static EnumProperty<WallSide> wallSide(Direction dir) {
+        return switch (dir) {
+            case NORTH -> BlockStateProperties.NORTH_WALL;
+            case SOUTH -> BlockStateProperties.SOUTH_WALL;
+            case WEST -> BlockStateProperties.WEST_WALL;
+            default -> BlockStateProperties.EAST_WALL;
+        };
+    }
+
+    /** A fence's or pane's side towards {@code dir} (CrossCollisionBlock's own map is protected). */
+    private static BooleanProperty crossSide(Direction dir) {
+        return switch (dir) {
+            case NORTH -> BlockStateProperties.NORTH;
+            case SOUTH -> BlockStateProperties.SOUTH;
+            case WEST -> BlockStateProperties.WEST;
+            default -> BlockStateProperties.EAST;
+        };
+    }
+
+    /** Whether a post already has its side towards {@code dir}. Anything without sides answers true. */
+    private static boolean connected(BlockState post, Direction dir) {
+        if (post.getBlock() instanceof WallBlock) return post.getValue(wallSide(dir)) != WallSide.NONE;
+        if (post.getBlock() instanceof CrossCollisionBlock) return post.getValue(crossSide(dir));
+        return true;
+    }
+
+    /** The post with its sides towards every direction in {@code mask} added (low, for a wall). */
+    public static BlockState joined(BlockState post, int mask) {
+        for (Direction dir : Direction.Plane.HORIZONTAL) {
+            if ((mask & (1 << dir.get2DDataValue())) == 0) continue;
+            if (post.getBlock() instanceof WallBlock) {
+                post = post.setValue(wallSide(dir), WallSide.LOW);
+            } else if (post.getBlock() instanceof CrossCollisionBlock) {
+                post = post.setValue(crossSide(dir), true);
+            }
+        }
+        return post;
+    }
+
+    /**
+     * The post as it looks with another post stacked on it: a wall's low sides become tall, as
+     * vanilla makes them under a wall, so a copy of the post continues into the next one without a
+     * notch. Sides in {@code keepLow} stay low (a step side, which meets a low side).
+     */
+    public static BlockState stacked(BlockState post, int keepLow) {
+        if (!(post.getBlock() instanceof WallBlock)) return post;
+        for (Direction dir : Direction.Plane.HORIZONTAL) {
+            if ((keepLow & (1 << dir.get2DDataValue())) != 0) continue;
+            if (post.getValue(wallSide(dir)) == WallSide.LOW) post = post.setValue(wallSide(dir), WallSide.TALL);
+        }
+        return post;
+    }
+
+    /**
+     * Whether a post on a layer shows at the level below it, where a post beside its layer stands:
+     * drawn down to the layer (EXTEND), or lowered at least halfway into that level (LOWER, a layer
+     * of 4 or less), so the two read as neighbours and are joined.
+     */
+    private static boolean showsBelow(BlockState post, BlockGetter level, BlockPos pos) {
+        if (!LayerConfig.postsLowered()) return isStandingPost(post, level, pos);
+        return postDrop(post, level, pos) <= -0.5f;
+    }
+
+    /**
+     * Sides a post needs towards a standing post of its family one level up: the cell beside it is
+     * that post's layer, which the post above is drawn down into.
+     */
+    public static int levelBridges(BlockState post, BlockGetter level, BlockPos pos) {
+        if (!LayerConfig.postsOnLayers() || !GroundingFlags.ready || level == null || pos == null) return 0;
+        if (!isPostBlock(post.getBlock())) return 0;
+        BlockGetter view = nonBlocking(level, pos);
+        if (view == null) return 0;
+        int mask = 0;
+        for (Direction dir : Direction.Plane.HORIZONTAL) {
+            if (connected(post, dir)) continue;
+            BlockPos side = pos.relative(dir);
+            if (!isLayerSoil(view.getBlockState(side))) continue;
+            BlockPos abovePos = side.above();
+            BlockState above = view.getBlockState(abovePos);
+            if (sameFamily(post, above) && showsBelow(above, level, abovePos)) mask |= 1 << dir.get2DDataValue();
+        }
+        return mask;
+    }
+
+    /**
+     * Sides a standing post needs in its extension, towards a post of its family beside its layer:
+     * the lower post of {@link #levelBridges}, seen from above.
+     */
+    public static int stepBridges(BlockState post, BlockGetter level, BlockPos pos) {
+        if (!showsBelow(post, level, pos)) return 0;
+        BlockGetter view = nonBlocking(level, pos);
+        if (view == null) return 0;
+        BlockPos layer = pos.below();
+        int mask = 0;
+        for (Direction dir : Direction.Plane.HORIZONTAL) {
+            if (connected(post, dir)) continue;
+            if (sameFamily(post, view.getBlockState(layer.relative(dir)))) mask |= 1 << dir.get2DDataValue();
+        }
+        return mask;
+    }
+
+    // ----- Lowered posts (PostMode.LOWER) -----
+
+    /**
+     * How far a post is lowered onto the layer under it, as a negative block fraction, or 0. The
+     * soil is under the bottom of its column of posts, so a wall stacked on a lowered wall is
+     * lowered with it.
+     */
+    public static float postDrop(BlockState state, BlockGetter level, BlockPos pos) {
+        return postDrop(state, level, level, pos);
+    }
+
+    /** As {@link #postDrop(BlockState, BlockGetter, BlockPos)}, walking the column on {@code columnLevel} (see offset). */
+    public static float postDrop(BlockState state, BlockGetter level, BlockGetter columnLevel, BlockPos pos) {
+        if (!LayerConfig.postsLowered() || !GroundingFlags.ready || level == null || pos == null) return 0f;
+        if (!isPostBlock(state.getBlock())) return 0f;
+        BlockGetter view = nonBlocking(level, pos);
+        BlockGetter column = nonBlocking(columnLevel, pos);
+        if (view == null || column == null) return 0f;
+        BlockPos soil = pos.below();
+        BlockGetter soilLevel = view;
+        if (isPostBlock(view.getBlockState(soil).getBlock())) {
+            soilLevel = column;
+            for (int i = 0; i < MAX_COLUMN && isPostBlock(soilLevel.getBlockState(soil).getBlock()); i++) {
+                soil = soil.below();
+            }
+        }
+        BlockState soilState = soilLevel.getBlockState(soil);
+        if (!isLayerSoil(soilState)) return 0f;
+        return surfaceDrop(soilState, soilLevel, soil);
+    }
+
+    /**
+     * Whether a lowered post reaches back up to a block standing on it: lowering opens a gap under
+     * that block, which the parts of the post reaching its cell top close again. A post stacked on
+     * it is lowered with the column and needs nothing.
+     */
+    public static boolean reachesUp(BlockState post, BlockGetter level, BlockPos pos, float drop) {
+        if (!LayerConfig.LOWERED_POSTS_REACH_UP || drop == 0f || level == null || pos == null) return false;
+        BlockGetter view = nonBlocking(level, pos);
+        if (view == null) return false;
+        BlockPos abovePos = pos.above();
+        BlockState above = view.getBlockState(abovePos);
+        if (above.isAir()) return false;
+        return !isPostBlock(above.getBlock()) || postDrop(above, level, abovePos) != drop;
+    }
+
+    /** A lowered post's shape: moved down, and reaching back up to a block on it (see reachesUp). */
+    private static VoxelShape lowered(BlockState post, BlockGetter level, BlockPos pos, VoxelShape shape, float drop) {
+        VoxelShape moved = shape.move(0.0, drop, 0.0);
+        if (!reachesUp(post, level, pos, drop)) return moved;
+        VoxelShape[] out = {moved};
+        shape.forAllBoxes((x0, y0, z0, x1, y1, z1) -> {
+            if (y1 > 1.0 - 1.0E-4) out[0] = Shapes.or(out[0], Shapes.box(x0, Math.max(0.0, y0 + drop), z0, x1, 1.0, z1));
+        });
+        return out[0];
+    }
+
+    /**
+     * Sides of a post that join a block lowered by a different amount: a post with one of the two on
+     * a layer, or both on layers of different counts, or anything that is never lowered (a fence
+     * gate, a full block). The faces at the end of each side are culled as if the two still met,
+     * which leaves the end open: these sides have their end faces drawn.
+     */
+    public static int openSides(BlockState post, BlockGetter level, BlockPos pos, float drop) {
+        if (!LayerConfig.postsLowered() || !isPostBlock(post.getBlock()) || level == null || pos == null) return 0;
+        BlockGetter view = nonBlocking(level, pos);
+        if (view == null) return 0;
+        int mask = 0;
+        for (Direction dir : Direction.Plane.HORIZONTAL) {
+            if (!connected(post, dir)) continue;
+            BlockPos sidePos = pos.relative(dir);
+            BlockState side = view.getBlockState(sidePos);
+            // Any block it joins, not only posts: a fence gate is not lowered (drop 0), and the end
+            // of a lowered fence's rails would show its inside against it. Against a full block
+            // the end face is drawn flush with that block and stays out of sight.
+            if (postDrop(side, level, sidePos) != drop) mask |= 1 << dir.get2DDataValue();
+        }
+        return mask;
+    }
+
+    /** A post's collision moved down with it (lowered), or with its level bridges added (extended). */
+    public static VoxelShape bridgedCollision(BlockState post, BlockGetter level, BlockPos pos, VoxelShape shape) {
+        float drop = postDrop(post, level, pos);
+        if (drop != 0f) {
+            int sides = levelBridges(post, level, pos) | stepBridges(post, level, pos);
+            if (sides != 0) shape = Shapes.or(shape, joined(post, sides).getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
+            return lowered(post, level, pos, shape, drop);
+        }
+        int mask = levelBridges(post, level, pos);
+        if (mask == 0) return shape;
+        return Shapes.or(shape, joined(post, mask).getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
+    }
+
+    /** A standing trunk or post: drawn, outlined and footed down to the layer under it. */
+    public static boolean reachesDown(BlockState state, BlockGetter level, BlockPos pos) {
+        return isStandingTrunk(state, level, pos) || isStandingPost(state, level, pos);
+    }
+
+    /**
+     * The columns of a shape that rest on the bottom of its cell, stretched to the full cell
+     * height: a fence's post (its rails start higher), a wall's post and sides.
+     */
+    private static VoxelShape footprint(VoxelShape shape) {
+        VoxelShape[] out = {Shapes.empty()};
+        shape.forAllBoxes((x0, y0, z0, x1, y1, z1) -> {
+            if (y0 < 1.0E-4) out[0] = Shapes.or(out[0], Shapes.box(x0, 0.0, z0, x1, 1.0, z1));
+        });
+        return out[0];
+    }
+
+    /**
+     * Height of the layer block at {@code layerPos} as a fraction of its cell, from its collision
+     * shape (VanillaLayer+ leaves the outline a full cube), or 1 when it cannot be read.
+     */
+    public static float layerTop(BlockGetter level, BlockPos layerPos) {
+        BlockGetter view = nonBlocking(level, layerPos);
+        if (view == null) return 1f;
+        BlockState layer = view.getBlockState(layerPos);
+        MEASURING_LAYER.set(true);
+        try {
+            VoxelShape shape = layer.getCollisionShape(view, layerPos);
+            if (shape.isEmpty()) shape = layer.getShape(view, layerPos);
+            if (shape.isEmpty()) return 0f;
+            double top = shape.max(Direction.Axis.Y);
+            return Double.isFinite(top) ? (float) Math.min(1.0, Math.max(0.0, top)) : 1f;
+        } finally {
+            MEASURING_LAYER.set(false);
+        }
+    }
+
+    /**
+     * A standing trunk's or post's outline, reaching down to the top of its layer: the whole cell for
+     * a trunk, the part of the outline that rests on the ground for a post.
+     */
+    public static VoxelShape standingOutline(BlockState state, BlockGetter level, BlockPos pos, VoxelShape shape) {
+        if (shape.isEmpty()) return shape;
+        float drop = postDrop(state, level, pos);
+        if (drop != 0f) {
+            int sides = levelBridges(state, level, pos) | stepBridges(state, level, pos);
+            if (sides != 0) shape = Shapes.or(shape, joined(state, sides).getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
+            return lowered(state, level, pos, shape, drop);
+        }
+        int bridges = levelBridges(state, level, pos);
+        if (bridges != 0) shape = Shapes.or(shape, joined(state, bridges).getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
+        boolean trunk = isStandingTrunk(state, level, pos);
+        if (!trunk && !isStandingPost(state, level, pos)) return shape;
+        float top = layerTop(level, pos.below());
+        if (top >= 1f) return shape;
+        VoxelShape reach = Shapes.box(0.0, top - 1.0, 0.0, 1.0, 0.0, 1.0);
+        if (!trunk) {
+            int step = stepBridges(state, level, pos);
+            VoxelShape base = step == 0 ? shape : joined(state, step).getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+            reach = Shapes.join(footprint(base).move(0.0, -1.0, 0.0), reach, BooleanOp.AND);
+        }
+        return Shapes.or(shape, reach);
+    }
+
+    /**
+     * The collision of a layer block with a standing trunk on it: a full cube. The part of the cell
+     * above the layer is drawn as trunk; without this a chicken or a dropped item could walk into
+     * the foot of the tree. A player is too tall to fit there anyway.
+     *
+     * <p>Under a standing post the layer takes the post's footprint instead (a fence's post and
+     * rails), which keeps animals in a
+     * pen built on low layers: a chicken fits under a fence 7/8 of a block above the ground.
+     */
+    public static VoxelShape trunkFooting(BlockGetter level, BlockPos pos, VoxelShape shape) {
+        if ((!LayerConfig.treesOnLayers() && !LayerConfig.postsOnLayers())
+                || level == null || pos == null || MEASURING_LAYER.get()) return shape;
+        BlockGetter view = nonBlocking(level, pos);
+        if (view == null) return shape;
+        BlockPos above = pos.above();
+        BlockState aboveState = view.getBlockState(above);
+        if (isStandingTrunk(aboveState, level, above)) return Shapes.block();
+        if (!isStandingPost(aboveState, level, above)) return shape;
+        // With its step bridges, so the side reaching the lower post is footed too.
+        aboveState = joined(aboveState, stepBridges(aboveState, level, above));
+        // Vanilla posts' collision depends on the state alone, and this runs on every collision
+        // query against the layer, so the footprint is computed once per state.
+        VoxelShape foot = POST_FOOTINGS.computeIfAbsent(aboveState,
+            s -> footprint(s.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO)));
+        return foot.isEmpty() ? shape : Shapes.or(shape, foot);
+    }
+
     // ========== Shapes and ray traces ==========
 
     /** The outline or collision shape of a grounded plant, moved down with it. */
@@ -332,7 +733,7 @@ public final class PlantGrounding {
     }
 
     /**
-     * A lowered plant reaches down into the layer block's space, and the block traversal only asks
+     * A lowered plant (or a standing trunk) reaches down into the layer block's space, and the block traversal only asks
      * each cell about its own block: a look ray that crosses only the layer cell would pass through
      * the plant's lower part without hitting it. Re-trace for grounded plants sitting above each
      * cell the ray crosses, and keep that hit when it is nearer than the original.
@@ -343,7 +744,8 @@ public final class PlantGrounding {
      * @return a nearer hit, or null to keep the original
      */
     public static BlockHitResult clipLowered(BlockGetter level, ClipContext context, BlockHitResult original) {
-        if (!LayerConfig.PLANT_GROUNDING || !LayerConfig.PLANT_GROUNDING_SHAPES) return null;
+        boolean plants = LayerConfig.PLANT_GROUNDING && LayerConfig.PLANT_GROUNDING_SHAPES;
+        if (!plants && !LayerConfig.treesOnLayers() && !LayerConfig.postsOnLayers()) return null;
         if (((ClipContextAccessor) context).aronalayersgen$block() != ClipContext.Block.OUTLINE) return null;
 
         BlockHitResult plantHit = BlockGetter.traverseBlocks(context.getFrom(), context.getTo(), context, (ctx, cell) -> {
@@ -351,7 +753,9 @@ public final class PlantGrounding {
             BlockGetter view = nonBlocking(level, plantPos);
             if (view == null) return null;
             BlockState plant = view.getBlockState(plantPos);
-            if (!isGrounded(plant) || offset(plant, level, plantPos) == 0f) return null;
+            // A standing trunk or post reaches into the layer cell the same way (see standingOutline).
+            boolean reaches = plants && isGrounded(plant) && offset(plant, level, plantPos) != 0f;
+            if (!reaches && !reachesDown(plant, level, plantPos) && postDrop(plant, level, plantPos) == 0f) return null;
             return ctx.getBlockShape(plant, level, plantPos).clip(ctx.getFrom(), ctx.getTo(), plantPos);
         }, ctx -> null);
 

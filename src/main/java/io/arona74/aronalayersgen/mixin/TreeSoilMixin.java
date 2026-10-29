@@ -59,7 +59,10 @@ public class TreeSoilMixin {
                 BlockPos soilPos = checkOrigin.below();
                 BlockState soilState = world.getBlockState(soilPos);
 
-                if (RTFLayerInjector.hasLayerProperty(soilState)) {
+                // With the stem models the tree stands on its layer (a sapling grows on top of
+                // it), and the trunk's dirt goes under the layer (see TrunkDirtMixin). Without
+                // them the layer becomes the soil block, as before.
+                if (!LayerConfig.treesOnLayers() && RTFLayerInjector.hasLayerProperty(soilState)) {
                     BlockPos actualSoilPos = soilPos.below();
                     BlockState actualSoilState = world.getBlockState(actualSoilPos);
 

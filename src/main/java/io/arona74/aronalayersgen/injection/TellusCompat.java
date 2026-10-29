@@ -7,7 +7,6 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
-import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -239,8 +238,7 @@ public class TellusCompat {
     private static boolean isNaturalGround(BlockState state) {
         return Compat.blocksMotion(state)
             && !LayerPlacementHelper.hasLayerProperty(state)
-            && !state.is(BlockTags.LEAVES)
-            && !state.is(BlockTags.LOGS);
+            && !LayerPlacementHelper.isTreePart(state);
     }
 
     /**

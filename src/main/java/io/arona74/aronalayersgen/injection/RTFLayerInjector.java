@@ -230,7 +230,7 @@ public class RTFLayerInjector {
      * elsewhere.
      */
     public static void onChunkLoadRemap(net.minecraft.server.level.ServerLevel world, LevelChunk chunk) {
-        if (!LayerConfig.LAYER_INJECTION || !LayerConfig.RTF_LAYER_INJECTION) return;
+        if (LayerBackend.of(world) != LayerBackend.TERRAFORGED) return;
         if (LayerConfig.INJECTION_MODE != LayerConfig.InjectionMode.POST_FEATURES) return;
         LayerPlacementHelper.correctMismatchedLayers(chunk, true);
     }

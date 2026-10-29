@@ -22,12 +22,19 @@
     "PlantGroundingClipMixin",
     "ClipContextAccessor",
     "ColumnPlantSurviveMixin",
+    "ChorusSurviveMixin",
+    "MushroomSurviveMixin",
+    "TreeShiftMixin",
+    "HugeMushroomShiftMixin",
+    "TrunkDirtMixin",
     "BambooSurviveMixin",
     "BambooPlacementMixin",
     "PlantSoilSurviveMixin",
     "DripstoneSurviveMixin"
   ],
-  "client": [],
+  "client": [
+    "GroundedParticleMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   },

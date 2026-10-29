@@ -24,7 +24,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.levelgen.Heightmap;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +40,8 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.world.level.WorldGenLevel;
+import net.minecraft.world.level.LevelSimulatedReader;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -158,7 +163,18 @@ public class LayerPlacementHelper {
         if (!Compat.blocksMotion(state)) return false;
         if (getMappingRegistry().isLayerBlock(state.getBlock())) return false;
         if (isCoralBlock(state)) return false;
-        return !state.is(BlockTags.LEAVES) && !state.is(BlockTags.LOGS);
+        return !isTreePart(state);
+    }
+
+    /**
+     * Part of a tree: leaves, logs, huge mushrooms (stem and cap), or the End's chorus plants, which
+     * grow the same way — a stem on the ground with branches over the neighbouring columns. None of it is ground, and none
+     * of it is a structure roof over the column below.
+     */
+    public static boolean isTreePart(BlockState state) {
+        return state.is(BlockTags.LEAVES) || state.is(BlockTags.LOGS)
+            || state.is(Blocks.CHORUS_PLANT) || state.is(Blocks.CHORUS_FLOWER)
+            || state.getBlock() instanceof net.minecraft.world.level.block.HugeMushroomBlock;
     }
 
     /**
@@ -1147,6 +1163,9 @@ public class LayerPlacementHelper {
 
                         int currentCount = readLayerCount(state);
                         int newCount = currentCount > 4 ? 4 : currentCount - 1;
+                        // A lifted chorus plant stands on this layer: removing it would leave the
+                        // plant floating over an empty cell, so the layer keeps its last eighth.
+                        if (newCount <= 0 && isChorus(chunk.getBlockState(layerPos.above()))) newCount = 1;
 
                         if (newCount <= 0) {
                             setBlockStateSafe(chunk, layerPos, Blocks.AIR.defaultBlockState());
@@ -1182,10 +1201,10 @@ public class LayerPlacementHelper {
             // Replaceable blocks (tall grass, flowers, snow layers, water) are not ceilings.
             // Non-replaceable non-air blocks (stairs, slabs, glass, stone, fences, etc.) are.
             if (state.canBeReplaced()) continue;
-            // Nor is a tree. Leaves and logs are neither air nor replaceable, so a canopy
+            // Nor is a tree (or a chorus plant). Leaves and logs are neither air nor replaceable, so a canopy
             // overhead used to read as an enclosing ceiling and suppress the column. This
             // check exists to avoid layering inside structures; a tree is not one.
-            if (state.is(BlockTags.LEAVES) || state.is(BlockTags.LOGS)) continue;
+            if (isTreePart(state)) continue;
             // Nor is pale_hanging_moss dangling from that canopy — it is vegetation, not a
             // structure ceiling, so it must not suppress or (via the correction pass) remove the
             // layer below it, which left bare air under pale_garden moss.
@@ -1213,6 +1232,7 @@ public class LayerPlacementHelper {
      *   <li>Anything plant grounding treats as a plant: a 2+ block cactus, sugar cane or kelp (or
      *       the upper half of a tall plant) read as a roof over its own column, and a plant lifted
      *       onto a layer read as a block built on it.</li>
+     *   <li>A chorus plant, which {@link #liftChorusPlant} stands on a layer.</li>
      * </ul>
      */
     public static boolean isPlantCover(BlockState state) {
@@ -1220,6 +1240,7 @@ public class LayerPlacementHelper {
         if (block instanceof net.minecraft.world.level.block.BaseCoralPlantTypeBlock) return true;
         if (isCoralBlock(state)) return true;
         if (block == Blocks.LILY_PAD || block == Blocks.FROGSPAWN) return true;
+        if (isChorus(state)) return true;
         return GroundingFlags.ready && PlantGrounding.isGroundedBlock(block);
     }
 
@@ -1480,12 +1501,12 @@ public class LayerPlacementHelper {
         // reef), the layer position is the coral itself and the not-air guard leaves the column
         // alone; where water separates them, the floor gets its layer.
         BlockState heightmapTop = chunk.getBlockState(new BlockPos(worldX, surfaceY - 1, worldZ));
-        if (heightmapTop.is(BlockTags.LEAVES) || heightmapTop.is(BlockTags.LOGS) || isCoralBlock(heightmapTop)) {
+        if (isTreePart(heightmapTop) || isCoralBlock(heightmapTop)) {
             int probeY = surfaceY - 1;
             int foliageGuard = 0;
             while (probeY > Compat.minY(chunk) && foliageGuard++ < 64) {
                 BlockState s = chunk.getBlockState(new BlockPos(worldX, probeY, worldZ));
-                if (Compat.blocksMotion(s) && !s.is(BlockTags.LEAVES) && !s.is(BlockTags.LOGS) && !isCoralBlock(s)) break;
+                if (Compat.blocksMotion(s) && !isTreePart(s) && !isCoralBlock(s)) break;
                 probeY--;
             }
             surfaceY = probeY + 1;
@@ -1711,7 +1732,7 @@ public class LayerPlacementHelper {
         // column under a canopy silently got no layer. Whether a given column was affected
         // depended on whether the overhanging tree belonged to this chunk or to a neighbour
         // whose feature step had not run yet, which is why it presented as chunk-dependent.
-        boolean surfaceIsFoliage = surfaceState.is(BlockTags.LEAVES) || surfaceState.is(BlockTags.LOGS);
+        boolean surfaceIsFoliage = isTreePart(surfaceState);
         if ((isPostFeaturesContext || surfaceIsFoliage) && !getMappingRegistry().hasMapping(surfaceBlock)) {
             boolean found = false;
             for (int dy = 1; dy <= 30; dy++) {
@@ -1910,6 +1931,12 @@ public class LayerPlacementHelper {
 
         BlockPos abovePos = surfacePos.above();
 
+        // Under a 2x2 trunk every base cell keeps a real layer, so the trunk meets the ground the
+        // same way all round (see wideTrunkGapsLocal).
+        if (isWideTrunkGap(abovePos)) {
+            layerCount = Math.max(1, Math.min(7, layerCount));
+        }
+
         if (LayerConfig.STRUCTURE_INJECTION && isInsideStructure(chunk, abovePos)) {
             addSecondPassTarget(abovePos.getX(), abovePos.getZ(), abovePos.getY(), surfaceBlock);
             return false;
@@ -2063,6 +2090,10 @@ public class LayerPlacementHelper {
                         // lowers it back onto the layer surface.
                         liftedPlant = true;
                         liftedWet = liftResult == LIFT_WET;
+                    } else if (liftChorusPlant(chunk, abovePos)) {
+                        // The root of a chorus plant: the whole plant moved up one block, and
+                        // ChorusStemModel draws the root's stem down through the layer to the ground.
+                        liftedPlant = true;
                     } else {
                         debugSkipNotAir.incrementAndGet();
                         return false;
@@ -2312,6 +2343,299 @@ public class LayerPlacementHelper {
                 Compat.blockId(moved[0].getBlock()), height, pos);
         }
         return wet[0] ? LIFT_WET : LIFT_DRY;
+    }
+
+    /** Largest chorus plant {@link #liftChorusPlant} will move, in blocks. */
+    private static final int MAX_LIFTED_CHORUS = 512;
+
+    /**
+     * The feature step's region while a chunk is being layered, so a chorus lift can move the
+     * branches that reach over a neighbouring chunk. Null elsewhere (the LevelChunk.&lt;init&gt; pass,
+     * reset chunks); only plants entirely inside the chunk are lifted then.
+     */
+    private static final ThreadLocal<WorldGenLevel> liftRegionLocal = new ThreadLocal<>();
+
+    public static void setLiftRegion(WorldGenLevel region) {
+        liftRegionLocal.set(region);
+    }
+
+    public static void clearLiftRegion() {
+        liftRegionLocal.remove();
+    }
+
+    public static boolean isChorus(BlockState state) {
+        return state.is(Blocks.CHORUS_PLANT) || state.is(Blocks.CHORUS_FLOWER);
+    }
+
+    /**
+     * Moves a whole chorus plant up one block when its root stands at {@code pos}, so a layer can
+     * take the root's cell.
+     *
+     * <p>Unlike a cactus, a chorus plant branches sideways, so moving its root column alone would
+     * tear it apart: every connected chorus block moves together, and the plant keeps its shape one
+     * block higher. Nothing lowers it back afterwards; instead ChorusStemModel extends the root's
+     * stem down through the layer to the ground it stood on, so it still reads as rooted.
+     *
+     * <p>Refused, leaving the column unlayered (the tree treatment), when this version's client has
+     * no such model, a branch reaches somewhere that cannot be read and written, the plant touches
+     * another anchored chorus plant, or a block above it is not air.
+     */
+    private static boolean liftChorusPlant(ChunkAccess chunk, BlockPos pos) {
+        if (!LayerConfig.treesOnLayers()) return false;
+        if (!chunk.getBlockState(pos).is(Blocks.CHORUS_PLANT)) return false;
+        WorldGenLevel region = liftRegionLocal.get();
+
+        Map<BlockPos, BlockState> plant = new HashMap<>();
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        plant.put(pos.immutable(), chunk.getBlockState(pos));
+        queue.add(pos.immutable());
+        while (!queue.isEmpty()) {
+            BlockPos at = queue.poll();
+            for (Direction d : Direction.values()) {
+                BlockPos next = at.relative(d);
+                if (plant.containsKey(next)) continue;
+                BlockState state = readForLift(chunk, region, next);
+                if (state == null) return false;
+                if (!isChorus(state)) continue;
+                if (plant.size() >= MAX_LIFTED_CHORUS) return false;
+                plant.put(next, state);
+                queue.add(next);
+            }
+        }
+
+        for (BlockPos at : plant.keySet()) {
+            // Only the root may stand on something: a second anchor is another plant grown into
+            // this one, or a branch resting on the ground, and neither may leave its support.
+            BlockPos below = at.below();
+            if (!at.equals(pos) && !plant.containsKey(below)) {
+                BlockState belowState = readForLift(chunk, region, below);
+                if (belowState == null || !belowState.isAir()) return false;
+            }
+            BlockPos above = at.above();
+            if (!plant.containsKey(above)) {
+                if (above.getY() >= Compat.maxY(chunk)) return false;
+                BlockState aboveState = readForLift(chunk, region, above);
+                if (aboveState == null || !aboveState.isAir()) return false;
+            }
+        }
+
+        // Top down, so no block is overwritten before it has moved; then clear each column's
+        // bottom cell, which nothing moved into.
+        List<BlockPos> order = new ArrayList<>(plant.keySet());
+        order.sort(Comparator.comparingInt((BlockPos p) -> p.getY()).reversed());
+        for (BlockPos at : order) {
+            writeForLift(chunk, region, at.above(), plant.get(at));
+        }
+        for (BlockPos at : order) {
+            if (!plant.containsKey(at.below())) {
+                writeForLift(chunk, region, at, Blocks.AIR.defaultBlockState());
+            }
+        }
+        if (LayerConfig.logPlants()) {
+            AronaLayersGen.LOGGER.info("[Plant Debug] Lifted chorus plant ({} blocks) at {} for a layer",
+                plant.size(), pos);
+        }
+        return true;
+    }
+
+    /** {@code pos} in this chunk, or through the region within one chunk of it; null if neither. */
+    private static BlockState readForLift(ChunkAccess chunk, WorldGenLevel region, BlockPos pos) {
+        if (pos.getY() < Compat.minY(chunk) || pos.getY() >= Compat.maxY(chunk)) {
+            return Blocks.AIR.defaultBlockState();
+        }
+        int dx = (pos.getX() >> 4) - Compat.chunkX(chunk.getPos());
+        int dz = (pos.getZ() >> 4) - Compat.chunkZ(chunk.getPos());
+        if (dx == 0 && dz == 0) return chunk.getBlockState(pos);
+        // The feature step may write one chunk around the one it decorates, no further.
+        if (region == null || Math.abs(dx) > 1 || Math.abs(dz) > 1) return null;
+        return region.getBlockState(pos);
+    }
+
+    private static void writeForLift(ChunkAccess chunk, WorldGenLevel region, BlockPos pos, BlockState state) {
+        if ((pos.getX() >> 4) == Compat.chunkX(chunk.getPos()) && (pos.getZ() >> 4) == Compat.chunkZ(chunk.getPos())) {
+            setBlockStateSafe(chunk, pos, state);
+        } else {
+            region.setBlock(pos, state, Block.UPDATE_CLIENTS);
+        }
+    }
+
+    // ========== Trees one block higher ==========
+
+    /**
+     * Trunk bases of the trees this chunk's feature step started one block higher, consumed by
+     * {@link #fillTrunkGaps} once the chunk is layered. Same thread throughout: the trees are placed
+     * inside applyBiomeDecoration and the layer pass runs at its RETURN.
+     */
+    private static final ThreadLocal<List<BlockPos>> shiftedTrunksLocal = new ThreadLocal<>();
+
+    /**
+     * The cells under the trunks of this chunk's shifted 2x2 trees, filled by {@link #clearTrunkGaps}.
+     * Each gets its own layer count from the terrain, and across a slope those run from 0 to 8:
+     * one cell became a full block the trunk sat on, the next got no layer and the log fallback,
+     * the next a layer, so one trunk ended in three different ways. The layer pass keeps them all
+     * partial layers instead (1 to 7), and the trunk is drawn down to each.
+     */
+    private static final ThreadLocal<Set<BlockPos>> wideTrunkGapsLocal = new ThreadLocal<>();
+
+    private static boolean isWideTrunkGap(BlockPos pos) {
+        Set<BlockPos> gaps = wideTrunkGapsLocal.get();
+        return gaps != null && gaps.contains(pos);
+    }
+
+    /** Set while the tree being placed on this thread was started one block higher. */
+    private static final ThreadLocal<Boolean> placingShiftedTree = ThreadLocal.withInitial(() -> false);
+
+    /**
+     * Where a generated tree starts: one block above {@code origin} when the layer pass will run on
+     * this chunk afterwards, so the cell the trunk would have stood in is left for a layer and the
+     * tree stands on top of it. TrunkStemModel then draws the trunk down to the layer, and breaking
+     * the trunk later reveals layered ground instead of a hole.
+     *
+     * <p>Only at worldgen in POST_FEATURES mode: in CARVERS mode the layers already exist and the
+     * tree already starts on top of them, and a growing sapling stands on its layer already. Trees
+     * with a root placer (mangroves) keep their origin, as do trees standing in water or under
+     * something.
+     */
+    public static BlockPos shiftTreeOrigin(WorldGenLevel level, BlockPos origin, boolean hasRootPlacer) {
+        if (!LayerConfig.treesOnLayers() || !LayerConfig.TREE_INJECTION || !LayerConfig.LAYER_INJECTION) return origin;
+        if (LayerConfig.INJECTION_MODE != LayerConfig.InjectionMode.POST_FEATURES) return origin;
+        if (!(level instanceof WorldGenRegion region) || hasRootPlacer) return origin;
+        if (!level.getBlockState(origin).isAir() || !level.getBlockState(origin.above()).isAir()) return origin;
+        BlockState ground = level.getBlockState(origin.below());
+        if (!Compat.blocksMotion(ground) || hasLayerProperty(ground)) return origin;
+        @SuppressWarnings("deprecation")
+        ServerLevel serverLevel = region.getLevel();
+        if (LayerBackend.of(serverLevel) == LayerBackend.NONE) return origin;
+
+        BlockPos trunk = origin.above();
+        List<BlockPos> trunks = shiftedTrunksLocal.get();
+        if (trunks == null) {
+            trunks = new ArrayList<>();
+            shiftedTrunksLocal.set(trunks);
+        }
+        trunks.add(trunk.immutable());
+        placingShiftedTree.set(true);
+        return trunk;
+    }
+
+    /** Called when TreeFeature.place returns. */
+    public static void endTreePlacement() {
+        placingShiftedTree.set(false);
+    }
+
+    /**
+     * Where a tree's trunk placer puts the dirt under its trunk: under the layer, or under the empty
+     * cell {@link #shiftTreeOrigin} left, rather than in it. Vanilla turns the block under the trunk
+     * into dirt; in either case that block is the cell the layer belongs in, and a dirt block there
+     * would bury it.
+     *
+     * <p>For a shifted tree an empty cell always moves down one, whatever is under it: that is the
+     * cell vanilla aimed at before the shift. Under a 2x2 trunk across a dip it is air too, and
+     * vanilla fills it with this dirt on purpose; stopping one short left the dirt floating a
+     * block above the dip. For a tree that was not shifted an empty cell is such a dip itself, and
+     * stays where it is.
+     */
+    public static BlockPos soilUnderTrunk(LevelSimulatedReader level, BlockPos pos) {
+        if (!LayerConfig.treesOnLayers() || !LayerConfig.TREE_INJECTION) return pos;
+        if (placingShiftedTree.get() && level.isStateAtPosition(pos, BlockState::isAir)) return pos.below();
+        if (!level.isStateAtPosition(pos, PlantGrounding::isLayerSoil)) return pos;
+        return level.isStateAtPosition(pos.below(), BlockState::isAir) ? pos : pos.below();
+    }
+
+    /**
+     * Where a huge mushroom feature looks for its soil: the block under {@code query}'s layer, or
+     * under the empty cell a shifted mushroom left. The feature only grows on dirt or a mushroom
+     * grow block directly below its stem; the layer in between is neither. Also lets bone meal grow
+     * a mushroom standing on a layer.
+     */
+    public static BlockPos mushroomSoil(net.minecraft.world.level.BlockGetter level, BlockPos query) {
+        if (!LayerConfig.treesOnLayers() || !LayerConfig.TREE_INJECTION) return query;
+        BlockState state = level.getBlockState(query);
+        boolean layerCell = (placingShiftedTree.get() && state.isAir()) || PlantGrounding.isLayerSoil(state);
+        if (!layerCell || level.getBlockState(query.below()).isAir()) return query;
+        return query.below();
+    }
+
+    /** Forgets the trunks recorded on this thread; called before each chunk's feature step. */
+    public static void clearShiftedTrunks() {
+        shiftedTrunksLocal.remove();
+        wideTrunkGapsLocal.remove();
+    }
+
+    /**
+     * Empties the cells under shifted trunks before the layer pass. The vegetation features run
+     * after trees in the same feature step and see an empty cell over grass, so short grass,
+     * flowers or mushrooms land in it, the layer pass then finds the cell taken, and the tree is
+     * left floating over a tuft. Anything there that does not block motion and holds no fluid is a
+     * plant that only got there through the gap, so it goes.
+     */
+    public static void clearTrunkGaps(ChunkAccess chunk) {
+        List<BlockPos> trunks = shiftedTrunksLocal.get();
+        if (trunks == null || trunks.isEmpty()) return;
+        WorldGenLevel region = liftRegionLocal.get();
+        Set<BlockPos> wide = new java.util.HashSet<>();
+        for (BlockPos trunk : trunks) {
+            List<BlockPos> gaps = new ArrayList<>();
+            forEachTrunkGap(chunk, region, trunk, (gap, gapState, log) -> {
+                if (!gapState.isAir() && !Compat.blocksMotion(gapState) && gapState.getFluidState().isEmpty()) {
+                    writeForLift(chunk, region, gap, Blocks.AIR.defaultBlockState());
+                }
+                gaps.add(gap.immutable());
+            });
+            if (gaps.size() > 1) wide.addAll(gaps);
+        }
+        wideTrunkGapsLocal.set(wide);
+    }
+
+    @FunctionalInterface
+    private interface TrunkGapVisitor {
+        void visit(BlockPos gap, BlockState gapState, BlockState log);
+    }
+
+    /**
+     * Visits the cell under each base of a shifted trunk: the recorded base and the cells around it,
+     * which covers 2x2 trunks. Only cells with a log above and ground below.
+     */
+    private static void forEachTrunkGap(ChunkAccess chunk, WorldGenLevel region, BlockPos trunk, TrunkGapVisitor visitor) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                BlockPos base = trunk.offset(dx, 0, dz);
+                BlockPos gap = base.below();
+                BlockState log = readForLift(chunk, region, base);
+                if (log == null || !PlantGrounding.isTrunkBlock(log)) continue;
+                BlockState gapState = readForLift(chunk, region, gap);
+                if (gapState == null) continue;
+                BlockState ground = readForLift(chunk, region, gap.below());
+                if (ground == null || !Compat.blocksMotion(ground)) continue;
+                visitor.visit(gap, gapState, log);
+            }
+        }
+    }
+
+    /**
+     * Gives every shifted tree something to stand on where the layer pass left its cell empty (a
+     * layer count of 0, a column it skipped, or one a cleanup pass removed): the trunk's own log,
+     * so the tree is one block taller instead of floating. Covers 2x2 trunks, whose bases sit
+     * around the recorded one; those can reach into a neighbouring chunk, written through the
+     * region.
+     */
+    public static void fillTrunkGaps(ChunkAccess chunk) {
+        List<BlockPos> trunks = shiftedTrunksLocal.get();
+        shiftedTrunksLocal.remove();
+        if (trunks == null || trunks.isEmpty()) return;
+        WorldGenLevel region = liftRegionLocal.get();
+        int[] filled = {0};
+        for (BlockPos trunk : trunks) {
+            forEachTrunkGap(chunk, region, trunk, (gap, gapState, log) -> {
+                if (!gapState.isAir()) return;
+                writeForLift(chunk, region, gap, log);
+                filled[0]++;
+            });
+        }
+        if (filled[0] > 0 && LayerConfig.logTreeSoil()) {
+            AronaLayersGen.LOGGER.info("[TreeSoil] ChunkAccess {},{}: {} trunk gap(s) left unlayered, filled with log",
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), filled[0]);
+        }
     }
 
     private static final int LIFT_REFUSED = 0;

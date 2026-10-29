@@ -12,10 +12,24 @@ base {
 
 // Pull shared Java source and resources from the root src/ tree.
 // Version-specific overrides (mixins that differ across versions) go in this subproject's own src/.
+//
+// The shared config screen is built on 1.21's OptionsSubScreen, whose widget rows 1.20.1 lacks; it is
+// left out of the staged shared source and this subproject's own src/ supplies the 1.20.1 version.
+def sharedOverridden = [
+    'io/arona74/aronalayersgen/client/config/AronaConfigScreen.java',
+]
+def stagedSharedJava = layout.buildDirectory.dir('sharedJava')
+def stageSharedJava = tasks.register('stageSharedJava', Sync) {
+    from(rootProject.file('src/main/java')) {
+        exclude sharedOverridden
+    }
+    into stagedSharedJava
+}
+
 sourceSets {
     main {
         java {
-            srcDirs += rootProject.file('src/main/java')
+            srcDir(stageSharedJava)
         }
         resources {
             srcDirs += rootProject.file('src/main/resources')
@@ -55,4 +69,10 @@ jar {
     from(rootProject.file('LICENSE')) {
         rename { "${it}_${rootProject.archives_base_name}" }
     }
+    // Compile-only stand-ins for Mod Menu's API (see ModMenuApi): shipping them would shadow Mod Menu's own.
+    exclude 'com/terraformersmc/**'
+}
+
+sourcesJar {
+    exclude 'com/terraformersmc/**'
 }

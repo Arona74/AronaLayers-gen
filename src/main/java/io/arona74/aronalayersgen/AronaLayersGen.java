@@ -95,9 +95,9 @@ public class AronaLayersGen implements ModInitializer {
         }
 
         LOGGER.info("Arona Layers Generator initialized successfully");
-        LOGGER.info("[Config] cr_nbt_trees={} vanilla_fallback={} layer_injection={} rtf_layer_injection={} plant_injection={} tree_injection={}",
-            LayerConfig.CR_NBT_TREES, LayerConfig.CR_NBT_TREES_VANILLA_FALLBACK,
-            LayerConfig.LAYER_INJECTION, LayerConfig.RTF_LAYER_INJECTION,
+        LOGGER.info("[Config] layer_injection={} cr_nbt_trees={} vanilla_fallback={} plant_injection={} tree_injection={}"
+            + " (each dimension's layer source is detected when it first generates)",
+            LayerConfig.LAYER_INJECTION, LayerConfig.CR_NBT_TREES, LayerConfig.CR_NBT_TREES_VANILLA_FALLBACK,
             LayerConfig.PLANT_INJECTION, LayerConfig.TREE_INJECTION);
     }
 }

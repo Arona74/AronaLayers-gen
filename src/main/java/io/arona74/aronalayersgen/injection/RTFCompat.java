@@ -5,6 +5,7 @@ import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -121,6 +122,34 @@ public class RTFCompat {
             rtfAvailable = checkRTF();
         }
         return rtfAvailable;
+    }
+
+    private static volatile Method isTerraForgedMethod;
+    private static volatile boolean isTerraForgedBound;
+
+    /**
+     * Whether {@code randomState} belongs to a dimension the TerraForged fork generates. Every
+     * RandomState implements the fork's duck interface once the mod is loaded, so the interface
+     * alone says nothing. FreeTerraForged answers directly through {@code isTerraForged()}, which
+     * is set from the dimension's generator before the GeneratorContext necessarily exists;
+     * ReTerraForged has no such flag, but only builds a GeneratorContext for its own dimensions.
+     */
+    public static boolean isTerraForgedDimension(Object randomState) {
+        if (!isRTFAvailable() || randomState == null || !rtfRandomStateClass.isInstance(randomState)) return false;
+        try {
+            if (!isTerraForgedBound) {
+                try {
+                    isTerraForgedMethod = rtfRandomStateClass.getMethod("isTerraForged");
+                } catch (NoSuchMethodException e) {
+                    isTerraForgedMethod = null;
+                }
+                isTerraForgedBound = true;
+            }
+            if (isTerraForgedMethod != null) return (Boolean) isTerraForgedMethod.invoke(randomState);
+            return generatorContextMethod.invoke(randomState) != null;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static boolean checkRTF() {
@@ -303,10 +332,11 @@ public class RTFCompat {
     }
 
     /**
-     * Chunk-cells mode: reads the 256 cells FreeTerraForged keeps on the chunk. When the chunk has
-     * none (the LevelChunk.&lt;init&gt; pass runs on a new chunk object), they are rebuilt from the
-     * filtered chunk cache, except on the server thread: rebuilding can generate a whole region
-     * there, so it only takes cells that already exist, one at a time.
+     * Chunk-cells mode: reads the 256 cells FreeTerraForged keeps on the chunk. When a chunk still
+     * being generated has none, they are rebuilt from the filtered chunk cache. A finished
+     * LevelChunk (the LevelChunk.&lt;init&gt; pass runs on a new chunk object), or any chunk on the
+     * server thread, only takes cells the cache still holds, one at a time: a miss leaves that
+     * column without a cell rather than generating a region.
      */
     private static boolean withChunkCells(ChunkAccess chunk, Object generatorContext, CellsUser user) throws Exception {
         if (cachedWorldHeight < 0) {
@@ -325,7 +355,11 @@ public class RTFCompat {
         Object[] cells = null;
         if (chunkCellsHolderClass.isInstance(chunk)) {
             cells = (Object[]) getChunkCellsMethod.invoke(chunk);
-            if (cells == null && !isServerThread()) {
+            // A finished LevelChunk only reads cells the cache still holds. getOrCreateChunkCells
+            // would store them on the chunk for as long as it stays loaded (68 KB each, kept alive
+            // after the 2048-entry cache drops them), and on a cache miss rebuild a whole 4x4-chunk
+            // region just for this re-check: the main placement already ran during generation.
+            if (cells == null && !isServerThread() && !(chunk instanceof LevelChunk)) {
                 cells = (Object[]) getOrCreateChunkCellsMethod.invoke(chunk, generatorContext);
             }
         }

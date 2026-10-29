@@ -34,6 +34,13 @@ import java.io.InputStream;
 public final class Compat {
     private Compat() {}
 
+    /**
+     * Whether this version's client has the stem models (ChorusStemModel, TrunkStemModel), which
+     * draw a chorus plant or an upright log standing on a layer down to the layer's top. Worldgen
+     * only lifts chorus plants and starts trees one block higher where they exist.
+     */
+    public static final boolean STEM_MODELS = true;
+
     public static ResourceLocation id(String namespace, String path) {
         return ResourceLocation.fromNamespaceAndPath(namespace, path);
     }

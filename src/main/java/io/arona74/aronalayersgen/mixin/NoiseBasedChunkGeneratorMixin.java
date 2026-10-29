@@ -3,6 +3,7 @@ package io.arona74.aronalayersgen.mixin;
 import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
+import io.arona74.aronalayersgen.injection.LayerBackend;
 import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
 import io.arona74.aronalayersgen.injection.VanillaLayerInjector;
 import io.arona74.aronalayersgen.injection.PlantConversionHelper;
@@ -13,7 +14,9 @@ import io.arona74.aronalayersgen.injection.RandomStateHolder;
 import io.arona74.aronalayersgen.injection.TellusCompat;
 import java.util.Set;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.levelgen.RandomState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -36,12 +39,16 @@ public class NoiseBasedChunkGeneratorMixin {
         at = @At("RETURN")
     )
     private void onChunkCreate(ServerLevel world, net.minecraft.world.level.chunk.ProtoChunk protoChunk, LevelChunk.PostLoadProcessor entityLoader, CallbackInfo ci) {
-        if (!LayerConfig.LAYER_INJECTION && !LayerConfig.RTF_LAYER_INJECTION && !LayerConfig.TELLUS_LAYER_INJECTION) {
+        if (!LayerConfig.LAYER_INJECTION) {
             return;
         }
 
         try {
             LevelChunk chunk = (LevelChunk)(Object)this;
+            ChunkGenerator generator = world.getChunkSource().getGenerator();
+            RandomState randomState = RandomStateHolder.noiseConfigFor(world);
+            LayerBackend backend = LayerBackend.of(world, generator, randomState);
+            if (backend == LayerBackend.NONE) return;
 
             long stepStart = 0L;
             if (LayerConfig.logChunkInit()) {
@@ -61,7 +68,7 @@ public class NoiseBasedChunkGeneratorMixin {
                 }
             }
 
-            if (LayerConfig.TELLUS_LAYER_INJECTION && TellusCompat.isAvailable()) {
+            if (backend == LayerBackend.TELLUS) {
                 // ChunkGeneratorFeaturesMixin is the primary injector for Tellus worlds, but
                 // re-run Tellus here as a safety net: for some chunks the WG heightmap is still
                 // empty at generateFeatures() time (every column reports noSurface and nothing
@@ -77,56 +84,34 @@ public class NoiseBasedChunkGeneratorMixin {
                         AronaLayersGen.LOGGER.info("[ChunkInit] Tellus re-run at {},{} — features pass found no surface (empty heightmap)",
                             Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
                     }
-                    TellusCompat.injectLayersWithTellus(chunk, world.getChunkSource().getGenerator());
+                    TellusCompat.injectLayersWithTellus(chunk, generator);
                 } else if (LayerConfig.logChunkInit()) {
                     AronaLayersGen.LOGGER.info("[ChunkInit] Tellus already handled {},{} at features time",
                         Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
                 }
-            } else if (LayerConfig.RTF_LAYER_INJECTION) {
-                boolean rtfAvailable = RTFCompat.isRTFAvailable() && RandomStateHolder.hasRTFRandomState();
-                boolean isPostFeaturesMode = LayerConfig.INJECTION_MODE == LayerConfig.InjectionMode.POST_FEATURES;
-
-                if (rtfAvailable) {
-                    if (isPostFeaturesMode) {
-                        // In POST_FEATURES mode, ChunkGeneratorFeaturesMixin is the primary injector
-                        // (fires at generateFeatures() RETURN, while the tile is still in cache).
-                        // On NeoForge+ETcomehome the tile is dropped before LevelChunk.<init> fires,
-                        // so the RTF attempt here will always miss. Do not run the vanilla fallback:
-                        // ChunkGeneratorFeaturesMixin already placed RTF layers (or its own vanilla
-                        // fallback). Calling vanilla here would overwrite correct RTF layers.
-                        RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
-                        // Re-map only: by LevelChunk.<init> the chunk is fully generated, so any
-                        // surface RTF swapped after our POST_FEATURES injection (grass → beach/river
-                        // sand) is now final. Re-point each layer's block at the current surface below
-                        // it (grass_block_layer on sand → sand_layer) without running the removal
-                        // steps, which have never applied in this mode.
-                        RTFLayerInjector.correctMismatchedLayers(chunk, true);
-                    } else {
-                        // CARVERS mode: layers placed earlier, run correction pass
-                        RTFLayerInjector.correctMismatchedLayers(chunk);
-                        // Fallback injection for chunks that missed the carvers phase
-                        boolean rtfSuccess = RTFCompat.injectLayersWithRTF(chunk, RandomStateHolder.getRandomState());
-                        if (!rtfSuccess && LayerConfig.LAYER_INJECTION) {
-                            AronaLayersGen.LOGGER.warn("[ChunkInit] RTF tile miss at {},{} (CARVERS mode) — falling back to vanilla injection",
-                                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
-                            VanillaLayerInjector.injectLayers(chunk, RandomStateHolder.noiseConfigFor(world), world.getChunkSource().getGenerator());
-                        }
-                    }
-                } else if (LayerConfig.LAYER_INJECTION) {
-                    // RTF requested but not available: fall back to vanilla injection
-                    if (LayerConfig.logChunkInit())
-                        AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject START {},{}", Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
-                    VanillaLayerInjector.injectLayers(chunk, RandomStateHolder.noiseConfigFor(world), world.getChunkSource().getGenerator());
-                    if (LayerConfig.logChunkInit()) {
-                        AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject DONE {},{} ms={}",
-                            Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), (System.nanoTime() - stepStart) / 1_000_000L);
-                        stepStart = System.nanoTime();
-                    }
+            } else if (backend == LayerBackend.TERRAFORGED) {
+                if (LayerConfig.INJECTION_MODE == LayerConfig.InjectionMode.POST_FEATURES) {
+                    // In POST_FEATURES mode, ChunkGeneratorFeaturesMixin is the primary injector
+                    // (fires at generateFeatures() RETURN, while the cells are still on the chunk).
+                    // This re-run only fills what that pass missed. Never the vanilla injector:
+                    // the density field does not describe TerraForged terrain.
+                    RTFCompat.injectLayersWithRTF(chunk, randomState);
+                    // Re-map only: by LevelChunk.<init> the chunk is fully generated, so any
+                    // surface RTF swapped after our POST_FEATURES injection (grass → beach/river
+                    // sand) is now final. Re-point each layer's block at the current surface below
+                    // it (grass_block_layer on sand → sand_layer) without running the removal
+                    // steps, which have never applied in this mode.
+                    RTFLayerInjector.correctMismatchedLayers(chunk, true);
+                } else {
+                    // CARVERS mode: layers placed earlier, run correction pass, then fill chunks
+                    // that missed the carvers phase.
+                    RTFLayerInjector.correctMismatchedLayers(chunk);
+                    RTFCompat.injectLayersWithRTF(chunk, randomState);
                 }
-            } else if (LayerConfig.LAYER_INJECTION) {
+            } else if (backend == LayerBackend.VANILLA) {
                 if (LayerConfig.logChunkInit())
                     AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject START {},{}", Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
-                VanillaLayerInjector.injectLayers(chunk, RandomStateHolder.noiseConfigFor(world), world.getChunkSource().getGenerator());
+                VanillaLayerInjector.injectLayers(chunk, randomState, generator);
                 if (LayerConfig.logChunkInit()) {
                     AronaLayersGen.LOGGER.info("[ChunkInit] vanilla inject DONE {},{} ms={}",
                         Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), (System.nanoTime() - stepStart) / 1_000_000L);
@@ -142,7 +127,7 @@ public class NoiseBasedChunkGeneratorMixin {
             }
 
             // structure_no_layers: remove layers where structures changed the terrain
-            if (LayerConfig.RTF_LAYER_INJECTION && LayerConfig.STRUCTURE_NO_LAYERS) {
+            if (backend == LayerBackend.TERRAFORGED && LayerConfig.STRUCTURE_NO_LAYERS) {
                 if (LayerConfig.logChunkInit())
                     AronaLayersGen.LOGGER.info("[ChunkInit] structure_no_layers START {},{}", Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
                 Set<Integer> changedColumns = PreStructureHeightmapStorage.getChangedColumns(chunk);

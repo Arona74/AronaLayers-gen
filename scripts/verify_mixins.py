@@ -79,7 +79,8 @@ def check(jar, mc_jar, deobf):
     problems, checked = [], 0
     members = {}
 
-    for cls in cfg["mixins"]:
+    names = cfg["mixins"] + cfg.get("client", []) + cfg.get("server", [])
+    for cls in names:
         entry = f"io/arona74/aronalayersgen/mixin/{cls}.class"
         if entry not in z.namelist():
             problems.append((cls, "class missing from jar"))
@@ -114,7 +115,7 @@ def check(jar, mc_jar, deobf):
                     break
             else:
                 problems.append((cls, f'method="{name}" not found on {", ".join(tgt_classes)}'))
-    return cfg["mixins"], checked, problems
+    return names, checked, problems
 
 
 def main():

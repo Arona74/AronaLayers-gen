@@ -67,7 +67,7 @@ public class TellusDebugCommand {
         TellusCompat.Probe p = TellusCompat.probe(generator, chunk, x, z);
 
         send(src, "--- ALG Tellus Column (" + x + ", " + z + ") ---");
-        send(src, "config: tellus_inj=" + LayerConfig.TELLUS_LAYER_INJECTION
+        send(src, "config: backend=" + io.arona74.aronalayersgen.injection.LayerBackend.of(world)
                 + " underwater=" + LayerConfig.UNDERWATER_LAYERS
                 + " skip_elev=" + LayerConfig.STRUCTURE_SKIP_ELEVATED
                 + " conservative=" + LayerConfig.CONSERVATIVE_SURFACE_HEIGHTMAP);

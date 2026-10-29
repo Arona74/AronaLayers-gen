@@ -5,6 +5,7 @@ import io.arona74.aronalayersgen.Compat;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import io.arona74.aronalayersgen.LayerConfig;
+import io.arona74.aronalayersgen.injection.LayerBackend;
 import io.arona74.aronalayersgen.injection.FractionalSurfaceSampler;
 import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
 import io.arona74.aronalayersgen.injection.RandomStateHolder;
@@ -96,7 +97,9 @@ public class ChunkDebugCommand {
         // The fractional-surface backend is the only one for vanilla worldgen. Without a
         // RandomState, or under RTF, there is no density field to read and it places nothing.
         RandomState randomState = RandomStateHolder.noiseConfigFor(world);
-        boolean vanillaWorldgen = !RandomStateHolder.hasRTFRandomState();
+        LayerBackend backend = LayerBackend.of(world);
+        boolean terraForged = backend == LayerBackend.TERRAFORGED;
+        boolean vanillaWorldgen = backend == LayerBackend.VANILLA;
         boolean fractionalMode  = vanillaWorldgen && randomState != null;
 
         String simMode = fractionalMode ? "fractional-surface" : "none (injector inactive)";
@@ -295,7 +298,7 @@ public class ChunkDebugCommand {
                 + " mode=" + LayerConfig.INJECTION_MODE
                 + " enclosed=" + LayerConfig.ENCLOSED_SPACE_CHECK + "(" + LayerConfig.ENCLOSED_SPACE_HEIGHT + ")"
                 + " debug_log=" + LayerConfig.DEBUG_LOGGING);
-        send(source, "Config: rtf=" + LayerConfig.RTF_LAYER_INJECTION
+        send(source, "Config: backend=" + backend
                 + " struct_inj=" + LayerConfig.STRUCTURE_INJECTION
                 + " extra_bounds=" + LayerConfig.STRUCTURE_INJECTION_EXTRA_BOUNDS
                 + "(" + LayerConfig.STRUCTURE_INJECTION_EXTRA_BOUNDS_DISTANCE + ")"
@@ -392,7 +395,7 @@ public class ChunkDebugCommand {
         send(source, "Layers: existing=" + existingLayers + (chunkSkipped ? " (stale, chunk predates the skip)" : "")
                 + "  would-place(sim)=" + wouldPlace
                 + "/256  missing=" + missingLayers
-                + (LayerConfig.RTF_LAYER_INJECTION ? " (RTF mode: sim!=actual)" : ""));
+                + (terraForged ? " (RTF mode: sim!=actual)" : ""));
 
         // top block grid
         send(source, "");
@@ -419,7 +422,7 @@ public class ChunkDebugCommand {
 
         // layer count grid (sim)
         send(source, "");
-        send(source, "Layer Count (sim: " + simMode + ")  (_ = 0)" + (LayerConfig.RTF_LAYER_INJECTION ? " [RTF actual count may differ]" : ""));
+        send(source, "Layer Count (sim: " + simMode + ")  (_ = 0)" + (terraForged ? " [RTF actual count may differ]" : ""));
         send(source, "  " + colMarker);
         for (int lz = 0; lz < 16; lz++) {
             StringBuilder row = new StringBuilder(lz == plz ? ">>" : "  ");
@@ -430,7 +433,7 @@ public class ChunkDebugCommand {
         // layer presence grid
         send(source, "");
         send(source, "Layer Presence  #=present M=missing(sim>0,no layer) .=sim=0"
-                + (LayerConfig.RTF_LAYER_INJECTION ? " [M may mean RTF gave 0]" : ""));
+                + (terraForged ? " [M may mean RTF gave 0]" : ""));
         send(source, "  " + colMarker);
         for (int lz = 0; lz < 16; lz++) {
             StringBuilder row = new StringBuilder(lz == plz ? ">>" : "  ");
@@ -531,7 +534,7 @@ public class ChunkDebugCommand {
         send(source, "  groundBlock (after mapping scan): " + Compat.blockId(groundB) + " @Y=" + (gh - 1));
         send(source, "  aboveGround (layer placement pos): " + Compat.blockId(aboveB) + " @Y=" + gh);
         send(source, "  groundHeight=" + gh + "  simLayerCount=" + lc
-                + (LayerConfig.RTF_LAYER_INJECTION ? " (RTF actual count may differ)" : ""));
+                + (terraForged ? " (RTF actual count may differ)" : ""));
 
         if (fractionalMode) {
             float frac = fractions[plx][plz];
@@ -633,7 +636,7 @@ public class ChunkDebugCommand {
         }
 
         // ---- structure elevation analysis ----
-        if (LayerConfig.STRUCTURE_SKIP_ELEVATED || LayerConfig.RTF_LAYER_INJECTION) {
+        if (LayerConfig.STRUCTURE_SKIP_ELEVATED || terraForged) {
             send(source, "");
             send(source, "--- Structure Elevation Analysis ---");
             send(source, "  (Note: uses in-chunk neighbor minimum as proxy for natural surface,");
@@ -671,7 +674,7 @@ public class ChunkDebugCommand {
                             send(source, "  -> Sim decision: SKIP (1-block elev, REPLACE blocked: non-air above)");
                         } else if (elevDelta == 1 && LayerConfig.STRUCTURE_REPLACE_ELEVATED && lc == 0) {
                             send(source, "  -> Sim decision: SKIP (1-block elev, REPLACE blocked: simLayerCount=0)");
-                            if (LayerConfig.RTF_LAYER_INJECTION) {
+                            if (terraForged) {
                                 send(source, "  !! RTF: if actual layerCount was also 0, REPLACE would also fail in real worldgen");
                             }
                         } else {
@@ -692,7 +695,7 @@ public class ChunkDebugCommand {
             }
 
             // RTF-specific diagnosis
-            if (LayerConfig.RTF_LAYER_INJECTION) {
+            if (terraForged) {
                 send(source, "");
                 send(source, "  RTF mode note:");
                 send(source, "  Actual layer count uses RTF terrain noise (floor(height*worldHeight)),");

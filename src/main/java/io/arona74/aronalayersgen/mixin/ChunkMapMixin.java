@@ -35,6 +35,7 @@ public class ChunkMapMixin {
     private void onClose(CallbackInfo ci) {
         RandomStateHolder.clear();
         RTFCompat.resetWorldState();
+        io.arona74.aronalayersgen.injection.LayerBackend.clear();
         AronaLayersGen.LOGGER.info("[ChunkMap Mixin] Cleared world state on chunk manager close");
     }
 }

@@ -47,13 +47,9 @@ public class VanillaLayerInjector {
      *                  lattice; null falls back to the vanilla overworld 4x8 cell size.
      */
     public static void injectLayers(ChunkAccess chunk, RandomState noiseConfig, net.minecraft.world.level.chunk.ChunkGenerator generator) {
-        // RTF replaces the router with its own pipeline, so finalDensity no longer describes
-        // the terrain that actually got placed and every fraction read from it would be
-        // fiction. RTF worlds are served by RTFLayerInjector instead.
-        if (RandomStateHolder.hasRTFRandomState()) {
-            return;
-        }
-
+        // Callers only reach this for the VANILLA backend (LayerBackend): TerraForged and Tellus
+        // dimensions, whose density field does not describe the placed terrain, are routed to
+        // their own injectors before getting here.
         RandomState resolved = (noiseConfig != null) ? noiseConfig : RandomStateHolder.getNoiseConfig();
         if (resolved == null) {
             AronaLayersGen.LOGGER.warn("[FractionalSurface] RandomState unavailable for chunk {},{} — leaving vanilla terrain",

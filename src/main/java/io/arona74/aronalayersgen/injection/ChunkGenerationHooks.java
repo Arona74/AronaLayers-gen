@@ -3,6 +3,7 @@ package io.arona74.aronalayersgen.injection;
 import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.RandomState;
@@ -31,7 +32,14 @@ public final class ChunkGenerationHooks {
 
     /** Carvers-phase snapshot plus the RTF layer injection. */
     public static void afterCarve(WorldGenRegion chunkRegion, RandomState noiseConfig, ChunkAccess chunk) {
-        if (!LayerConfig.RTF_LAYER_INJECTION) {
+        if (!LayerConfig.LAYER_INJECTION) {
+            return;
+        }
+        @SuppressWarnings("deprecation")
+        ServerLevel level = chunkRegion != null ? chunkRegion.getLevel() : null;
+        RandomState randomState = noiseConfig != null ? noiseConfig : RandomStateHolder.noiseConfigFor(level);
+        LayerBackend backend = LayerBackend.of(level, level != null ? level.getChunkSource().getGenerator() : null, randomState);
+        if (backend != LayerBackend.TERRAFORGED && backend != LayerBackend.TELLUS) {
             return;
         }
 
@@ -41,24 +49,16 @@ public final class ChunkGenerationHooks {
             PreStructureHeightmapStorage.captureHeightmap(chunk);
         }
 
-        // POST_FEATURES mode injects later, at WorldChunk creation.
-        if (LayerConfig.INJECTION_MODE == LayerConfig.InjectionMode.POST_FEATURES) {
+        // POST_FEATURES mode injects later; Tellus only ever injects at features time.
+        if (LayerConfig.INJECTION_MODE == LayerConfig.InjectionMode.POST_FEATURES || backend != LayerBackend.TERRAFORGED) {
             return;
         }
 
         try {
             RTFLayerInjector.prepareStructureBounds(chunk, chunkRegion);
-
-            if (RTFCompat.isRTFAvailable()) {
-                if (noiseConfig != null) {
-                    AronaLayersGen.LOGGER.debug("[ChunkGen] Injecting layers after carve for chunk {},{}",
-                        Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
-                    RTFCompat.injectLayersWithRTF(chunk, noiseConfig);
-                } else if (RandomStateHolder.hasRTFRandomState()) {
-                    Object randomState = RandomStateHolder.getRandomState();
-                    RTFCompat.injectLayersWithRTF(chunk, randomState);
-                }
-            }
+            AronaLayersGen.LOGGER.debug("[ChunkGen] Injecting layers after carve for chunk {},{}",
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
+            RTFCompat.injectLayersWithRTF(chunk, randomState);
         } catch (Exception e) {
             AronaLayersGen.LOGGER.debug("[ChunkGen] Layer injection failed: {}", e.getMessage());
         } finally {

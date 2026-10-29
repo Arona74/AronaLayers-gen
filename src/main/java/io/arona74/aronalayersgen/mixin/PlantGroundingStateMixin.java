@@ -24,6 +24,10 @@ import org.spongepowered.asm.mixin.injection.At;
  * allocation) and the grounded-or-not answer is cached on the state, leaving non-plants with one
  * field read and a compare.
  *
+ * <p>The same hooks reach a standing trunk (an upright log on a layer) or post (a fence, wall,
+ * pane or bars) down to the layer's top and make the layer under it solid; see
+ * PlantGrounding.standingOutline and trunkFooting.
+ *
  * <p>Hooked points:
  * <ul>
  *   <li>{@code getShape(level, pos, context)}: the two-argument overload delegates here.</li>
@@ -41,6 +45,21 @@ public abstract class PlantGroundingStateMixin implements GroundedState {
 
     @Unique
     private int aronalayersgen$groundedEpoch;
+
+    /** Whether this state is a layer block, which a standing trunk can rest on; UNKNOWN until asked. */
+    @Unique
+    private byte aronalayersgen$layerSoil;
+
+    @Unique
+    private boolean aronalayersgen$isLayerSoil() {
+        byte layerSoil = this.aronalayersgen$layerSoil;
+        if (layerSoil == PlantGrounding.UNKNOWN) {
+            if (!GroundingFlags.ready) return false;
+            layerSoil = PlantGrounding.isLayerSoil((BlockState) (Object) this) ? PlantGrounding.YES : PlantGrounding.NO;
+            this.aronalayersgen$layerSoil = layerSoil;
+        }
+        return layerSoil == PlantGrounding.YES;
+    }
 
     @Override
     public boolean aronalayersgen$isGrounded() {
@@ -63,7 +82,7 @@ public abstract class PlantGroundingStateMixin implements GroundedState {
         at = @At("RETURN")
     )
     private VoxelShape aronalayersgen$groundOutline(VoxelShape shape, BlockGetter level, BlockPos pos, CollisionContext context) {
-        if (!aronalayersgen$isGrounded()) return shape;
+        if (!aronalayersgen$isGrounded()) return PlantGrounding.standingOutline((BlockState) (Object) this, level, pos, shape);
         return PlantGrounding.lowerShape((BlockState) (Object) this, level, pos, shape);
     }
 
@@ -72,7 +91,8 @@ public abstract class PlantGroundingStateMixin implements GroundedState {
         at = @At("RETURN")
     )
     private VoxelShape aronalayersgen$groundCollision(VoxelShape shape, BlockGetter level, BlockPos pos, CollisionContext context) {
-        if (!aronalayersgen$isGrounded()) return shape;
+        if (aronalayersgen$isLayerSoil()) return PlantGrounding.trunkFooting(level, pos, shape);
+        if (!aronalayersgen$isGrounded()) return PlantGrounding.bridgedCollision((BlockState) (Object) this, level, pos, shape);
         return PlantGrounding.lowerShape((BlockState) (Object) this, level, pos, shape);
     }
 
@@ -84,7 +104,8 @@ public abstract class PlantGroundingStateMixin implements GroundedState {
         )
     )
     private VoxelShape aronalayersgen$groundCachedCollision(VoxelShape shape, BlockGetter level, BlockPos pos) {
-        if (!aronalayersgen$isGrounded()) return shape;
+        if (aronalayersgen$isLayerSoil()) return PlantGrounding.trunkFooting(level, pos, shape);
+        if (!aronalayersgen$isGrounded()) return PlantGrounding.bridgedCollision((BlockState) (Object) this, level, pos, shape);
         return PlantGrounding.lowerShape((BlockState) (Object) this, level, pos, shape);
     }
 }
