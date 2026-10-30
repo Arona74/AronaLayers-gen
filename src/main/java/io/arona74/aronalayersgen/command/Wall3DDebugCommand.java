@@ -58,7 +58,8 @@ public final class Wall3DDebugCommand {
         int lx = cell.getX() & 15, lz = cell.getZ() & 15;
 
         boolean ok = RTFCompat.withCells(chunk, randomState, (scale, cells) -> {
-            Layer3DWalls.Terrain terrain = Layer3DWalls.Terrain.read(chunk, scale, cells);
+            Layer3DWalls.Terrain terrain = Layer3DWalls.Terrain.read(chunk, scale, cells,
+                (x, z) -> level.getChunkSource().getChunkNow(x, z));
             Layer3DWalls.Analysis a = Layer3DWalls.analyse(terrain, lx, lz, cell.getY(), true);
 
             send(source, "[ALG wall3d] cell " + cell.getX() + "," + cell.getY() + "," + cell.getZ()
@@ -100,7 +101,8 @@ public final class Wall3DDebugCommand {
         ChunkAccess chunk = level.getChunk(Compat.chunkX(cp), Compat.chunkZ(cp));
 
         boolean ok = RTFCompat.withCells(chunk, randomState, (scale, cells) -> {
-            Layer3DWalls.Terrain terrain = Layer3DWalls.Terrain.read(chunk, scale, cells);
+            Layer3DWalls.Terrain terrain = Layer3DWalls.Terrain.read(chunk, scale, cells,
+                (x, z) -> level.getChunkSource().getChunkNow(x, z));
             Map<Layer3DWalls.CellVerdict, Integer> verdicts = new EnumMap<>(Layer3DWalls.CellVerdict.class);
             Map<Layer3DWalls.SideVerdict, Integer> sideVerdicts = new EnumMap<>(Layer3DWalls.SideVerdict.class);
             int[] thickness = new int[8];

@@ -24,6 +24,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.levelgen.Heightmap;
 
+import java.util.HashSet;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -1605,8 +1606,10 @@ public class LayerPlacementHelper {
         }
 
         boolean isSnowyBiome = false;
+        Holder<Biome> columnBiome;
         {
             Holder<Biome> biome = chunk.getNoiseBiome(localX >> 2, surfaceY >> 2, localZ >> 2);
+            columnBiome = biome;
             // For Tellus, cap the cold-check Y below vanilla's altitude temperature penalty (which
             // starts above Y 80). At low world scales terrain sits at a huge block Y, so isCold at
             // the real surface reads every biome as cold and paints snow onto temperate plains.
@@ -1665,13 +1668,18 @@ public class LayerPlacementHelper {
         boolean vanillaSnowAtPlacement =
             chunk.getBlockState(new BlockPos(worldX, surfaceY, worldZ)).getBlock() == Blocks.SNOW;
 
-        if ((isSnowyBiome || vanillaSnowAtPlacement)
-                && LayerConfig.IMPROVE_SNOWY_BIOMES && !surfaceIsPowderSnow && !surfaceIsIceOrWater) {
+        boolean superSnowy = superSnowy(columnBiome, isSnowyBiome || vanillaSnowAtPlacement);
+        if (superSnowy && !surfaceIsPowderSnow && !surfaceIsIceOrWater) {
             useSnowLayers = true;
         } else if (surfaceIsIceOrWater || surfaceIsPowderSnow) {
             // Override any caller-supplied useSnowLayers=true: these surfaces need the CR
             // mapping path. Ice/water columns need waterlogged layers; powder_snow columns
             // need the powder_snow_layer block placed on top of the powder_snow.
+            useSnowLayers = false;
+        } else if (LayerConfig.IMPROVE_SNOWY_BIOMES
+                && LayerConfig.SUPER_SNOWY_MODE == LayerConfig.SuperSnowyMode.CONTROLLED_BY_LIST) {
+            // The list decides alone: a backend's own "cold biome" flag (TerraForged, Tellus's
+            // snow cover) does not add biomes the list leaves out.
             useSnowLayers = false;
         }
 
@@ -2167,6 +2175,12 @@ public class LayerPlacementHelper {
                 setBlockStateSafe(chunk, abovePos, layerState);
                 layerPlaced = true;
 
+                // Not under a plant that was converted or lifted onto this layer: it reads its soil
+                // through the layer and would pop off a snow_block.
+                if (layerState.is(Blocks.SNOW) && replacedPlant == null && replacedPlantState == null && !liftedPlant) {
+                    coverGroundWithSnow(chunk, surfacePos);
+                }
+
                 // A lily pad floated on the water this layer replaced. If the layer holds no water
                 // (a layer block that cannot be waterlogged), the pad would rest on dry ground: drop it.
                 BlockPos padPos = abovePos.above();
@@ -2361,6 +2375,54 @@ public class LayerPlacementHelper {
 
     public static void clearLiftRegion() {
         liftRegionLocal.remove();
+    }
+
+    /**
+     * Whether a cell lies in a snowy biome for Super Snowy Biomes: the biome there is cold enough
+     * to snow, tested one block below the cell (at the ground), as layer placement tests it.
+     */
+    public static boolean snowyAt(ChunkAccess chunk, BlockPos cell) {
+        Holder<Biome> biome = chunk.getNoiseBiome((cell.getX() & 15) >> 2, cell.getY() >> 2, (cell.getZ() & 15) >> 2);
+        return superSnowy(biome, Compat.coldEnoughToSnow(biome.value(), cell.below()));
+    }
+
+    private static volatile List<String> superSnowyListSource;
+    private static volatile Set<String> superSnowyList = Set.of();
+
+    /**
+     * Whether Super Snowy Biomes covers a column: off, never; in ALL_SNOWY_BIOMES mode, when the
+     * column is snowy ({@code snowyHere}: cold enough to snow there, or vanilla already laid snow);
+     * in CONTROLLED_BY_LIST mode, when its biome is in the list, whatever its temperature.
+     */
+    public static boolean superSnowy(Holder<Biome> biome, boolean snowyHere) {
+        if (!LayerConfig.IMPROVE_SNOWY_BIOMES) return false;
+        if (LayerConfig.SUPER_SNOWY_MODE != LayerConfig.SuperSnowyMode.CONTROLLED_BY_LIST) return snowyHere;
+        List<String> source = LayerConfig.SUPER_SNOWY_BIOMES;
+        if (source != superSnowyListSource) {
+            superSnowyList = source == null ? Set.of() : new HashSet<>(source);
+            superSnowyListSource = source;
+        }
+        return biome.unwrapKey().map(key -> superSnowyList.contains(Compat.keyId(key))).orElse(false);
+    }
+
+    /**
+     * Super Snowy Biomes: a snow layer lies on snow. The ground block under it becomes a snow_block,
+     * so breaking or thinning the layer shows snow rather than grass or stone. Natural terrain only
+     * (a block with a layer mapping); paths, farmland and anything already snow are left alone.
+     */
+    public static void coverGroundWithSnow(ChunkAccess chunk, BlockPos groundPos) {
+        if (!LayerConfig.IMPROVE_SNOWY_BIOMES) return;
+        BlockState ground = chunk.getBlockState(groundPos);
+        Block groundBlock = ground.getBlock();
+        if (groundBlock == Blocks.SNOW_BLOCK || groundBlock == Blocks.DIRT_PATH || groundBlock == Blocks.FARMLAND) return;
+        if (!Compat.blocksMotion(ground) || isTreePart(ground) || hasLayerProperty(ground)) return;
+        if (!getMappingRegistry().hasMapping(groundBlock)) return;
+        setBlockStateSafe(chunk, groundPos, Blocks.SNOW_BLOCK.defaultBlockState());
+    }
+
+    /** The feature step's region while a chunk is being layered, or null (see liftRegionLocal). */
+    public static WorldGenLevel liftRegion() {
+        return liftRegionLocal.get();
     }
 
     public static boolean isChorus(BlockState state) {

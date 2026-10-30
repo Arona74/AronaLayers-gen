@@ -4,13 +4,12 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.CycleButton;
-import net.minecraft.client.gui.components.OptionsList;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Function;
 
 /**
@@ -20,8 +19,8 @@ import java.util.function.Function;
 public final class ScreenCompat {
     private ScreenCompat() {}
 
-    public static <T> CycleButton.Builder<T> cycle(Function<T, Component> format, T initial) {
-        return CycleButton.builder(format, initial);
+    public static <T> CycleButton.Builder<T> cycle(Function<T, Component> format, List<T> values, T initial) {
+        return CycleButton.builder(format, initial).withValues(values);
     }
 
     public static CycleButton.Builder<Boolean> onOff(boolean initial) {
@@ -44,10 +43,5 @@ public final class ScreenCompat {
     /** Runs on the client thread after the current tick, e.g. once the chat screen has closed. */
     public static void schedule(Runnable task) {
         Minecraft.getInstance().schedule(task);
-    }
-
-    /** A section heading in the option list. */
-    public static void addHeader(OptionsList list, Component text, Font font) {
-        list.addHeader(text);
     }
 }

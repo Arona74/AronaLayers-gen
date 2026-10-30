@@ -85,6 +85,11 @@ public final class Compat {
         return key.identifier().toString();
     }
 
+    /** Whether a chunk has been through its feature step, and so through the layer pass too. */
+    public static boolean featuresDone(ChunkAccess chunk) {
+        return chunk.getPersistedStatus().isOrAfter(net.minecraft.world.level.chunk.status.ChunkStatus.FEATURES);
+    }
+
     /** 1.21.11 renamed LevelHeightAccessor.getMinBuildHeight/getMaxBuildHeight to getMinY/getMaxY. */
     public static int minY(net.minecraft.world.level.LevelHeightAccessor level) {
         return level.getMinY();

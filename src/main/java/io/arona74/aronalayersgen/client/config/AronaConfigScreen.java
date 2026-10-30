@@ -7,13 +7,10 @@ import io.arona74.aronalayersgen.config.ConfigOption;
 import io.arona74.aronalayersgen.config.ConfigTab;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.options.OptionsSubScreen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 
@@ -22,24 +19,27 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The in-game config screen: one tab per {@link ConfigTab}, the options of the open tab in vanilla's
- * two-column option list, and Done / Cancel in the footer. Edits go into a {@link ConfigDraft} and
- * reach the game only on Done.
+ * The in-game config screen: one tab per {@link ConfigTab} along the top, the options of the open
+ * tab in the left half, and in the right half a preview of the option under the mouse (an image,
+ * its name and its description: {@link ConfigPreview}). Done / Cancel sit in the footer. Edits go
+ * into a {@link ConfigDraft} and reach the game only on Done.
  *
- * <p>Built on OptionsSubScreen so the list, scrolling and background are vanilla's own on every
- * version from 1.21.1 on (1.20.1 has its own copy of this class). Its header layout is final and
- * cannot be rebuilt in place, so switching tab opens a new screen on the same draft.
+ * <p>The option list and the preview panel are drawn by each version's {@link OptionRows} and
+ * {@link PreviewPanel}, as drawing differs between versions; the rest is shared from 1.21.1 on
+ * (1.20.1 has its own copy of this class). Switching tab opens a new screen on the same draft.
  */
-public class AronaConfigScreen extends OptionsSubScreen {
-    private static final int HEADER_HEIGHT = 58;
+public class AronaConfigScreen extends Screen {
+    private static final int LIST_TOP = 50;
+    private static final int FOOTER_HEIGHT = 32;
 
     /** Remembered for the session, so reopening the screen returns to where the user was. */
     private static ConfigTab lastTab = ConfigTab.WORLDGEN;
     private static boolean showAdvanced;
 
+    private final Screen lastScreen;
     private final ConfigDraft draft;
     private final ConfigTab tab;
-    private ConfigWidgets widgets;
+    private ConfigPreview preview;
     private boolean discard;
 
     public AronaConfigScreen(Screen parent) {
@@ -47,83 +47,92 @@ public class AronaConfigScreen extends OptionsSubScreen {
     }
 
     private AronaConfigScreen(Screen parent, ConfigDraft draft, ConfigTab tab) {
-        super(parent, Minecraft.getInstance().options, Component.translatable("config.aronalayersgen.title"));
+        super(Component.translatable("config.aronalayersgen.title"));
+        this.lastScreen = parent;
         this.draft = draft;
         this.tab = tab;
         lastTab = tab;
-        layout.setHeaderHeight(HEADER_HEIGHT);
     }
 
     @Override
-    protected void addTitle() {
-        LinearLayout header = layout.addToHeader(LinearLayout.vertical().spacing(6));
-        header.defaultCellSetting().alignHorizontallyCenter();
-        header.addChild(new StringWidget(title, font));
+    protected void init() {
+        int titleWidth = font.width(title);
+        addRenderableWidget(new StringWidget((width - titleWidth) / 2, 8, titleWidth, 9, title, font));
 
         List<ConfigTab> tabs = visibleTabs();
-        LinearLayout row = header.addChild(LinearLayout.horizontal().spacing(4));
         int buttonWidth = Math.min(80, (width - 20) / tabs.size() - 4);
+        int x = (width - tabs.size() * (buttonWidth + 4) + 4) / 2;
         for (ConfigTab t : tabs) {
-            Button button = Button.builder(Component.translatable(t.langKey()), b -> reopen(t)).width(buttonWidth).build();
+            Button button = addRenderableWidget(Button.builder(Component.translatable(t.langKey()), b -> reopen(t))
+                    .bounds(x, 22, buttonWidth, 20).build());
             button.active = t != tab;
-            row.addChild(button);
+            x += buttonWidth + 4;
         }
+
+        int half = width / 2;
+        int listBottom = height - FOOTER_HEIGHT;
+        OptionRows list = new OptionRows(Minecraft.getInstance(), half, listBottom - LIST_TOP, LIST_TOP);
+        ConfigWidgets widgets = new ConfigWidgets(draft, font);
+        fillRows(list, widgets, tab, font);
+        addRenderableWidget(list);
+
+        preview = new ConfigPreview(widgets, tab, font);
+        preview.setBounds(half + 4, LIST_TOP + 2, width - 10, listBottom - 2);
+        addRenderableOnly(new PreviewPanel(preview, font));
+
+        int y = height - 26;
+        int fx = width / 2 - 179;
+        addRenderableWidget(ScreenCompat.onOff(showAdvanced)
+                .create(fx, y, 100, 20, Component.translatable("config.aronalayersgen.advanced"), (b, value) -> {
+                    showAdvanced = value;
+                    reopen(tab);
+                })).setTooltip(Tooltip.create(Component.translatable("config.aronalayersgen.advanced.tooltip")));
+        addRenderableWidget(Button.builder(Component.translatable("config.aronalayersgen.reset_tab"), b -> {
+                    draft.resetToDefaults(tab);
+                    reopen(tab);
+                }).bounds(fx + 106, y, 70, 20)
+                .tooltip(Tooltip.create(Component.translatable("config.aronalayersgen.reset_tab.tooltip"))).build());
+        addRenderableWidget(Button.builder(Component.translatable("config.aronalayersgen.open_folder"),
+                        b -> ScreenCompat.openPath(LayerConfig.configDir()))
+                .bounds(fx + 182, y, 50, 20)
+                .tooltip(Tooltip.create(Component.translatable("config.aronalayersgen.open_folder.tooltip"))).build());
+        addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL, b -> {
+                    discard = true;
+                    onClose();
+                }).bounds(fx + 238, y, 60, 20).build());
+        addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> onClose()).bounds(fx + 304, y, 60, 20).build());
     }
 
-    @Override
-    protected void addOptions() {
-        widgets = new ConfigWidgets(draft, font);
-        List<AbstractWidget> pending = new ArrayList<>();
-        if (tab.worldgen) {
-            for (int line = 0; line < ConfigWidgets.WORLDGEN_WARNING_LINES; line++) {
-                ScreenCompat.addHeader(list, ConfigWidgets.worldgenWarning(line), font);
-            }
-        }
+    /**
+     * The open tab's rows: on a world generation tab the warning's heading first, then each group
+     * under its heading, one option per row. A block-list box has no label of its own, so its name
+     * gets a row above it.
+     */
+    static void fillRows(OptionRows list, ConfigWidgets widgets, ConfigTab tab, net.minecraft.client.gui.Font font) {
+        if (tab.worldgen) list.add(new StringWidget(ConfigWidgets.WIDTH, ConfigWidgets.HEIGHT, ConfigWidgets.worldgenWarning(0), font));
         String group = null;
         for (ConfigOption<?> option : LayerConfig.options()) {
             if (option.tab != tab || (option.advanced && !showAdvanced)) continue;
             if (!Objects.equals(option.group, group)) {
-                flush(pending);
                 group = option.group;
-                if (group != null) ScreenCompat.addHeader(list, Component.translatable("config.aronalayersgen.group." + group), font);
+                if (group != null) {
+                    list.add(new StringWidget(ConfigWidgets.WIDTH, ConfigWidgets.HEIGHT,
+                            Component.translatable("config.aronalayersgen.group." + group), font));
+                }
             }
-            if (option.kind == ConfigOption.Kind.STRING_LIST) {
-                // A text box has no label of its own: give it a row with the name beside it.
-                flush(pending);
-                list.addSmall(widgets.label(option), widgets.create(option));
-            } else {
-                pending.add(widgets.create(option));
-            }
+            if (option.kind == ConfigOption.Kind.STRING_LIST) list.add(widgets.label(option));
+            list.add(widgets.create(option));
         }
-        flush(pending);
     }
 
-    private void flush(List<AbstractWidget> pending) {
-        if (pending.isEmpty()) return;
-        list.addSmall(new ArrayList<>(pending));
-        pending.clear();
-    }
-
+    /** The mouse wheel over the preview panel scrolls a long description. */
     @Override
-    protected void addFooter() {
-        LinearLayout footer = layout.addToFooter(LinearLayout.horizontal().spacing(6));
-        footer.addChild(ScreenCompat.onOff(showAdvanced)
-                .create(0, 0, 100, 20, Component.translatable("config.aronalayersgen.advanced"), (b, value) -> {
-                    showAdvanced = value;
-                    reopen(tab);
-                })).setTooltip(Tooltip.create(Component.translatable("config.aronalayersgen.advanced.tooltip")));
-        footer.addChild(Button.builder(Component.translatable("config.aronalayersgen.reset_tab"), b -> {
-                    draft.resetToDefaults(tab);
-                    reopen(tab);
-                }).width(70).tooltip(Tooltip.create(Component.translatable("config.aronalayersgen.reset_tab.tooltip"))).build());
-        footer.addChild(Button.builder(Component.translatable("config.aronalayersgen.open_folder"),
-                        b -> ScreenCompat.openPath(LayerConfig.configDir()))
-                .width(50).tooltip(Tooltip.create(Component.translatable("config.aronalayersgen.open_folder.tooltip"))).build());
-        footer.addChild(Button.builder(CommonComponents.GUI_CANCEL, b -> {
-                    discard = true;
-                    onClose();
-                }).width(60).build());
-        footer.addChild(Button.builder(CommonComponents.GUI_DONE, b -> onClose()).width(60).build());
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (preview != null && preview.contains(mouseX, mouseY)) {
+            preview.scroll(scrollY);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     private void reopen(ConfigTab target) {
@@ -134,12 +143,7 @@ public class AronaConfigScreen extends OptionsSubScreen {
     @Override
     public void onClose() {
         if (!discard) commit(draft);
-        super.onClose();
-    }
-
-    /** Vanilla's version saves options.txt, which this screen never touches. */
-    @Override
-    public void removed() {
+        ScreenCompat.setScreen(lastScreen);
     }
 
     static void commit(ConfigDraft draft) {

@@ -44,6 +44,9 @@ public final class ConfigOption<T> {
      */
     public enum Side { SERVER, CLIENT, BOTH }
 
+    /** What a STRING_LIST holds: block ids (checked against the registry on screen) or biome ids. */
+    public enum Ids { BLOCKS, BIOMES }
+
     /** This option only matters while {@code option} has {@code value}. */
     public record Requirement(ConfigOption<?> option, Object value) {}
 
@@ -63,6 +66,8 @@ public final class ConfigOption<T> {
     /** Any one of these mods enables the option; empty means no mod is needed. */
     public final List<String> mods;
     public final List<Requirement> requirements;
+    /** For a STRING_LIST, what its entries are. */
+    public final Ids ids;
     private final T[] enumValues;
     private final Supplier<T> getter;
     private final Consumer<T> setter;
@@ -77,6 +82,7 @@ public final class ConfigOption<T> {
         this.apply = b.apply;
         this.side = b.side;
         this.advanced = b.advanced;
+        this.ids = b.ids;
         this.min = b.min;
         this.max = b.max;
         this.step = b.step;
@@ -213,6 +219,17 @@ public final class ConfigOption<T> {
         return new Builder<>(key, Kind.STRING_LIST, List.copyOf(def), get, set);
     }
 
+    /**
+     * A list of biome ids. Biomes are a datapack registry, which only exists inside a world, so the
+     * screen cannot check them the way it checks block ids.
+     */
+    public static Builder<List<String>> biomeList(String key, List<String> def,
+                                                  Supplier<List<String>> get, Consumer<List<String>> set) {
+        Builder<List<String>> b = new Builder<>(key, Kind.STRING_LIST, List.copyOf(def), get, set);
+        b.ids = Ids.BIOMES;
+        return b;
+    }
+
     public static final class Builder<T> {
         private final String key;
         private final Kind kind;
@@ -230,6 +247,7 @@ public final class ConfigOption<T> {
         private final List<String> mods = new ArrayList<>();
         private final List<Requirement> requirements = new ArrayList<>();
         private T[] enumValues;
+        private Ids ids = Ids.BLOCKS;
 
         private Builder(String key, Kind kind, T def, Supplier<T> get, Consumer<T> set) {
             this.key = key;

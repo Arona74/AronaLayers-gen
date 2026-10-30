@@ -9,6 +9,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Function;
 
 /**
@@ -18,8 +19,9 @@ import java.util.function.Function;
 public final class ScreenCompat {
     private ScreenCompat() {}
 
-    public static <T> CycleButton.Builder<T> cycle(Function<T, Component> format, T initial) {
-        return CycleButton.builder(format).withInitialValue(initial);
+    /** The values go in before the initial one, which is looked up among them when it is set. */
+    public static <T> CycleButton.Builder<T> cycle(Function<T, Component> format, List<T> values, T initial) {
+        return CycleButton.builder(format).withValues(values).withInitialValue(initial);
     }
 
     public static CycleButton.Builder<Boolean> onOff(boolean initial) {

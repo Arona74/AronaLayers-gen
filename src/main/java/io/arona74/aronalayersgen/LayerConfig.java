@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+import static io.arona74.aronalayersgen.config.ConfigOption.biomeList;
 import static io.arona74.aronalayersgen.config.ConfigOption.blockList;
 import static io.arona74.aronalayersgen.config.ConfigOption.bool;
 import static io.arona74.aronalayersgen.config.ConfigOption.choice;
@@ -424,6 +425,19 @@ public class LayerConfig {
      */
     public static boolean IMPROVE_SNOWY_BIOMES;
 
+    /** Which biomes Super Snowy Biomes covers. */
+    public static SuperSnowyMode SUPER_SNOWY_MODE;
+
+    public enum SuperSnowyMode {
+        /** Every biome cold enough to snow at the column (and wherever vanilla already laid snow). */
+        ALL_SNOWY_BIOMES,
+        /** Only the biomes in {@link #SUPER_SNOWY_BIOMES}, whatever their temperature. */
+        CONTROLLED_BY_LIST
+    }
+
+    /** The biome ids Super Snowy Biomes covers in CONTROLLED_BY_LIST mode. */
+    public static List<String> SUPER_SNOWY_BIOMES;
+
     /**
      * When breaking a snow layer, replace it with the mapped layer block
      * based on the block below, with layer value reduced by 1.
@@ -513,6 +527,13 @@ public class LayerConfig {
     public static boolean THREE_D_LAYER_INJECTION;
 
     /**
+     * 3D layers at chunk borders: a border cell's wall stands in the next chunk, read through the
+     * feature step's region instead of being skipped (see Layer3DWalls.Margin). Without it, steep
+     * cliffs crossing a chunk border stay bare there.
+     */
+    public static boolean THREE_D_LAYER_CROSS_CHUNK;
+
+    /**
      * Lower the layer count in swamp biomes (any biome whose id contains "swamp": vanilla swamp and
      * mangrove swamp, and modded ones) by REDUCE_SWAMP_LAYERS_VALUE. Swamp ground sits around the
      * water line with puddles cut into it, and full-height layers there stand proud of the water.
@@ -599,9 +620,12 @@ public class LayerConfig {
             () -> LAYER_INJECTION, v -> LAYER_INJECTION = v).in(ConfigTab.WORLDGEN, "backends"));
     private static final ConfigOption<InjectionMode> O_INJECTION_MODE = add(choice("injection_mode", InjectionMode.POST_FEATURES,
             () -> INJECTION_MODE, v -> INJECTION_MODE = v).in(ConfigTab.WORLDGEN, "backends"));
+    private static final ConfigOption<Boolean> O_3D_LAYER_INJECTION = add(bool("3D_layer_injection", false,
+            () -> THREE_D_LAYER_INJECTION, v -> THREE_D_LAYER_INJECTION = v)
+            .in(ConfigTab.WORLDGEN, "backends").mods("vanillalayerplus").apply(Apply.RESTART));
     static {
-        add(bool("3D_layer_injection", false, () -> THREE_D_LAYER_INJECTION, v -> THREE_D_LAYER_INJECTION = v)
-                .in(ConfigTab.WORLDGEN, "backends").mods("vanillalayerplus").apply(Apply.RESTART));
+        add(bool("3D_layer_cross_chunk", false, () -> THREE_D_LAYER_CROSS_CHUNK, v -> THREE_D_LAYER_CROSS_CHUNK = v)
+                .in(ConfigTab.WORLDGEN, "backends").requires(O_3D_LAYER_INJECTION).mods("vanillalayerplus"));
 
         add(bool("tellus_reduce_layer_count", true, () -> TELLUS_REDUCE_LAYER_COUNT, v -> TELLUS_REDUCE_LAYER_COUNT = v)
                 .in(ConfigTab.WORLDGEN, "tuning").mods("tellus"));
@@ -622,9 +646,20 @@ public class LayerConfig {
     // --- Biomes ---
     private static final ConfigOption<Boolean> O_SKIP_SNOWY_BIOMES = add(bool("skip_snowy_biomes", false,
             () -> SKIP_SNOWY_BIOMES, v -> SKIP_SNOWY_BIOMES = v).in(ConfigTab.WORLDGEN, "snow"));
+    private static final ConfigOption<Boolean> O_IMPROVE_SNOWY_BIOMES = add(bool("improve_snowy_biomes", false,
+            () -> IMPROVE_SNOWY_BIOMES, v -> IMPROVE_SNOWY_BIOMES = v)
+            .in(ConfigTab.WORLDGEN, "snow").requiresOff(O_SKIP_SNOWY_BIOMES));
+    private static final ConfigOption<SuperSnowyMode> O_SUPER_SNOWY_MODE = add(choice("super_snowy_mode",
+            SuperSnowyMode.ALL_SNOWY_BIOMES, () -> SUPER_SNOWY_MODE, v -> SUPER_SNOWY_MODE = v)
+            .in(ConfigTab.WORLDGEN, "snow").requiresOff(O_SKIP_SNOWY_BIOMES).requires(O_IMPROVE_SNOWY_BIOMES));
     static {
-        add(bool("improve_snowy_biomes", true, () -> IMPROVE_SNOWY_BIOMES, v -> IMPROVE_SNOWY_BIOMES = v)
-                .in(ConfigTab.WORLDGEN, "snow").requiresOff(O_SKIP_SNOWY_BIOMES));
+        add(biomeList("super_snowy_biomes", List.of(
+                    "minecraft:snowy_plains", "minecraft:ice_spikes", "minecraft:snowy_taiga", "minecraft:snowy_beach",
+                    "minecraft:frozen_river", "minecraft:snowy_slopes", "minecraft:grove", "minecraft:frozen_peaks",
+                    "minecraft:jagged_peaks"),
+                () -> SUPER_SNOWY_BIOMES, v -> SUPER_SNOWY_BIOMES = v)
+                .in(ConfigTab.WORLDGEN, "snow").requiresOff(O_SKIP_SNOWY_BIOMES).requires(O_IMPROVE_SNOWY_BIOMES)
+                .requires(O_SUPER_SNOWY_MODE, SuperSnowyMode.CONTROLLED_BY_LIST));
         add(bool("break_snow_layers_to_mapped_layers", true,
                 () -> BREAK_SNOW_LAYERS_TO_MAPPED_LAYERS, v -> BREAK_SNOW_LAYERS_TO_MAPPED_LAYERS = v)
                 .in(ConfigTab.GAMEPLAY, "snow").apply(Apply.LIVE));

@@ -9,12 +9,14 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FallingBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -59,8 +61,10 @@ import java.util.List;
  * one opposite the wall): a higher floor layer there raises it to match. Falling materials (sand,
  * gravel...) are skipped.
  *
- * <p>Only cells whose wall lies inside the chunk: a generating chunk cannot read or write its
- * neighbours, so faces on the chunk border are skipped.
+ * <p>Only cells inside the chunk get pieces. The wall a border cell leans against lies in the next
+ * chunk: with {@code 3D_layer_cross_chunk} on, it is read through the feature step's region (the
+ * chunk's eight neighbours, as vanilla features read them; see {@link Margin}); otherwise, or when
+ * the region cannot serve that chunk, the side is skipped as {@link SideVerdict#BORDER}.
  *
  * <p>{@link #analyse} is pure and shared with /algdebug wall3d, so the command reports exactly
  * the decision placement makes.
@@ -135,9 +139,27 @@ public final class Layer3DWalls {
      * surface as placed (ground plus the floor layer there, in eighths).
      */
     public record Terrain(ChunkAccess chunk, int startX, int startZ, float[][] height, int[][] ground,
-                          float[][] surface) {
+                          float[][] surface, Margin margin) {
 
+        /** The chunk alone: border sides stay unread. */
         public static Terrain read(ChunkAccess chunk, int scale, RTFLayerInjector.CellAccessor cells) {
+            return read(chunk, scale, cells, null);
+        }
+
+        /**
+         * The chunk, with the columns beside it in its side neighbours when {@code neighbours} is
+         * given and {@code 3D_layer_cross_chunk} is on (see {@link Margin}).
+         */
+        public static Terrain read(ChunkAccess chunk, int scale, RTFLayerInjector.CellAccessor cells, ChunkLookup neighbours) {
+            return read(chunk, scale, cells, neighbours, false);
+        }
+
+        /**
+         * As above. {@code settled}: the chunk has been through this pass already, so a column
+         * whose floor layer was turned into a full block is read a block higher (see settledGround).
+         */
+        static Terrain read(ChunkAccess chunk, int scale, RTFLayerInjector.CellAccessor cells, ChunkLookup neighbours,
+                            boolean settled) {
             int startX = chunk.getPos().getMinBlockX();
             int startZ = chunk.getPos().getMinBlockZ();
             Heightmap.Types hmType = (chunk instanceof LevelChunk)
@@ -152,11 +174,58 @@ public final class Layer3DWalls {
                         cell = cells.getCell(startX + lx, startZ + lz);
                     } catch (Exception ignored) {}
                     height[lx][lz] = cell == null ? Float.NaN : cell.height * scale;
-                    int g = ground[lx][lz];
+                    int g = settled ? settledGround(chunk, startX + lx, ground[lx][lz], startZ + lz) : ground[lx][lz];
+                    ground[lx][lz] = g;
                     surface[lx][lz] = g + floorLayersAt(chunk.getBlockState(new BlockPos(startX + lx, g, startZ + lz))) / 8f;
                 }
             }
-            return new Terrain(chunk, startX, startZ, height, ground, surface);
+            Margin margin = neighbours != null && LayerConfig.THREE_D_LAYER_CROSS_CHUNK
+                ? Margin.read(startX, startZ, scale, cells, neighbours) : null;
+            return new Terrain(chunk, startX, startZ, height, ground, surface, margin);
+        }
+
+        /** Whether column {@code (lx, lz)} (chunk-local, -1..16) can be read: inside, or in the margin. */
+        public boolean known(int lx, int lz) {
+            if (!outside(lx, lz)) return !Float.isNaN(height[lx][lz]);
+            return margin != null && margin.known(lx, lz);
+        }
+
+        /** True when column {@code (lx, lz)} lies in a neighbouring chunk. */
+        public static boolean outside(int lx, int lz) {
+            return lx < 0 || lx > 15 || lz < 0 || lz > 15;
+        }
+
+        public float heightAt(int lx, int lz) {
+            return outside(lx, lz) ? margin.height[lx + 1][lz + 1] : height[lx][lz];
+        }
+
+        public int groundAt(int lx, int lz) {
+            return outside(lx, lz) ? margin.ground[lx + 1][lz + 1] : ground[lx][lz];
+        }
+
+        public float surfaceAt(int lx, int lz) {
+            return outside(lx, lz) ? margin.surface[lx + 1][lz + 1] : surface[lx][lz];
+        }
+
+        /** The block at {@code pos}: from the chunk, or from the neighbour holding it. */
+        public BlockState blockAt(BlockPos pos) {
+            int lx = pos.getX() - startX, lz = pos.getZ() - startZ;
+            if (!outside(lx, lz) || margin == null) return chunk.getBlockState(pos);
+            ChunkAccess neighbour = margin.chunkFor(lx, lz);
+            return neighbour == null ? Blocks.AIR.defaultBlockState() : neighbour.getBlockState(pos);
+        }
+
+        /**
+         * The ground of a column in a chunk that has been through this pass. During generation the
+         * heightmap the ground comes from (OCEAN_FLOOR_WG) does not follow block changes, so a column
+         * whose floor layer was turned into its full block (promoteFloorsUnderWalls) still reports
+         * the old ground, now a solid block: the ground is the cell above it. Elsewhere that cell holds
+         * a floor layer, a 3D layer, air or a plant, and the reported ground stands.
+         */
+        static int settledGround(ChunkAccess chunk, int x, int g, int z) {
+            BlockState at = chunk.getBlockState(new BlockPos(x, g, z));
+            boolean promoted = isTerrainCandidate(at) && !LayerPlacementHelper.isFloorLayer(at) && !Layer3D.is(at.getBlock());
+            return promoted ? g + 1 : g;
         }
 
         /** The floor height a ground cell holds: its floor layer, or the floor part of a 3D layer. */
@@ -167,12 +236,16 @@ public final class Layer3DWalls {
             return 0;
         }
 
-        /** Highest ground among the column's side neighbours inside the chunk (at least its own). */
+        /**
+         * Highest ground among the column's side neighbours (at least its own): those inside the
+         * chunk, and those in the margin when it is read.
+         */
         public int topBeside(int lx, int lz) {
             int top = ground[lx][lz];
             for (Direction d : Direction.Plane.HORIZONTAL) {
                 int ax = lx + d.getStepX(), az = lz + d.getStepZ();
-                if (ax >= 0 && ax < 16 && az >= 0 && az < 16) top = Math.max(top, ground[ax][az]);
+                if (!outside(ax, az)) top = Math.max(top, ground[ax][az]);
+                else if (known(ax, az)) top = Math.max(top, groundAt(ax, az));
             }
             return top;
         }
@@ -199,7 +272,80 @@ public final class Layer3DWalls {
                     s[x][z] = g[x][z];
                 }
             }
-            return new Terrain(chunk, startX, startZ, height, g, s);
+            return new Terrain(chunk, startX, startZ, height, g, s, margin);
+        }
+    }
+
+    /** Finds a chunk by its chunk coordinates, or null when it cannot be read. */
+    @FunctionalInterface
+    public interface ChunkLookup {
+        ChunkAccess get(int chunkX, int chunkZ);
+    }
+
+    /**
+     * The columns just outside the chunk, in its four side neighbours: the ones a border cell's wall
+     * stands in. Indexed {@code [lx + 1][lz + 1]} with chunk-local -1..16; only the edge rows are
+     * filled, never the corners (only side neighbours count).
+     *
+     * <p>A neighbour that generated first is read as it ended up, layers included. One that has not
+     * run its own layer pass yet is read raw: its ground (the full blocks) is already final and
+     * decides the step and the material, but it has no floor layer yet, so its surface reads up to
+     * 7/8 of a block low and a piece against it can come out a layer or two thinner.
+     */
+    public static final class Margin {
+        final float[][] height = new float[18][18];
+        final int[][] ground = new int[18][18];
+        final float[][] surface = new float[18][18];
+        /** The side neighbours, by Direction.get2DDataValue(); null where unreadable. */
+        final ChunkAccess[] chunks = new ChunkAccess[4];
+
+        static Margin read(int startX, int startZ, int scale, RTFLayerInjector.CellAccessor cells, ChunkLookup neighbours) {
+            Margin m = new Margin();
+            for (float[] row : m.height) Arrays.fill(row, Float.NaN);
+            int cx = startX >> 4, cz = startZ >> 4;
+            for (Direction d : Direction.Plane.HORIZONTAL) {
+                ChunkAccess n;
+                try {
+                    n = neighbours.get(cx + d.getStepX(), cz + d.getStepZ());
+                } catch (RuntimeException e) {
+                    n = null;
+                }
+                if (n == null) continue;
+                m.chunks[d.get2DDataValue()] = n;
+                int nStartX = startX + 16 * d.getStepX(), nStartZ = startZ + 16 * d.getStepZ();
+                Heightmap.Types hmType = (n instanceof LevelChunk) ? Heightmap.Types.OCEAN_FLOOR : Heightmap.Types.OCEAN_FLOOR_WG;
+                int[][] g = LayerPlacementHelper.computeGroundFloorYs(n, hmType, nStartX, nStartZ, Compat.minY(n));
+                for (int i = 0; i < 16; i++) {
+                    // The neighbour's column touching this chunk, and where it sits in the margin.
+                    int nlx = d == Direction.EAST ? 0 : d == Direction.WEST ? 15 : i;
+                    int nlz = d == Direction.SOUTH ? 0 : d == Direction.NORTH ? 15 : i;
+                    int lx = nlx + 16 * d.getStepX(), lz = nlz + 16 * d.getStepZ();
+                    RTFLayerInjector.CellData cell = null;
+                    try {
+                        cell = cells.getCell(nStartX + nlx, nStartZ + nlz);
+                    } catch (Exception ignored) {}
+                    if (cell == null) continue;
+                    // A neighbour that has been layered already may have a promoted column here.
+                    int ground = Terrain.settledGround(n, nStartX + nlx, g[nlx][nlz], nStartZ + nlz);
+                    m.height[lx + 1][lz + 1] = cell.height * scale;
+                    m.ground[lx + 1][lz + 1] = ground;
+                    m.surface[lx + 1][lz + 1] = ground
+                        + Terrain.floorLayersAt(n.getBlockState(new BlockPos(nStartX + nlx, ground, nStartZ + nlz))) / 8f;
+                }
+            }
+            return m;
+        }
+
+        boolean known(int lx, int lz) {
+            if (lx < -1 || lx > 16 || lz < -1 || lz > 16) return false;
+            boolean edgeX = lx == -1 || lx == 16, edgeZ = lz == -1 || lz == 16;
+            if (edgeX == edgeZ) return false;   // inside, or a corner
+            return !Float.isNaN(height[lx + 1][lz + 1]);
+        }
+
+        ChunkAccess chunkFor(int lx, int lz) {
+            Direction d = lx < 0 ? Direction.WEST : lx > 15 ? Direction.EAST : lz < 0 ? Direction.NORTH : Direction.SOUTH;
+            return chunks[d.get2DDataValue()];
         }
     }
 
@@ -217,7 +363,9 @@ public final class Layer3DWalls {
     public static int placeInChunk(ChunkAccess chunk, int scale, RTFLayerInjector.CellAccessor cells) {
         if (!Layer3D.isActive()) return 0;
 
-        Terrain terrain = Terrain.read(chunk, scale, cells);
+        WorldGenLevel region = LayerPlacementHelper.liftRegion();
+        Terrain terrain = Terrain.read(chunk, scale, cells, region == null ? null
+            : (x, z) -> region.hasChunk(x, z) ? region.getChunk(x, z) : null);
         // Applied to the terrain as read, not read again: during generation the heightmap the
         // ground comes from (OCEAN_FLOOR_WG) does not follow block changes, so a re-read still saw
         // each promoted column a block low and measured its walls from there.
@@ -233,17 +381,92 @@ public final class Layer3DWalls {
                     Analysis a = analyse(terrain, lx, lz, y, false);
                     if (a.verdict() == CellVerdict.PIECE || a.verdict() == CellVerdict.TROUGH) {
                         LayerPlacementHelper.setBlockStateSafe(chunk, a.pos(), a.piece());
+                        if (a.piece().is(Blocks.SNOW)) LayerPlacementHelper.coverGroundWithSnow(chunk, a.pos().below());
                         placed++;
                     }
                 }
             }
         }
 
+        int refit = LayerConfig.THREE_D_LAYER_CROSS_CHUNK && region != null ? refitNeighbours(chunk, region, scale, cells) : 0;
+
         if (LayerConfig.logRtf()) {
-            AronaLayersGen.LOGGER.info("[Layer3DWalls] ChunkAccess {},{}: placed={} floorsToFullBlock={}",
-                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), placed, promoted);
+            AronaLayersGen.LOGGER.info("[Layer3DWalls] ChunkAccess {},{}: placed={} floorsToFullBlock={} refitInNeighbours={}",
+                Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), placed, promoted, refit);
         }
         return placed;
+    }
+
+    /**
+     * Re-measures the border row of each side neighbour that has already been through this pass,
+     * now that this chunk is final, and writes what changed into it. When that neighbour generated
+     * it read this chunk raw, before its layers and full-block floors, so its pieces against this
+     * chunk could come out too thin, or be missing where this chunk's ground only reached its final
+     * height afterwards. Whichever of two chunks generates second thus leaves both sides of their
+     * border measured against each other's final terrain.
+     *
+     * <p>A neighbour past its feature step is never further than that while this chunk is still in
+     * it (lighting needs this chunk's features first), so it is a proto-chunk no player has been
+     * sent yet, and the feature step may write into it.
+     *
+     * @return the number of cells changed in neighbours
+     */
+    private static int refitNeighbours(ChunkAccess chunk, WorldGenLevel region, int scale, RTFLayerInjector.CellAccessor cells) {
+        int cx = Compat.chunkX(chunk.getPos()), cz = Compat.chunkZ(chunk.getPos());
+        int changed = 0;
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            int nx = cx + d.getStepX(), nz = cz + d.getStepZ();
+            if (!region.hasChunk(nx, nz)) continue;
+            ChunkAccess n = region.getChunk(nx, nz);
+            if (!Compat.featuresDone(n)) continue;
+            // Only this chunk is read beside it: the row touching it is all that is re-measured.
+            Terrain terrain = Terrain.read(n, scale, cells, (x, z) -> x == cx && z == cz ? chunk : null, true);
+            Direction back = d.getOpposite();
+            for (int i = 0; i < 16; i++) {
+                int lx = back == Direction.EAST ? 15 : back == Direction.WEST ? 0 : i;
+                int lz = back == Direction.SOUTH ? 15 : back == Direction.NORTH ? 0 : i;
+                changed += refitColumn(terrain, lx, lz);
+            }
+        }
+        return changed;
+    }
+
+    /**
+     * One column of a layered neighbour, measured again: its floor layer turned into the full block
+     * when a piece now stands on it (as promoteFloorsUnderWalls does), then a piece written into each
+     * cell that now gets a different one. Pieces already there are read as what they replaced, so
+     * the decision is the one a fresh pass would make; cells that no longer qualify are left as they
+     * are, since the new neighbour only ever adds a wall to lean against.
+     */
+    private static int refitColumn(Terrain terrain, int lx, int lz) {
+        if (Float.isNaN(terrain.height()[lx][lz])) return 0;
+        ChunkAccess chunk = terrain.chunk();
+        int changed = 0;
+        int g = terrain.ground()[lx][lz];
+        int top = terrain.topBeside(lx, lz);
+        if (top > g + 1) {
+            BlockPos floorPos = new BlockPos(terrain.startX() + lx, g, terrain.startZ() + lz);
+            BlockState floor = chunk.getBlockState(floorPos);
+            Block full = LayerPlacementHelper.isFloorLayer(floor) && !Layer3D.is(floor.getBlock())
+                ? LayerPlacementHelper.getMappingRegistry().getSourceBlock(floor.getBlock()) : null;
+            if (full != null) {
+                CellVerdict above = analyse(terrain.raised(lx, lz), lx, lz, g + 1, true).verdict();
+                if (above == CellVerdict.PIECE || above == CellVerdict.TROUGH) {
+                    LayerPlacementHelper.setBlockStateSafe(chunk, floorPos, full.defaultBlockState());
+                    terrain = terrain.raised(lx, lz);
+                    changed++;
+                }
+            }
+        }
+        for (int y = terrain.ground()[lx][lz]; y < top; y++) {
+            Analysis a = analyse(terrain, lx, lz, y, true);
+            if (a.verdict() != CellVerdict.PIECE && a.verdict() != CellVerdict.TROUGH) continue;
+            if (chunk.getBlockState(a.pos()).equals(a.piece())) continue;
+            LayerPlacementHelper.setBlockStateSafe(chunk, a.pos(), a.piece());
+            if (a.piece().is(Blocks.SNOW)) LayerPlacementHelper.coverGroundWithSnow(chunk, a.pos().below());
+            changed++;
+        }
+        return changed;
     }
 
     /**
@@ -365,6 +588,11 @@ public final class Layer3DWalls {
                 }
             }
             Block base = Layer3D.baseLayerOf(chosen.piece().getBlock());
+            // Super Snowy Biomes: every layer in a snowy biome is snow, the trough's too. Not in
+            // water, which a snow layer cannot hold.
+            if (base != null && !water && LayerConfig.IMPROVE_SNOWY_BIOMES && LayerPlacementHelper.snowyAt(chunk, pos)) {
+                base = Blocks.SNOW;
+            }
             if (base != null) {
                 BlockState layer = LayerPlacementHelper.applyLayerCount(base.defaultBlockState(), base, Math.min(7, layers));
                 if (layer.hasProperty(BlockStateProperties.WATERLOGGED)) {
@@ -426,9 +654,9 @@ public final class Layer3DWalls {
      */
     private static int downhillFloor(Terrain terrain, int lx, int lz, int y, Direction wallSide) {
         int nx = lx - wallSide.getStepX(), nz = lz - wallSide.getStepZ();
-        if (nx < 0 || nx > 15 || nz < 0 || nz > 15 || terrain.ground()[nx][nz] != y) return 0;
+        if (!terrain.known(nx, nz) || terrain.groundAt(nx, nz) != y) return 0;
         BlockPos pos = new BlockPos(terrain.startX() + nx, y, terrain.startZ() + nz);
-        return Terrain.floorLayersAt(terrain.chunk().getBlockState(pos));
+        return Terrain.floorLayersAt(terrain.blockAt(pos));
     }
 
     /**
@@ -456,8 +684,7 @@ public final class Layer3DWalls {
     }
 
     private static float neighbourSurface(Terrain terrain, int lx, int lz, float fallback) {
-        if (lx < 0 || lx > 15 || lz < 0 || lz > 15 || Float.isNaN(terrain.height()[lx][lz])) return fallback;
-        return terrain.surface()[lx][lz];
+        return terrain.known(lx, lz) ? terrain.surfaceAt(lx, lz) : fallback;
     }
 
     /** True if {@code a} points further uphill than {@code b}; the thicker wall breaks a tie. */
@@ -475,19 +702,19 @@ public final class Layer3DWalls {
     private static Side side(Terrain terrain, BlockPos pos, int lx, int lz, int y, float sB, int gB, Direction d,
                              Block floor3D, int floorLayers, boolean water) {
         int ax = lx + d.getStepX(), az = lz + d.getStepZ();
-        if (ax < 0 || ax > 15 || az < 0 || az > 15) {
+        if (Terrain.outside(ax, az) && !terrain.known(ax, az)) {
             return new Side(d, SideVerdict.BORDER, Float.NaN, Float.NaN, 0, MIN_STEP, 0f, 0, null);
         }
-        float hA = terrain.height()[ax][az];
-        float sA = terrain.surface()[ax][az];
-        int gA = terrain.ground()[ax][az];
+        float hA = terrain.heightAt(ax, az);
+        float sA = terrain.surfaceAt(ax, az);
+        int gA = terrain.groundAt(ax, az);
         if (Float.isNaN(hA)) return new Side(d, SideVerdict.NO_CELL, hA, sA, gA, MIN_STEP, 0f, 0, null);
         if (sA <= sB) return new Side(d, SideVerdict.NOT_HIGHER, hA, sA, gA, MIN_STEP, 0f, 0, null);
         if (gA - gB < MIN_STEP) return new Side(d, SideVerdict.STEP_TOO_SMALL, hA, sA, gA, MIN_STEP, 0f, 0, null);
         // y < gA: A is a full block at this level, below its own floor layer.
         if (y >= gA) return new Side(d, SideVerdict.AT_EDGE_LAYER, hA, sA, gA, MIN_STEP, 0f, 0, null);
 
-        BlockState wall = terrain.chunk().getBlockState(pos.relative(d));
+        BlockState wall = terrain.blockAt(pos.relative(d));
         if (!isTerrainCandidate(wall)) return new Side(d, SideVerdict.NOT_TERRAIN, hA, sA, gA, MIN_STEP, 0f, 0, null);
         if (wall.getBlock() instanceof FallingBlock) return new Side(d, SideVerdict.FALLING, hA, sA, gA, MIN_STEP, 0f, 0, null);
 

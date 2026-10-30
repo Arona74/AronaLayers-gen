@@ -13,8 +13,9 @@ base {
 // Pull shared Java source and resources from the root src/ tree.
 // Version-specific overrides (mixins that differ across versions) go in this subproject's own src/.
 //
-// The shared config screen is built on 1.21's OptionsSubScreen, whose widget rows 1.20.1 lacks; it is
-// left out of the staged shared source and this subproject's own src/ supplies the 1.20.1 version.
+// The shared config screen relies on Screen drawing its own background and on 1.20.2's mouse-wheel
+// signature; it is left out of the staged shared source and this subproject's own src/ supplies the
+// 1.20.1 version.
 def sharedOverridden = [
     'io/arona74/aronalayersgen/client/config/AronaConfigScreen.java',
 ]

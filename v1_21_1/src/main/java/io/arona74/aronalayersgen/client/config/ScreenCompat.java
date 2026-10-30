@@ -4,14 +4,12 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.CycleButton;
-import net.minecraft.client.gui.components.OptionsList;
-import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Function;
 
 /**
@@ -21,8 +19,9 @@ import java.util.function.Function;
 public final class ScreenCompat {
     private ScreenCompat() {}
 
-    public static <T> CycleButton.Builder<T> cycle(Function<T, Component> format, T initial) {
-        return CycleButton.builder(format).withInitialValue(initial);
+    /** The values go in before the initial one, which is looked up among them when it is set. */
+    public static <T> CycleButton.Builder<T> cycle(Function<T, Component> format, List<T> values, T initial) {
+        return CycleButton.builder(format).withValues(values).withInitialValue(initial);
     }
 
     public static CycleButton.Builder<Boolean> onOff(boolean initial) {
@@ -45,10 +44,5 @@ public final class ScreenCompat {
     /** Runs on the client thread after the current tick, e.g. once the chat screen has closed. */
     public static void schedule(Runnable task) {
         Minecraft.getInstance().tell(task);
-    }
-
-    /** A section heading in the option list (OptionsList.addHeader arrives in 1.21.2). */
-    public static void addHeader(OptionsList list, Component text, Font font) {
-        list.addSmall(new StringWidget(310, 20, text, font), null);
     }
 }
