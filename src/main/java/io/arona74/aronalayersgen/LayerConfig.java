@@ -229,9 +229,9 @@ public class LayerConfig {
      */
     public static boolean POSTS_ON_LAYERS;
 
-    /** True when {@link #POSTS_ON_LAYERS} is on and this version's client has the stem models. */
+    /** True when {@link #POSTS_ON_LAYERS} is on and this version's client has the post models. */
     public static boolean postsOnLayers() {
-        return Compat.STEM_MODELS && POSTS_ON_LAYERS;
+        return Compat.POST_MODELS && POSTS_ON_LAYERS;
     }
 
     /** How a post on a layer reaches it. */

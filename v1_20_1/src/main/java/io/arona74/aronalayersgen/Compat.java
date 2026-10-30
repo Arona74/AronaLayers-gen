@@ -40,6 +40,13 @@ public final class Compat {
      */
     public static final boolean STEM_MODELS = true;
 
+    /**
+     * Whether this version's client draws fences, walls, panes and bars down to a layer
+     * (TrunkStemModel's post handling). Without it the post outline and collision stay vanilla too,
+     * or they would not match the model. Only 1.21.1 has it so far.
+     */
+    public static final boolean POST_MODELS = false;
+
     public static ResourceLocation id(String namespace, String path) {
         return new ResourceLocation(namespace, path);
     }
