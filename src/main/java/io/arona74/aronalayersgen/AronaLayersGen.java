@@ -84,16 +84,6 @@ public class AronaLayersGen implements ModInitializer {
         // block bootstrap, before the config can safely load (see GroundingFlags).
         GroundingFlags.ready = true;
 
-        // Distant Horizons: layers in LODs. The compat class names DH types, so it is only loaded
-        // when DH is installed; any API mismatch is logged rather than taking the game down.
-        if (net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("distanthorizons")) {
-            try {
-                io.arona74.aronalayersgen.compat.DistantHorizonsCompat.register();
-            } catch (Throwable t) {
-                LOGGER.warn("[DistantHorizons] support disabled: {}", t.toString());
-            }
-        }
-
         LOGGER.info("Arona Layers Generator initialized successfully");
         LOGGER.info("[Config] layer_injection={} cr_nbt_trees={} vanilla_fallback={} plant_injection={} tree_injection={}"
             + " (each dimension's layer source is detected when it first generates)",

@@ -44,7 +44,6 @@ import java.util.Map;
  *   /algdebug
  *   /algdebug wall3d  (TerraForged 3D layer / wall piece decision for the cell you look at, see Wall3DDebugCommand)
  *   /algdebug walls3d (the same, tallied for every cell of the chunk)
- *   /algdebug dh      (Distant Horizons exact-height timings, see DhDebugCommand)
  */
 public class ChunkDebugCommand {
 
@@ -57,12 +56,6 @@ public class ChunkDebugCommand {
                     .then(Commands.literal("wall3d").executes(Wall3DDebugCommand::lookedAt))
                     .then(Commands.literal("walls3d").executes(Wall3DDebugCommand::chunkScan))
                     .then(Commands.literal("plant").executes(PlantDebugCommand::lookedAt))
-                    .then(Commands.literal("dh").executes(DhDebugCommand::report)
-                        .then(Commands.literal("reset").executes(DhDebugCommand::reset))
-                        .then(Commands.literal("skip")
-                            .then(Commands.literal("none").executes(ctx -> DhDebugCommand.skip(ctx, false)))
-                            .then(Commands.literal("refine").executes(ctx -> DhDebugCommand.skip(ctx, true)))
-                            .then(Commands.literal("trim").executes(DhDebugCommand::skipTrim))))
             )
         );
     }

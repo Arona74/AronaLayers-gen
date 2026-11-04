@@ -175,20 +175,15 @@ These are the fastest way to work out why a particular column did or did not get
 
 ---
 
-### Distant Horizons
+### Distant Horizons and Voxy (LODs)
 
-With [Distant Horizons](https://modrinth.com/mod/distanthorizons) installed, layers show in its LODs.
+Layers in LOD renderers are handled by a separate mod, **LSL - Layer Supported LOD**: exact layer
+heights in Distant Horizons (formerly gen's `dh_*` options, now in `config/lsl.json`, copied from
+`layer_config.json` on LSL's first start) and layer-aware Voxy LODs. With gen installed, LSL reads
+gen's layer knowledge (mappings, 3D layers, wall pieces) through `io.arona74.aronalayersgen.api.LayersApi`.
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `dh_exact_layers` | `true` | Draw layers in LODs at their exact height (eighths of a block). Only switches on for DH versions it was checked against (3.3.2 to 3.3.4); needs a restart |
-| `dh_exact_layers_color_bits` | `true` | Keeps the eighths in the lowest colour bits of the LODs instead of DH's height fields, so exact heights work in dimensions up to DH's 4096-block limit (`false`: up to 512). Colours shift by at most 3/255. Only affects how LODs are drawn, not DH's saved data: needs a restart, no LOD reset |
-| `dh_layer_rounding` | `true` | Fallback when exact heights are off or unavailable: show layers rounded to whole blocks |
-| `dh_layer_rounding_threshold` | `4` | In the fallback, the layer count from which a layer shows as its full block (thinner layers show the ground under them) |
-
-Exact heights reach into DH's internals (its LOD data, mesh builder and terrain shader, and Iris's DH shader when a shader pack is on), which is why they are tied to specific DH versions; the rounding uses DH's public API only and works on any recent DH. Switching `dh_exact_layers` or `dh_layer_rounding` changes what DH saves, so existing LODs keep their old look until DH's LOD data is cleared (or in a new world); `dh_exact_layers_color_bits` does not. DH's own distant generation only gets layers with `injection_mode` set to `POST_FEATURES`: DH skips the carver step that `CARVERS` mode hooks into.
-
-The exact-height technique is adapted from [Geostep](https://modrinth.com/mod/geostep) (MIT), see `THIRD_PARTY_NOTICES.md`. The colour-bit encoding is inspired by the Tellus build of Distant Horizons, which takes colour bits to widen DH's height fields.
+One gen setting still matters for DH: DH's own distant generation only gets layers with
+`injection_mode` set to `POST_FEATURES`, because DH skips the carver step that `CARVERS` mode hooks into.
 
 ---
 

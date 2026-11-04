@@ -549,32 +549,6 @@ public class LayerConfig {
     public static boolean SWAMP_PUDDLES_AS_WATER;
 
     /**
-     * Distant Horizons: show layers in LODs rounded to whole blocks (DH stores whole blocks only).
-     * A layer with DH_LAYER_ROUNDING_THRESHOLD layers or more becomes its full block, a thinner
-     * one disappears (or becomes water when waterlogged). See compat.DistantHorizonsCompat.
-     */
-    public static boolean DH_LAYER_ROUNDING;
-    public static int DH_LAYER_ROUNDING_THRESHOLD;
-
-    /**
-     * Distant Horizons: exact layer heights in LODs (eighths of a block), through mixins into DH's
-     * internals; only for DH versions they were checked against (3.3.2-3.3.4). Other versions, or
-     * false here, fall back to the rounding above. Read at startup by mixin.dh.DhMixinPlugin
-     * straight from the file (mixins load before this class may be touched), so changes need a
-     * restart.
-     */
-    public static boolean DH_EXACT_LAYERS;
-
-    /**
-     * Distant Horizons exact heights: keep DH's render heights in whole blocks and carry the eighths
-     * in the two lowest bits of each colour channel (a colour shift of at most 3/255). Works in
-     * dimensions up to DH's own 4096-block limit, where the eighths-in-height-fields encoding stops
-     * at 512. Only affects DH's in-memory render data, never its saved LOD data. Read at startup by
-     * mixin.dh.DhMixinPlugin; changes need a restart.
-     */
-    public static boolean DH_EXACT_LAYERS_COLOR_BITS;
-
-    /**
      * Also lower the selection outline and collision box of grounded plants, so they can be
      * targeted where they are drawn. false = visual offset only.
      */
@@ -838,24 +812,6 @@ public class LayerConfig {
         add(integer("structure_skip_extra_cleanup_distance", 2, 0, 8,
                 () -> STRUCTURE_SKIP_EXTRA_CLEANUP_DISTANCE, v -> STRUCTURE_SKIP_EXTRA_CLEANUP_DISTANCE = v)
                 .in(ConfigTab.STRUCTURES, "elevated").requires(O_STRUCTURE_SKIP_EXTRA_CLEANUP).mods(TERRAFORGED).advanced());
-    }
-
-    // --- Distant Horizons ---
-    private static final ConfigOption<Boolean> O_DH_LAYER_ROUNDING = add(bool("dh_layer_rounding", true,
-            () -> DH_LAYER_ROUNDING, v -> DH_LAYER_ROUNDING = v)
-            .in(ConfigTab.VISUALS, "rounding").mods("distanthorizons").side(Side.CLIENT).apply(Apply.DH_LODS));
-    static {
-        add(integer("dh_layer_rounding_threshold", 4, 1, 8, () -> DH_LAYER_ROUNDING_THRESHOLD, v -> DH_LAYER_ROUNDING_THRESHOLD = v)
-                .in(ConfigTab.VISUALS, "rounding").requires(O_DH_LAYER_ROUNDING).mods("distanthorizons")
-                .side(Side.CLIENT).apply(Apply.DH_LODS));
-    }
-    private static final ConfigOption<Boolean> O_DH_EXACT_LAYERS = add(bool("dh_exact_layers", true,
-            () -> DH_EXACT_LAYERS, v -> DH_EXACT_LAYERS = v)
-            .in(ConfigTab.VISUALS, "exact").mods("distanthorizons").side(Side.CLIENT).apply(Apply.RESTART));
-    static {
-        add(bool("dh_exact_layers_color_bits", true, () -> DH_EXACT_LAYERS_COLOR_BITS, v -> DH_EXACT_LAYERS_COLOR_BITS = v)
-                .in(ConfigTab.VISUALS, "exact").requires(O_DH_EXACT_LAYERS).mods("distanthorizons")
-                .side(Side.CLIENT).apply(Apply.RESTART).advanced());
     }
 
     // --- Debug ---

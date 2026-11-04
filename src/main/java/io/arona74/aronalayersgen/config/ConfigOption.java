@@ -30,8 +30,7 @@ public final class ConfigOption<T> {
         LIVE,
         NEW_CHUNKS,
         RESTART,
-        RESOURCE_RELOAD,
-        DH_LODS;
+        RESOURCE_RELOAD;
 
         public String langKey() {
             return "config.aronalayersgen.apply." + name().toLowerCase(Locale.ROOT);
