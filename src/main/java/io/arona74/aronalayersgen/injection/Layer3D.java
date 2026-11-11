@@ -5,6 +5,7 @@ import io.arona74.aronalayersgen.LayerConfig;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
@@ -12,6 +13,7 @@ import net.minecraft.world.level.block.state.properties.Property;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -55,6 +57,14 @@ public final class Layer3D {
                     if (getBaseLayer.invoke(block) instanceof Block base) {
                         forward.put(base, block);
                         reverse.put(block, base);
+                        // VLP's snow 3D layer is built on its own snow_layer, but snow placed by
+                        // this mod (and by vanilla) is minecraft:snow, so it would never find it.
+                        // Link it to minecraft:snow both ways: the floor and wall pieces then merge,
+                        // and a trough's regular layer stays vanilla snow like every other one.
+                        if (isVlpSnowLayer(base)) {
+                            forward.put(Blocks.SNOW, block);
+                            reverse.put(block, Blocks.SNOW);
+                        }
                     }
                 }
             } catch (ClassNotFoundException e) {
@@ -73,6 +83,11 @@ public final class Layer3D {
         }
     }
 
+    private static boolean isVlpSnowLayer(Block base) {
+        String id = BuiltInRegistries.BLOCK.getKey(base).toString();
+        return id.equals("vanillalayerplus:snow_layer");
+    }
+
     /** True when 3D layer injection is enabled and VanillaLayer+ provides 3D layers. */
     public static boolean isActive() {
         if (!LayerConfig.THREE_D_LAYER_INJECTION) return false;
@@ -81,11 +96,29 @@ public final class Layer3D {
         return map != null && !map.isEmpty();
     }
 
-    /** The 3D variant of a normal layer block, or null if it has none. */
+    /**
+     * The 3D variant of a normal layer block, or null if it has none or its material is in
+     * {@code 3D_layer_excluded_blocks}.
+     */
     public static Block forLayer(Block layer) {
         ensureBuilt();
         Map<Block, Block> map = byBaseLayer;
-        return map == null ? null : map.get(layer);
+        Block block = map == null ? null : map.get(layer);
+        return block == null || excluded(layer) ? null : block;
+    }
+
+    /** Per layer block: whether its material is excluded. The config is read at first use. */
+    private static final Map<Block, Boolean> excludedCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Listed by the layer's id or by the full block it is mapped from (snow_block for snow). */
+    private static boolean excluded(Block layer) {
+        return excludedCache.computeIfAbsent(layer, l -> {
+            List<String> ids = LayerConfig.THREE_D_LAYER_EXCLUDED_BLOCKS;
+            if (ids == null || ids.isEmpty()) return false;
+            if (ids.contains(BuiltInRegistries.BLOCK.getKey(l).toString())) return true;
+            Block source = LayerPlacementHelper.getMappingRegistry().getSourceBlock(l);
+            return source != null && ids.contains(BuiltInRegistries.BLOCK.getKey(source).toString());
+        });
     }
 
     /** The normal layer a 3D layer is the variant of, or null if {@code block} is not a 3D layer. */

@@ -81,12 +81,12 @@ public final class Layer3DWalls {
     /** Why a cell does or does not get a piece, in the order the checks run. */
     public enum CellVerdict {
         PIECE("gets a piece"),
-        TROUGH("higher on two opposite sides, or on one with the next chunk opposite: a regular layer, the floor or the thickest wall, whichever is higher"),
+        TROUGH("higher on the chosen side and the one opposite it (or the next chunk opposite): a regular layer, the floor or the thickest wall, whichever is higher"),
         NO_CELL("no TerraForged cell height for this column"),
         BELOW_GROUND("below the column's ground"),
         OCCUPIED("the cell holds something other than air, water or the column's floor layer"),
         FLOOR_FULL("the floor layer is 8 layers: a full block"),
-        FLOOR_NO_3D("the floor layer has no 3D variant"),
+        FLOOR_NO_3D("the floor layer has no 3D variant, or its material is in 3D_layer_excluded_blocks"),
         STRUCTURE("inside a structure"),
         FLAT("no higher column beside it"),
         NO_WALL("a higher column is beside it, but no side qualifies");
@@ -109,7 +109,7 @@ public final class Layer3DWalls {
         AT_EDGE_LAYER("this level is beside its floor layer: a wall piece would stand above its surface"),
         NOT_TERRAIN("its block is not terrain (leaves, logs, a layer...)"),
         FALLING("falling material (sand, gravel...)"),
-        SOFT_MATERIAL("soft material: wall pieces are hard materials only, those with a 3D layer"),
+        SOFT_MATERIAL("no 3D layer for the material (soft, or in 3D_layer_excluded_blocks)"),
         TOO_THIN("the wall rounds to 0 layers here"),
         NO_PIECE("no wall layer or 3D variant for the material");
 
@@ -238,10 +238,11 @@ public final class Layer3DWalls {
 
         /**
          * Highest ground among the column's side neighbours (at least its own): those inside the
-         * chunk, and those in the margin when it is read.
+         * chunk, and those in the margin when it is read. Also takes a margin column (which must be
+         * known): of its neighbours, the next chunk's further row is never read, so it is left out.
          */
         public int topBeside(int lx, int lz) {
-            int top = ground[lx][lz];
+            int top = groundAt(lx, lz);
             for (Direction d : Direction.Plane.HORIZONTAL) {
                 int ax = lx + d.getStepX(), az = lz + d.getStepZ();
                 if (!outside(ax, az)) top = Math.max(top, ground[ax][az]);
@@ -419,8 +420,13 @@ public final class Layer3DWalls {
             if (!region.hasChunk(nx, nz)) continue;
             ChunkAccess n = region.getChunk(nx, nz);
             if (!Compat.featuresDone(n)) continue;
-            // Only this chunk is read beside it: the row touching it is all that is re-measured.
-            Terrain terrain = Terrain.read(n, scale, cells, (x, z) -> x == cx && z == cz ? chunk : null, true);
+            // Read with all its side neighbours the region holds, not this chunk alone: the row's two
+            // end cells also touch the chunk on its other side (diagonal to this one, still in the
+            // region). Read with this chunk only, that side counted as unknown and the refit
+            // rewrote a corner piece from half the picture: its wall turned toward the side along
+            // the row when the real one was across the border.
+            Terrain terrain = Terrain.read(n, scale, cells,
+                (x, z) -> x == cx && z == cz ? chunk : region.hasChunk(x, z) ? region.getChunk(x, z) : null, true);
             Direction back = d.getOpposite();
             for (int i = 0; i < 16; i++) {
                 int lx = back == Direction.EAST ? 15 : back == Direction.WEST ? 0 : i;
@@ -574,13 +580,14 @@ public final class Layer3DWalls {
 
         Side chosen = sides.get(best);
 
-        // A trough: higher columns on two opposite sides, at the column's ground level (a side in
+        // A trough: higher columns on the chosen side and the one opposite it, at the column's
+        // ground level (a side in
         // the next chunk counts as possibly higher, since it cannot be read). A 3D layer
         // leans against one of them only, so the cell gets a regular layer instead, as high as the
         // floor or the thickest wall, whichever is higher. The walls are measured as if the cell
         // had no floor: a later run (or /algdebug) that reads this layer as the floor then reaches
         // the same height instead of raising it again.
-        if (y == gB && oppositePair(sides)) {
+        if (y == gB && oppositePair(sides, chosen.dir())) {
             int layers = floorLayers;
             for (Side s : sides) {
                 if (s.verdict() == SideVerdict.CHOSEN || s.verdict() == SideVerdict.BEATEN) {
@@ -623,19 +630,21 @@ public final class Layer3DWalls {
     }
 
     /**
-     * True if two opposite sides (north and south, or east and west) may both hold a wall: both
-     * qualify, or one qualifies and the other lies in the next chunk, which a generating chunk
-     * cannot read. A 3D layer there would lean against one side of what may be a trough.
+     * True if the side opposite the chosen wall may hold a wall too: it qualifies, or one of the
+     * two qualifies and the other lies in the next chunk, which cannot be read. A 3D layer there
+     * would lean against one side of what may be a trough. Only the chosen wall's axis counts: a
+     * pair across the other axis is lost to the piece just as a single side wall is in a corner,
+     * and turning the cell into a regular layer for it dropped the wall the piece leans on
+     * (a 1-wide gully with a 1-block step either side and a tall wall at its end got a plain layer).
      */
-    private static boolean oppositePair(List<Side> sides) {
+    private static boolean oppositePair(List<Side> sides, Direction chosen) {
         int[] state = new int[6];   // 0 = no wall, 1 = in the next chunk, 2 = qualifies
         for (Side s : sides) {
             int i = s.dir().get3DDataValue();
             if (s.verdict() == SideVerdict.CHOSEN || s.verdict() == SideVerdict.BEATEN) state[i] = 2;
             else if (s.verdict() == SideVerdict.BORDER) state[i] = 1;
         }
-        return pairs(state[Direction.NORTH.get3DDataValue()], state[Direction.SOUTH.get3DDataValue()])
-            || pairs(state[Direction.EAST.get3DDataValue()], state[Direction.WEST.get3DDataValue()]);
+        return pairs(state[chosen.get3DDataValue()], state[chosen.getOpposite().get3DDataValue()]);
     }
 
     private static boolean pairs(int a, int b) {
@@ -661,14 +670,17 @@ public final class Layer3DWalls {
 
     /**
      * True if a wall on side {@code wallSide} would leave the piece's open part facing open ground:
-     * the neighbour opposite the wall is inside the chunk, not above level {@code y}, and gets no
+     * the neighbour opposite the wall is known (inside the chunk, or read in the margin), not above level {@code y}, and gets no
      * piece of its own there (none of its side neighbours rises above {@code y}). A neighbour that
      * is itself a wall piece at this level is not open, even when its ground is level with ours.
      */
     public static boolean opensOnto(Terrain terrain, int lx, int lz, int y, Direction wallSide) {
         int nx = lx - wallSide.getStepX(), nz = lz - wallSide.getStepZ();
-        if (nx < 0 || nx > 15 || nz < 0 || nz > 15 || Float.isNaN(terrain.height()[nx][nz])) return false;
-        return terrain.ground()[nx][nz] <= y && terrain.topBeside(nx, nz) <= y;
+        // A neighbour across the border counts when the margin has read it; refusing it made a
+        // border cell's wall turn away from the next chunk whenever another side faced open ground
+        // inside the chunk, even a lower wall further downhill.
+        if (!terrain.known(nx, nz)) return false;
+        return terrain.groundAt(nx, nz) <= y && terrain.topBeside(nx, nz) <= y;
     }
 
     /**

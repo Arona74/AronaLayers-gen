@@ -534,6 +534,14 @@ public class LayerConfig {
     public static boolean THREE_D_LAYER_CROSS_CHUNK;
 
     /**
+     * Materials that never get a 3D layer, though VanillaLayer+ has one: the full block or its layer
+     * ({@code minecraft:snow_block} or {@code minecraft:snow}). Their floor layers stay normal layers
+     * and their walls get no pieces, as if they had no 3D variant. Snow by default: its 3D layer
+     * reads poorly on slopes. Read when the 3D layers are first looked up; changes need a restart.
+     */
+    public static List<String> THREE_D_LAYER_EXCLUDED_BLOCKS;
+
+    /**
      * Lower the layer count in swamp biomes (any biome whose id contains "swamp": vanilla swamp and
      * mangrove swamp, and modded ones) by REDUCE_SWAMP_LAYERS_VALUE. Swamp ground sits around the
      * water line with puddles cut into it, and full-height layers there stand proud of the water.
@@ -600,6 +608,10 @@ public class LayerConfig {
     static {
         add(bool("3D_layer_cross_chunk", false, () -> THREE_D_LAYER_CROSS_CHUNK, v -> THREE_D_LAYER_CROSS_CHUNK = v)
                 .in(ConfigTab.WORLDGEN, "backends").requires(O_3D_LAYER_INJECTION).mods("vanillalayerplus"));
+        add(blockList("3D_layer_excluded_blocks", List.of("minecraft:snow_block"),
+                () -> THREE_D_LAYER_EXCLUDED_BLOCKS, v -> THREE_D_LAYER_EXCLUDED_BLOCKS = v)
+                .in(ConfigTab.WORLDGEN, "backends").requires(O_3D_LAYER_INJECTION).mods("vanillalayerplus")
+                .apply(Apply.RESTART));
 
         add(bool("tellus_reduce_layer_count", true, () -> TELLUS_REDUCE_LAYER_COUNT, v -> TELLUS_REDUCE_LAYER_COUNT = v)
                 .in(ConfigTab.WORLDGEN, "tuning").mods("tellus"));
