@@ -17,8 +17,8 @@ import net.minecraft.world.level.block.RotatedPillarBlock;
  * the "is there a layer below" test happen at draw time in PlantGrounding.offset.
  *
  * <p>Chorus plants get ChorusStemModel instead, which reaches the stem of one standing on a layer
- * down to the ground, and pillar blocks (logs among them) and mushroom stems TrunkStemModel, which
- * draws an upright log or a stem standing on a layer down to the layer.
+ * down to the ground, and pillar blocks (logs among them), mushroom stems and posts (fences, walls,
+ * panes, bars) TrunkStemModel, which draws one standing on a layer down to the layer.
  *
  * <p>This version's model-loading API hands over the model id rather than the block state. A
  * block-state model id is the block id plus a variant string, so the block is looked up from it;
@@ -32,7 +32,8 @@ public class GroundedPlantModelPlugin implements ModelLoadingPlugin {
             if (original == null) return null;
             if (context.id() instanceof ModelResourceLocation id && !"inventory".equals(id.getVariant())) {
                 Block block = Compat.blockFromId(id.getNamespace() + ":" + id.getPath());
-                if (LayerConfig.treesOnLayers() && (block instanceof RotatedPillarBlock || block == Blocks.MUSHROOM_STEM)) {
+                boolean trunk = LayerConfig.treesOnLayers() && (block instanceof RotatedPillarBlock || block == Blocks.MUSHROOM_STEM);
+                if (trunk || LayerConfig.postsOnLayers() && PlantGrounding.isPostBlock(block)) {
                     ForgeRenderTypeBridge.carryOver(original, block.defaultBlockState());
                     return new TrunkStemModel(original);
                 }

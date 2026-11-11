@@ -20,11 +20,8 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.BlockAndTintGetter;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
@@ -62,19 +59,12 @@ public class TrunkStemModel implements BakedModel {
             emitLowered(blockView, state, pos, randomSupplier, context);
             return;
         }
-        wrapped.emitBlockQuads(blockView, state, pos, randomSupplier, context);
+        // Drawn with its level bridges, sides towards a standing post one level up that reaches
+        // down beside this one: the post as it would look were that one on its level (a wall's
+        // side tall under a wall, its post gone where the wall now runs straight).
+        BlockState shown = PlantGrounding.bridged(state, blockView, pos, false);
+        wrapped.emitBlockQuads(blockView, shown, pos, randomSupplier, context);
         QuadEmitter emitter = context.getEmitter();
-
-        // Sides towards a standing post one level up, which reaches down beside this one
-        // (PlantGrounding.levelBridges).
-        int bridges = PlantGrounding.levelBridges(state, blockView, pos);
-        List<BakedQuad> arms = bridges == 0
-            ? List.of()
-            : added(state, PlantGrounding.joined(state, bridges), randomSupplier.get());
-        for (BakedQuad quad : arms) {
-            emitter.fromVanilla(quad, material(), null);
-            emitter.emit();
-        }
 
         if (!PlantGrounding.reachesDown(state, blockView, pos)) return;
         float top = PlantGrounding.layerTop(blockView, pos.below());
@@ -86,7 +76,7 @@ public class TrunkStemModel implements BakedModel {
             // post's level sides and its step sides too (towards a post one level down,
             // PlantGrounding.stepBridges), which then meet that post at its own height.
             int step = PlantGrounding.stepBridges(state, blockView, pos);
-            BlockState copy = PlantGrounding.stacked(PlantGrounding.joined(state, bridges | step), step);
+            BlockState copy = PlantGrounding.stacked(PlantGrounding.joined(shown, step), step);
             for (BakedQuad quad : allQuads(copy, randomSupplier.get())) {
                 emitClipped(emitter, () -> emitter.fromVanilla(quad, material(), null), -1f, top - 1f, 0f);
             }
@@ -117,10 +107,9 @@ public class TrunkStemModel implements BakedModel {
         float drop = GroundedPlantRender.postDrop(state, blockView, pos);
         // Sides joining a post across a step, drawn as part of the post itself: towards a post
         // lowered into this level, and (for a lowered post) towards one beside its layer.
-        int sides = PlantGrounding.levelBridges(state, blockView, pos) | PlantGrounding.stepBridges(state, blockView, pos);
-        BlockState drawn = PlantGrounding.joined(state, sides);
+        BlockState drawn = PlantGrounding.bridged(state, blockView, pos, true);
         int open = PlantGrounding.openSides(drawn, blockView, pos, drop);
-        if (drop == 0f && open == 0 && sides == 0) {
+        if (drop == 0f && open == 0 && drawn == state) {
             wrapped.emitBlockQuads(blockView, state, pos, randomSupplier, context);
             return;
         }
@@ -190,19 +179,6 @@ public class TrunkStemModel implements BakedModel {
         }
         emitter.cullFace(null);
         emitter.emit();
-    }
-
-    /** The quads {@code joined} has and {@code state} does not: the parts of the sides it adds. */
-    private List<BakedQuad> added(BlockState state, BlockState joined, RandomSource random) {
-        Set<BakedQuad> own = Collections.newSetFromMap(new IdentityHashMap<>());
-        List<BakedQuad> extra = new ArrayList<>();
-        for (Direction face : FACES) own.addAll(wrapped.getQuads(state, face, random));
-        for (Direction face : FACES) {
-            for (BakedQuad quad : wrapped.getQuads(joined, face, random)) {
-                if (!own.contains(quad)) extra.add(quad);
-            }
-        }
-        return extra;
     }
 
     private static final Direction[] FACES = {null, Direction.NORTH, Direction.SOUTH, Direction.WEST,

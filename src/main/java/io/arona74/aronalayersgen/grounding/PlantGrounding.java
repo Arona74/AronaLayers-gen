@@ -478,6 +478,56 @@ public final class PlantGrounding {
     }
 
     /**
+     * As {@link #joined(BlockState, int)}, with a wall's new sides made the way vanilla makes them
+     * at {@code pos}: tall under a block covering that side (a wall on it), and the post dropped when
+     * the wall now runs straight. A level bridge thus draws the wall as it would look if its
+     * neighbour stood on the same level, not as an arm put beside an unchanged post. Step bridges
+     * keep {@link #joined(BlockState, int)}: they meet a low side, whatever stands on the post.
+     */
+    public static BlockState joined(BlockState post, int mask, BlockGetter level, BlockPos pos) {
+        if (mask == 0 || !(post.getBlock() instanceof WallBlock)) return joined(post, mask);
+        BlockGetter view = nonBlocking(level, pos);
+        if (view == null) return joined(post, mask);
+        BlockState above = view.getBlockState(pos.above());
+        VoxelShape cover = above.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).getFaceShape(Direction.DOWN);
+        for (Direction dir : Direction.Plane.HORIZONTAL) {
+            if ((mask & (1 << dir.get2DDataValue())) == 0) continue;
+            post = post.setValue(wallSide(dir), covers(cover, wallTest(dir)) ? WallSide.TALL : WallSide.LOW);
+        }
+        return post.setValue(BlockStateProperties.UP, raisesPost(post, above, cover));
+    }
+
+    /** Vanilla's test for a tall wall side: the part of the side next to the post (WallBlock). */
+    private static VoxelShape wallTest(Direction dir) {
+        return switch (dir) {
+            case NORTH -> Shapes.box(7 / 16.0, 0.0, 0.0, 9 / 16.0, 1.0, 9 / 16.0);
+            case SOUTH -> Shapes.box(7 / 16.0, 0.0, 7 / 16.0, 9 / 16.0, 1.0, 1.0);
+            case WEST -> Shapes.box(0.0, 0.0, 7 / 16.0, 9 / 16.0, 1.0, 9 / 16.0);
+            default -> Shapes.box(7 / 16.0, 0.0, 7 / 16.0, 1.0, 1.0, 9 / 16.0);
+        };
+    }
+
+    private static final VoxelShape WALL_POST_TEST = Shapes.box(7 / 16.0, 0.0, 7 / 16.0, 9 / 16.0, 1.0, 9 / 16.0);
+
+    /** Whether {@code cover} (the face of the block above) covers {@code test}, as WallBlock.isCovered. */
+    private static boolean covers(VoxelShape cover, VoxelShape test) {
+        return !Shapes.joinIsNotEmpty(test, cover, BooleanOp.ONLY_FIRST);
+    }
+
+    /** Whether a wall shows its post, as WallBlock.shouldRaisePost decides it. */
+    private static boolean raisesPost(BlockState wall, BlockState above, VoxelShape cover) {
+        if (above.getBlock() instanceof WallBlock && above.getValue(BlockStateProperties.UP)) return true;
+        WallSide n = wall.getValue(BlockStateProperties.NORTH_WALL);
+        WallSide s = wall.getValue(BlockStateProperties.SOUTH_WALL);
+        WallSide e = wall.getValue(BlockStateProperties.EAST_WALL);
+        WallSide w = wall.getValue(BlockStateProperties.WEST_WALL);
+        boolean nNone = n == WallSide.NONE, sNone = s == WallSide.NONE, eNone = e == WallSide.NONE, wNone = w == WallSide.NONE;
+        if (nNone && sNone && eNone && wNone || nNone != sNone || eNone != wNone) return true;
+        if (n == WallSide.TALL && s == WallSide.TALL || e == WallSide.TALL && w == WallSide.TALL) return false;
+        return above.is(BlockTags.WALL_POST_OVERRIDE) || covers(cover, WALL_POST_TEST);
+    }
+
+    /**
      * The post as it looks with another post stacked on it: a wall's low sides become tall, as
      * vanilla makes them under a wall, so a copy of the post continues into the next one without a
      * notch. Sides in {@code keepLow} stay low (a step side, which meets a low side).
@@ -619,17 +669,24 @@ public final class PlantGrounding {
         return mask;
     }
 
-    /** A post's collision moved down with it (lowered), or with its level bridges added (extended). */
+    /**
+     * A post as drawn: with its level bridges ({@link #joined(BlockState, int, BlockGetter, BlockPos)})
+     * and, when {@code step}, its step bridges too.
+     */
+    public static BlockState bridged(BlockState post, BlockGetter level, BlockPos pos, boolean step) {
+        BlockState drawn = joined(post, levelBridges(post, level, pos), level, pos);
+        return step ? joined(drawn, stepBridges(post, level, pos)) : drawn;
+    }
+
+    /**
+     * A post's collision moved down with it (lowered), or with its level bridges (extended): the
+     * shape of the post as drawn, which may have lost its post where a bridge makes a wall straight.
+     */
     public static VoxelShape bridgedCollision(BlockState post, BlockGetter level, BlockPos pos, VoxelShape shape) {
         float drop = postDrop(post, level, pos);
-        if (drop != 0f) {
-            int sides = levelBridges(post, level, pos) | stepBridges(post, level, pos);
-            if (sides != 0) shape = Shapes.or(shape, joined(post, sides).getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
-            return lowered(post, level, pos, shape, drop);
-        }
-        int mask = levelBridges(post, level, pos);
-        if (mask == 0) return shape;
-        return Shapes.or(shape, joined(post, mask).getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
+        BlockState drawn = bridged(post, level, pos, drop != 0f);
+        if (drawn != post) shape = drawn.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+        return drop != 0f ? lowered(post, level, pos, shape, drop) : shape;
     }
 
     /** A standing trunk or post: drawn, outlined and footed down to the layer under it. */
@@ -676,13 +733,9 @@ public final class PlantGrounding {
     public static VoxelShape standingOutline(BlockState state, BlockGetter level, BlockPos pos, VoxelShape shape) {
         if (shape.isEmpty()) return shape;
         float drop = postDrop(state, level, pos);
-        if (drop != 0f) {
-            int sides = levelBridges(state, level, pos) | stepBridges(state, level, pos);
-            if (sides != 0) shape = Shapes.or(shape, joined(state, sides).getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
-            return lowered(state, level, pos, shape, drop);
-        }
-        int bridges = levelBridges(state, level, pos);
-        if (bridges != 0) shape = Shapes.or(shape, joined(state, bridges).getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
+        BlockState drawn = isPostBlock(state.getBlock()) ? bridged(state, level, pos, drop != 0f) : state;
+        if (drawn != state) shape = drawn.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+        if (drop != 0f) return lowered(state, level, pos, shape, drop);
         boolean trunk = isStandingTrunk(state, level, pos);
         if (!trunk && !isStandingPost(state, level, pos)) return shape;
         float top = layerTop(level, pos.below());
@@ -690,7 +743,7 @@ public final class PlantGrounding {
         VoxelShape reach = Shapes.box(0.0, top - 1.0, 0.0, 1.0, 0.0, 1.0);
         if (!trunk) {
             int step = stepBridges(state, level, pos);
-            VoxelShape base = step == 0 ? shape : joined(state, step).getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+            VoxelShape base = step == 0 ? shape : joined(drawn, step).getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
             reach = Shapes.join(footprint(base).move(0.0, -1.0, 0.0), reach, BooleanOp.AND);
         }
         return Shapes.or(shape, reach);
