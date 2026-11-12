@@ -10,7 +10,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * What gen knows about layer blocks, for other mods (LSL, Layer Supported LOD, reads it to draw
  * layers in Distant Horizons and Voxy LODs).
  *
- * <p>Gen's own detection covers the configured block mappings, gen's layer blocks, VanillaLayer+
+ * <p>Gen's own detection covers the configured block mappings, gen's layer blocks, AronaLayers
  * 3D layers and Conquest Reforged layers, which a mod looking only at shapes cannot fully tell
  * apart. Callers reach this class by reflection, so gen and its callers never need each other's jar
  * to build: keep the class name and these static signatures stable, and bump {@link #VERSION} when a

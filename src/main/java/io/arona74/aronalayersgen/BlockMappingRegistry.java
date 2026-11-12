@@ -11,7 +11,7 @@ import java.util.Map;
 /**
  * Registry for mapping vanilla blocks to their layer block equivalents.
  * Supports both Conquest Reforged (cr_block_mappings.json) and
- * VanillaLayerPlus (vp_block_mappings.json) backends.
+ * AronaLayers (al_block_mappings.json) backends.
  */
 public class BlockMappingRegistry {
     private final Map<Block, String> blockToLayerMapping;
@@ -101,7 +101,7 @@ public class BlockMappingRegistry {
 
     /**
      * The block a layer block stands in for: the surface block mapped to it ({@code mud} for
-     * {@code vanillalayerplus:mud_layer}). Null if no mapping produces this layer block. Used where
+     * {@code aronalayers:mud_layer}). Null if no mapping produces this layer block. Used where
      * a layer has to be shown as a whole block, e.g. Distant Horizons LODs.
      */
     public Block getSourceBlock(Block layerBlock) {

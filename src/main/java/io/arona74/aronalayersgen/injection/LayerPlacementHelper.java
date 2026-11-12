@@ -56,7 +56,7 @@ import net.minecraft.world.level.levelgen.structure.Structure;
  * Supports two layer backends:
  * - Conquest Reforged (conquest mod): cr_block_mappings.json, full feature set
  *   (rocks, foliage, plant conversion, custom "layer" property 1-4)
- * - VanillaLayerPlus (vanillalayerplus mod): vp_block_mappings.json, basic layers only
+ * - AronaLayers: Blocks (aronalayers mod): al_block_mappings.json, basic layers only
  *   (uses standard vanilla LAYERS property 1-8)
  *
  * If neither mod is present, no block mappings are available and injection is a no-op.
@@ -67,7 +67,7 @@ public class LayerPlacementHelper {
 
     public enum ModBackend {
         CONQUEST_REFORGED,
-        VANILLA_LAYER_PLUS,
+        ARONA_LAYERS,
         NONE
     }
 
@@ -76,19 +76,19 @@ public class LayerPlacementHelper {
     public static ModBackend getBackend() {
         if (detectedBackend == null) {
             FabricLoader loader = FabricLoader.getInstance();
-            if (LayerConfig.THREE_D_LAYER_INJECTION && loader.isModLoaded("vanillalayerplus")) {
-                // 3D layers are VanillaLayer+ blocks: its mappings win even with Conquest installed.
-                detectedBackend = ModBackend.VANILLA_LAYER_PLUS;
-                AronaLayersGen.LOGGER.info("[AronaLayersGen] Detected backend: VanillaLayerPlus (3D_layer_injection)");
+            if (LayerConfig.THREE_D_LAYER_INJECTION && loader.isModLoaded("aronalayers")) {
+                // 3D layers are AronaLayers blocks: its mappings win even with Conquest installed.
+                detectedBackend = ModBackend.ARONA_LAYERS;
+                AronaLayersGen.LOGGER.info("[AronaLayersGen] Detected backend: AronaLayers (3D_layer_injection)");
             } else if (loader.isModLoaded("conquest")) {
                 detectedBackend = ModBackend.CONQUEST_REFORGED;
                 AronaLayersGen.LOGGER.info("[AronaLayersGen] Detected backend: Conquest Reforged");
-            } else if (loader.isModLoaded("vanillalayerplus")) {
-                detectedBackend = ModBackend.VANILLA_LAYER_PLUS;
-                AronaLayersGen.LOGGER.info("[AronaLayersGen] Detected backend: VanillaLayerPlus");
+            } else if (loader.isModLoaded("aronalayers")) {
+                detectedBackend = ModBackend.ARONA_LAYERS;
+                AronaLayersGen.LOGGER.info("[AronaLayersGen] Detected backend: AronaLayers");
             } else {
                 detectedBackend = ModBackend.NONE;
-                AronaLayersGen.LOGGER.warn("[AronaLayersGen] No supported layer mod detected (conquest or vanillalayerplus). Layer injection will be inactive.");
+                AronaLayersGen.LOGGER.warn("[AronaLayersGen] No supported layer mod detected (conquest or aronalayers). Layer injection will be inactive.");
             }
         }
         return detectedBackend;
@@ -106,7 +106,7 @@ public class LayerPlacementHelper {
         if (mappingRegistry == null) {
             String configFile = switch (getBackend()) {
                 case CONQUEST_REFORGED -> "cr_block_mappings.json";
-                case VANILLA_LAYER_PLUS -> "vp_block_mappings.json";
+                case ARONA_LAYERS -> "al_block_mappings.json";
                 case NONE -> "cr_block_mappings.json"; // fallback, will return empty
             };
             mappingRegistry = new BlockMappingRegistry(configFile);
@@ -372,7 +372,7 @@ public class LayerPlacementHelper {
      * Handles both vanilla LAYERS and CR's custom "layer".
      */
     public static int readLayerCount(BlockState state) {
-        // A VanillaLayer+ 3D layer: its floor part (vertical_layers, 0 for a wall alone).
+        // An AronaLayers 3D layer: its floor part (vertical_layers, 0 for a wall alone).
         if (Layer3D.is(state.getBlock())) return Layer3D.verticalLayers(state);
         if (state.hasProperty(BlockStateProperties.LAYERS)) {
             return state.getValue(BlockStateProperties.LAYERS);
@@ -396,8 +396,8 @@ public class LayerPlacementHelper {
     private static final ConcurrentHashMap<Block, java.util.Optional<Property<?>>> facingPropertyCache = new ConcurrentHashMap<>();
 
     /**
-     * A layer standing against a wall rather than lying on the ground: a VanillaLayer+ 3D layer
-     * (see Layer3DWalls), or a layer property and a horizontal {@code facing} (VanillaLayer+ layers
+     * A layer standing against a wall rather than lying on the ground: an AronaLayers 3D layer
+     * (see Layer3DWalls), or a layer property and a horizontal {@code facing} (AronaLayers layers
      * placed sideways by hand, Conquest Reforged vertical slabs). Its count is a thickness, not a
      * height, and the block under it is usually air,
      * so every pass that reads a column's top layer as a floor must leave it alone: remapping it
@@ -456,7 +456,7 @@ public class LayerPlacementHelper {
      * Full-block to place when a native layer block maxes out at 8 layers, mirroring
      * powder_snow_layer -> powder_snow. Placing the full block directly avoids the cascading
      * onBlockAdded conversion (which can hang during chunk init). Returns the input unchanged for
-     * sub-8 counts and for backend (CR / VLP) layer blocks, which keep their own layers=8 model.
+     * sub-8 counts and for backend (CR / AronaLayers) layer blocks, which keep their own layers=8 model.
      */
     private static Block resolveMaxedLayerBlock(Block layerBlock, int layerCount) {
         if (layerCount < 8) return layerBlock;
@@ -2025,7 +2025,7 @@ public class LayerPlacementHelper {
                     // CR: converts plant to Conquest equivalent placed above the layer
                     boolean canReplacePlant = isConquestReforged() && isReplaceablePlant;
                     // VP: shifts plant one block up so it sits on the layer (visual offset handled by VP)
-                    boolean canShiftPlant = getBackend() == ModBackend.VANILLA_LAYER_PLUS && isReplaceablePlant;
+                    boolean canShiftPlant = getBackend() == ModBackend.ARONA_LAYERS && isReplaceablePlant;
 
                     if (isSnowBlockReplacement) {
                         // Snow_block will be overwritten by the snow layer below

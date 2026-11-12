@@ -208,7 +208,7 @@ public final class Wall3DDebugCommand {
             return null;
         }
         if (!Layer3D.isActive()) {
-            send(source, tag + " Note: 3D_layer_injection is off or VanillaLayer+ has no 3D layers; showing what it would do.");
+            send(source, tag + " Note: 3D_layer_injection is off or AronaLayers has no 3D layers; showing what it would do.");
         }
         return randomState;
     }

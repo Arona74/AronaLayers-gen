@@ -517,11 +517,11 @@ public class LayerConfig {
     public static boolean GROUND_DECORATIONS;
 
     /**
-     * VanillaLayer+ 3D layers on TerraForged terrain, measured from the surfaces on either side of
-     * each step (see Layer3DWalls): a floor layer beside a higher terrain block becomes a 3D layer
-     * (VLP 5.0.0+), the floor merged with a wall toward the step, and the open cells up the step
+     * AronaLayers 3D layers on TerraForged terrain, measured from the surfaces on either side of
+     * each step (see Layer3DWalls): a floor layer beside a higher terrain block becomes a 3D layer:
+     * the floor merged with a wall toward the step, and the open cells up the step
      * get a 3D layer with no floor part (vertical_layers 0), so only hard materials (those with a 3D
-     * layer) get one. Uses vp_block_mappings.json, even when Conquest
+     * layer) get one. Uses al_block_mappings.json, even when Conquest
      * Reforged is also installed. Read once, at the first world load; changes need a restart.
      */
     public static boolean THREE_D_LAYER_INJECTION;
@@ -534,7 +534,7 @@ public class LayerConfig {
     public static boolean THREE_D_LAYER_CROSS_CHUNK;
 
     /**
-     * Materials that never get a 3D layer, though VanillaLayer+ has one: the full block or its layer
+     * Materials that never get a 3D layer, though AronaLayers has one: the full block or its layer
      * ({@code minecraft:snow_block} or {@code minecraft:snow}). Their floor layers stay normal layers
      * and their walls get no pieces, as if they had no 3D variant. Snow by default: its 3D layer
      * reads poorly on slopes. Read when the 3D layers are first looked up; changes need a restart.
@@ -604,13 +604,13 @@ public class LayerConfig {
             () -> INJECTION_MODE, v -> INJECTION_MODE = v).in(ConfigTab.WORLDGEN, "backends"));
     private static final ConfigOption<Boolean> O_3D_LAYER_INJECTION = add(bool("3D_layer_injection", false,
             () -> THREE_D_LAYER_INJECTION, v -> THREE_D_LAYER_INJECTION = v)
-            .in(ConfigTab.WORLDGEN, "backends").mods("vanillalayerplus").apply(Apply.RESTART));
+            .in(ConfigTab.WORLDGEN, "backends").mods("aronalayers").apply(Apply.RESTART));
     static {
         add(bool("3D_layer_cross_chunk", false, () -> THREE_D_LAYER_CROSS_CHUNK, v -> THREE_D_LAYER_CROSS_CHUNK = v)
-                .in(ConfigTab.WORLDGEN, "backends").requires(O_3D_LAYER_INJECTION).mods("vanillalayerplus"));
+                .in(ConfigTab.WORLDGEN, "backends").requires(O_3D_LAYER_INJECTION).mods("aronalayers"));
         add(blockList("3D_layer_excluded_blocks", List.of("minecraft:snow_block"),
                 () -> THREE_D_LAYER_EXCLUDED_BLOCKS, v -> THREE_D_LAYER_EXCLUDED_BLOCKS = v)
-                .in(ConfigTab.WORLDGEN, "backends").requires(O_3D_LAYER_INJECTION).mods("vanillalayerplus")
+                .in(ConfigTab.WORLDGEN, "backends").requires(O_3D_LAYER_INJECTION).mods("aronalayers")
                 .apply(Apply.RESTART));
 
         add(bool("tellus_reduce_layer_count", true, () -> TELLUS_REDUCE_LAYER_COUNT, v -> TELLUS_REDUCE_LAYER_COUNT = v)

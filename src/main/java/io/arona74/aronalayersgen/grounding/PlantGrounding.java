@@ -324,7 +324,7 @@ public final class PlantGrounding {
      * Distance from the top of the soil block's space down to its actual surface, negated.
      *
      * <p>Collision shape first: it is the surface entities stand on, and some modded layer blocks
-     * (VanillaLayer+) leave the outline at a full cube while giving the collision the real height.
+     * (AronaLayers) leave the outline at a full cube while giving the collision the real height.
      * Outline as the fallback, because vanilla snow at layers=1 has no collision at all.
      */
     private static float surfaceDrop(BlockState soil, BlockGetter level, BlockPos pos) {
@@ -708,7 +708,7 @@ public final class PlantGrounding {
 
     /**
      * Height of the layer block at {@code layerPos} as a fraction of its cell, from its collision
-     * shape (VanillaLayer+ leaves the outline a full cube), or 1 when it cannot be read.
+     * shape (AronaLayers leaves the outline a full cube), or 1 when it cannot be read.
      */
     public static float layerTop(BlockGetter level, BlockPos layerPos) {
         BlockGetter view = nonBlocking(level, layerPos);

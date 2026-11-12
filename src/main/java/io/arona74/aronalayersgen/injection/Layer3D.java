@@ -17,17 +17,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * VanillaLayer+ 3D layers ({@code <name>_3d_layer}, VLP 5.0.0+): a floor layer and a wall layer of
+ * AronaLayers 3D layers ({@code <name>_3d_layer}): a floor layer and a wall layer of
  * the same material merged into one block. {@code vertical_layers} (0-8) is the floor's height
  * across the whole block, 0 for a wall alone; {@code horizontal_layers} the wall's thickness
  * against the side named by {@code horizontal_facing} (the side it is attached to); at 4/4 it is a
- * stair. Either value at 8 would be a full cube, so VLP turns such a state into the full base layer.
+ * stair. Either value at 8 would be a full cube, so AronaLayers turns such a state into the full base layer.
  *
  * <p>Every wall piece this mod places is one: a wall alone up the face of a step, and at its foot
- * the floor layer merged with the wall. A floor alone stays the normal layer. VLP gives 3D layers
+ * the floor layer merged with the wall. A floor alone stays the normal layer. AronaLayers gives 3D layers
  * to hard materials only (stone-like and ores).
  *
- * <p>Found by reflection, so VLP stays an optional dependency: every block of VLP's
+ * <p>Found by reflection, so AronaLayers stays an optional dependency: every block of AronaLayers'
  * {@code Layer3DBlock} class is linked to the normal layer it returns from {@code getBaseLayer()}.
  * The 3D blocks are named after the material ({@code grass_3d_layer} for {@code grass_layer}), not
  * after the layer id, so the name alone cannot be used.
@@ -35,7 +35,7 @@ import java.util.Map;
 public final class Layer3D {
     private Layer3D() {}
 
-    private static final String LAYER_3D_CLASS = "net.fellter.vanillalayerplus.block.Layer3DBlock";
+    private static final String LAYER_3D_CLASS = "io.arona74.aronalayers.block.Layer3DBlock";
 
     /** Normal layer -> its 3D variant, and the reverse. Null until built. */
     private static volatile Map<Block, Block> byBaseLayer;
@@ -57,11 +57,11 @@ public final class Layer3D {
                     if (getBaseLayer.invoke(block) instanceof Block base) {
                         forward.put(base, block);
                         reverse.put(block, base);
-                        // VLP's snow 3D layer is built on its own snow_layer, but snow placed by
+                        // AronaLayers' snow 3D layer is built on its own snow_layer, but snow placed by
                         // this mod (and by vanilla) is minecraft:snow, so it would never find it.
                         // Link it to minecraft:snow both ways: the floor and wall pieces then merge,
                         // and a trough's regular layer stays vanilla snow like every other one.
-                        if (isVlpSnowLayer(base)) {
+                        if (isAronaSnowLayer(base)) {
                             forward.put(Blocks.SNOW, block);
                             reverse.put(block, Blocks.SNOW);
                         }
@@ -70,25 +70,25 @@ public final class Layer3D {
             } catch (ClassNotFoundException e) {
                 classPresent = false;
             } catch (ReflectiveOperationException e) {
-                AronaLayersGen.LOGGER.warn("[Layer3D] Could not read VanillaLayer+ 3D layers: {}", e.toString());
+                AronaLayersGen.LOGGER.warn("[Layer3D] Could not read AronaLayers 3D layers: {}", e.toString());
                 classPresent = false;
             }
-            // VLP present but nothing registered yet: too early, try again on the next call.
+            // AronaLayers present but nothing registered yet: too early, try again on the next call.
             if (classPresent && forward.isEmpty()) return;
             baseLayerOf = reverse;
             byBaseLayer = forward;
             if (classPresent) {
-                AronaLayersGen.LOGGER.info("[Layer3D] Found {} VanillaLayer+ 3D layers", forward.size());
+                AronaLayersGen.LOGGER.info("[Layer3D] Found {} AronaLayers 3D layers", forward.size());
             }
         }
     }
 
-    private static boolean isVlpSnowLayer(Block base) {
+    private static boolean isAronaSnowLayer(Block base) {
         String id = BuiltInRegistries.BLOCK.getKey(base).toString();
-        return id.equals("vanillalayerplus:snow_layer");
+        return id.equals("aronalayers:snow_layer");
     }
 
-    /** True when 3D layer injection is enabled and VanillaLayer+ provides 3D layers. */
+    /** True when 3D layer injection is enabled and AronaLayers provides 3D layers. */
     public static boolean isActive() {
         if (!LayerConfig.THREE_D_LAYER_INJECTION) return false;
         ensureBuilt();

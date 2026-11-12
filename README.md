@@ -21,7 +21,7 @@ The mod places sub-block-height layers on terrain so slopes read as smooth gradi
 | Provider | Notes |
 |----------|-------|
 | **Conquest Reforged** | Layer blocks, plants, rocks, foliage and NBT trees |
-| **VanillaLayerPlus** | Layer blocks only |
+| **AronaLayers: Blocks** | Layer blocks only |
 
 ### Vanilla worldgen is fully supported
 
@@ -38,8 +38,8 @@ Columns where a carver cut into the surface after the noise stage (cave mouths, 
 - **Vanilla injection** — sub-block surface height recovered from vanilla's density field, giving measured layer depth with no terrain mod required. Works with Terralith, Tectonic, Lithosphere and other density-function worldgen
 - **RTF-based layer injection** — uses ReTerraForged's cell height data for realistic, gradient-based layer depth
 - **Tellus-based layer injection** — layers driven by real-world elevation data, with land-cover-aware water and snow handling
-- **Dual backend** — Conquest Reforged or VanillaLayerPlus
-- **Plant handling** — converts vanilla plants to CR equivalents, or shifts them up for VLP
+- **Dual backend** — Conquest Reforged or AronaLayers: Blocks
+- **Plant handling** — converts vanilla plants to CR equivalents, or shifts them up for AronaLayers
 - **Plant grounding** — plants standing on a layer block are drawn, outlined and collided with on the layer's surface instead of floating above it; plants are detected automatically, vanilla and modded alike
 - **Underwater layers** — waterlogged layer blocks on ocean and river floors
 - **Rocks & foliage** — biome-weighted CR rock and foliage placement above layers
@@ -62,7 +62,7 @@ Columns where a carver cut into the surface after the noise stage (cave mouths, 
 Plus a layer block provider:
 
 - [Conquest Reforged](https://www.curseforge.com/minecraft/mc-mods/conquest-reforged) *(recommended — required for plants, rocks, foliage and NBT trees)*
-- VanillaLayerPlus *(layer blocks only)* — you can use [my fork](https://github.com/Arona74/vanillalayerplus)
+- [AronaLayers: Blocks](https://github.com/Arona74/AronaLayers) *(layer blocks only)*
 
 A terrain source is **optional** — vanilla worldgen, including worldgen mods built on it, is fully supported on its own. Install one only if you want that mod's terrain:
 
@@ -78,7 +78,7 @@ Install the mod on **both client and server**: plant grounding moves plants' out
 ## Installation
 
 1. Install Fabric Loader and Fabric API for your Minecraft version (see the table above)
-2. Install Conquest Reforged **or** VanillaLayerPlus
+2. Install Conquest Reforged **or** AronaLayers: Blocks
 3. Optionally install ReTerraForged or Tellus — vanilla worldgen works without either
 4. Optional but strongly recommended, install my [AronaLayers-extras mod](https://github.com/Arona74/AronaLayers-extras) (1.3.0+) for a few layer mechanics: grass spreading, layers falling with sand, wet sand
 5. Place the mod JAR for your Minecraft version in your mods folder
@@ -166,7 +166,7 @@ These are the fastest way to work out why a particular column did or did not get
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `plant_injection` | `true` | Convert vanilla plants above layers to CR equivalents, or shift them up onto the layer for VLP |
+| `plant_injection` | `true` | Convert vanilla plants above layers to CR equivalents, or shift them up onto the layer for AronaLayers |
 | `replace_sea_grass` | `true` | Also convert seagrass and tall_seagrass |
 | `tree_injection` | `true` | Allow trees to generate through layer blocks |
 | `underwater_layers` | `true` | Place waterlogged layers on underwater surfaces |
@@ -189,15 +189,15 @@ One gen setting still matters for DH: DH's own distant generation only gets laye
 
 ### 3D Layers (experimental)
 
-VanillaLayer+ 5.0.0 adds 3D layers (`<name>_3d_layer`) for its hard materials (stone-like blocks and ores): a floor layer (`vertical_layers` high, 0 for none) and a wall layer (`horizontal_layers` thick, against the `horizontal_facing` side) merged into one block. At 4/4 it is a stair.
+AronaLayers: Blocks has 3D layers (`<name>_3d_layer`) for its hard materials (stone-like blocks and ores): a floor layer (`vertical_layers` high, 0 for none) and a wall layer (`horizontal_layers` thick, against the `horizontal_facing` side) merged into one block. At 4/4 it is a stair.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `3D_layer_injection` | `false` | On TerraForged terrain, turn floor layers beside a step into 3D layers and place wall pieces on cliffs. Uses `vp_block_mappings.json`. Needs a restart |
+| `3D_layer_injection` | `false` | On TerraForged terrain, turn floor layers beside a step into 3D layers and place wall pieces on cliffs. Uses `al_block_mappings.json`. Needs a restart |
 
 TerraForged terrain (FreeTerraForged / ReTerraForged) is a heightfield, so a step is the difference between two neighbouring columns, and their surfaces (ground plus floor layer) say how far the slope between them reaches sideways at each level: that fraction becomes the wall thickness. A floor layer with a higher terrain block beside it becomes a 3D layer: the same floor height, merged with a wall toward the higher side. Floor layers on flat ground stay normal layers, since a 3D layer always has a wall part. On any step of a block or more, the open cells up the face also get a 3D layer of the wall's material with no floor part (`vertical_layers` 0), so only hard faces get one: grass, dirt and other soft layers look wrong on edge, so a soft face gets none. Where the lowest wall piece would stand on a floor layer, that floor layer becomes its full block (`grass_layer` → `grass_block`), so the piece does not stand on a partial floor. The row beside the floor layer on the cliff edge gets nothing, since a wall piece is full height and would stand above that surface. Falling materials (sand, gravel…) and faces on a chunk border are skipped.
 
-Only the four side neighbours count. When several qualify, the piece's open part faces open ground first: a side wins if the neighbour opposite it gets no piece at that level. Otherwise the wall faces uphill: the qualifying side the surface rises toward most, from the four neighbours' surfaces. At ground level, a cell with higher columns on two opposite sides (a trough), or on one side with the chunk border opposite (the next chunk cannot be read, so it may be a trough), gets a regular layer instead of a 3D layer, as high as its floor layer or the thickest wall, whichever is higher. The thickness is measured in the part of the cell above its floor layer. At ground level, a 3D layer's floor part never sits lower than the floor layer of the downhill neighbour (the one opposite the wall): it is raised to match, so the floor does not dip next to the wall. `/algdebug wall3d` shows that decision for the cell you look at (look at the layer itself, or at the face in front of the cell): the column's surface, cell height and ground, the uphill direction, the verdict, and each side neighbour with its surface, step, `t` and thickness, or the reason it does not qualify. `/algdebug walls3d` tallies the verdicts for every cell of your chunk. Neither places anything. The VanillaLayer+ mappings are used even when Conquest Reforged is also installed.
+Only the four side neighbours count. When several qualify, the piece's open part faces open ground first: a side wins if the neighbour opposite it gets no piece at that level. Otherwise the wall faces uphill: the qualifying side the surface rises toward most, from the four neighbours' surfaces. At ground level, a cell with higher columns on two opposite sides (a trough), or on one side with the chunk border opposite (the next chunk cannot be read, so it may be a trough), gets a regular layer instead of a 3D layer, as high as its floor layer or the thickest wall, whichever is higher. The thickness is measured in the part of the cell above its floor layer. At ground level, a 3D layer's floor part never sits lower than the floor layer of the downhill neighbour (the one opposite the wall): it is raised to match, so the floor does not dip next to the wall. `/algdebug wall3d` shows that decision for the cell you look at (look at the layer itself, or at the face in front of the cell): the column's surface, cell height and ground, the uphill direction, the verdict, and each side neighbour with its surface, step, `t` and thickness, or the reason it does not qualify. `/algdebug walls3d` tallies the verdicts for every cell of your chunk. Neither places anything. The AronaLayers mappings are used even when Conquest Reforged is also installed.
 
 ---
 
@@ -336,8 +336,8 @@ All files are auto-created in `config/aronalayersgen/` on first launch:
 | File | Backend | Description |
 |------|---------|-------------|
 | `cr_block_mappings.json` | CR | Vanilla block → CR layer block |
-| `vp_block_mappings.json` | VLP | Vanilla block → VLP layer block |
-| `plant_mappings.json` | Both | Vanilla plant → CR plant, or `null` to shift the plant up for VLP |
+| `al_block_mappings.json` | AronaLayers | Vanilla block → AronaLayers layer block |
+| `plant_mappings.json` | Both | Vanilla plant → CR plant, or `null` to shift the plant up for AronaLayers |
 | `cr_rock_mappings.json` | CR | Surface block → CR rock |
 | `cr_extra_foliage_mappings.json` | CR | Surface block → CR foliage |
 | `cr_enhanced_rock_mappings.json` | CR | Per-biome weighted rock mappings |
@@ -346,11 +346,11 @@ All files are auto-created in `config/aronalayersgen/` on first launch:
 | `second_pass_cleanup_blocks.json` | Both | Blocks that trigger layer cleanup |
 | `structure_elevation_blocks.json` | Both | Blocks that indicate structure-elevated terrain |
 
-The active block mapping file (CR vs VLP) is chosen automatically based on which layer mod is installed.
+The active block mapping file (CR vs AronaLayers) is chosen automatically based on which layer mod is installed.
 
 If a mapping names a block that is not registered — usually because the backend does not provide it — the mod logs `Layer block not found in registry` at startup and skips that mapping. A clean startup log means the mapping files and your installed mods agree.
 
-Modded plants can be added to `plant_mappings.json` by block ID: give a Conquest equivalent as the value for CR, or `null` for VLP.
+Modded plants can be added to `plant_mappings.json` by block ID: give a Conquest equivalent as the value for CR, or `null` for AronaLayers.
 
 ## Building from Source
 

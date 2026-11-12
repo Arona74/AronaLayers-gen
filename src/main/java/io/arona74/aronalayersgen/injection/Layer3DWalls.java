@@ -20,7 +20,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Wall pieces for TerraForged terrain, from VanillaLayer+ 3D layers.
+ * Wall pieces for TerraForged terrain, from AronaLayers 3D layers.
  *
  * <p>TerraForged terrain is a heightfield: the density it generates from has no 3D surface noise,
  * so every column has exactly one surface. A step is the difference between two neighbouring
@@ -46,7 +46,7 @@ import java.util.List;
  *   <li>the open cells up the face, to the last full block of A, get a 3D layer of the wall's
  *       material with no floor part ({@code vertical_layers} 0, {@code horizontal_layers} = the
  *       thickness); so does the foot cell of a column without a floor layer. Hard materials only,
- *       the ones VanillaLayer+ gives a 3D layer: soft ones (grass, dirt...) look wrong on edge. A
+ *       the ones AronaLayers gives a 3D layer: soft ones (grass, dirt...) look wrong on edge. A
  *       floor layer under the lowest piece becomes its full block, so the piece does not stand
  *       on a partial floor;</li>
  *   <li>none beside A's own floor layer: a wall piece is full height and would stand above A's
@@ -744,7 +744,7 @@ public final class Layer3DWalls {
             Block layer = LayerPlacementHelper.hasMappingFor(wall.getBlock())
                 ? LayerPlacementHelper.getMappedLayerBlock(wall.getBlock(), thickness) : null;
             if (layer == null) return new Side(d, SideVerdict.NO_PIECE, hA, sA, gA, MIN_STEP, t, thickness, null);
-            // Soft materials (grass, dirt, sand...) look wrong standing on edge, and VLP gives 3D
+            // Soft materials (grass, dirt, sand...) look wrong standing on edge, and AronaLayers gives 3D
             // layers to its hard ones only.
             block = Layer3D.forLayer(layer);
             if (block == null) return new Side(d, SideVerdict.SOFT_MATERIAL, hA, sA, gA, MIN_STEP, t, thickness, null);
