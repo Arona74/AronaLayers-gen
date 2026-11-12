@@ -3,7 +3,7 @@ package io.arona74.aronalayersgen.config;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
-import net.fabricmc.loader.api.FabricLoader;
+import io.arona74.aronalayersgen.platform.Platform;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -119,7 +119,7 @@ public final class ConfigOption<T> {
     /** True when no mod is needed, or one of the listed mods is loaded. */
     public boolean modPresent() {
         if (modPresent == null) {
-            modPresent = mods.isEmpty() || mods.stream().anyMatch(FabricLoader.getInstance()::isModLoaded);
+            modPresent = mods.isEmpty() || mods.stream().anyMatch(Platform::isModLoaded);
         }
         return modPresent;
     }

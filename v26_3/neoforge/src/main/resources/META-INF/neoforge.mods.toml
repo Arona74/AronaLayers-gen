@@ -1,0 +1,30 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+issueTrackerURL = "https://github.com/Arona74/AronaLayers-gen/issues"
+
+[[mods]]
+modId = "aronalayersgen"
+version = "${version}"
+displayName = "Arona Layers Generator"
+description = """Generate terrain layer blocks automatically during worldgen using ReTerraForged or vanilla worldgen"""
+authors = "arona74"
+displayURL = "https://github.com/Arona74/AronaLayers-gen"
+logoFile = "assets/aronalayersgen/icon.png"
+
+[[mixins]]
+config = "aronalayersgen.mixins.json"
+
+[[dependencies.aronalayersgen]]
+modId = "neoforge"
+type = "required"
+versionRange = "[26.3.0,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.aronalayersgen]]
+modId = "minecraft"
+type = "required"
+versionRange = "[26.3]"
+ordering = "NONE"
+side = "BOTH"

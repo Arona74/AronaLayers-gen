@@ -1,8 +1,8 @@
 # Arona Layers Generator
 
-A Fabric mod that automatically generates terrain layer blocks during worldgen, turning vanilla grass, dirt and sand surfaces into multi-block layer stacks.
+A Fabric and NeoForge mod that automatically generates terrain layer blocks during worldgen, turning vanilla grass, dirt and sand surfaces into multi-block layer stacks.
 
-Supports **Minecraft 1.20.1, 1.21.1, 1.21.11, 26.1.2 and 26.2** from a single shared codebase.
+Supports **Minecraft 1.20.1, 1.21.1, 1.21.11, 26.1.2, 26.2 and 26.3** from a single shared codebase, on Fabric for every version and on NeoForge for every version except 1.20.1.
 
 ## Overview
 
@@ -59,6 +59,14 @@ Columns where a carver cut into the surface after the noise stage (cave mouths, 
 | 26.2 | 0.19.3+ | 0.156.0+ | 25 |
 | 26.3 | 0.19.5+ | 0.162.0+ | 25 |
 
+| Minecraft | NeoForge | Java |
+|-----------|----------|------|
+| 1.21.1 | 21.1.265+ | 21 |
+| 1.21.11 | 21.11.48+ | 21 |
+| 26.1.2 | 26.1.2.126+ | 25 |
+| 26.2 | 26.2.0.93+ | 25 |
+| 26.3 | 26.3.0.102+ | 25 |
+
 Plus a layer block provider:
 
 - [Conquest Reforged](https://www.curseforge.com/minecraft/mc-mods/conquest-reforged) *(recommended — required for plants, rocks, foliage and NBT trees)*
@@ -71,17 +79,17 @@ A terrain source is **optional** — vanilla worldgen, including worldgen mods b
 
 > Availability differs per Minecraft version. Conquest Reforged and ReTerraForged do not exist on every supported version; check before planning a setup. Without a layer block provider installed the mod loads but layer injection stays inactive, and says so in the log.
 
-Install the mod on **both client and server**: plant grounding moves plants' outline and collision boxes, which both sides must agree on. The lowered plant model is drawn through the Fabric Rendering API, which vanilla's renderer and Sodium 0.6+ provide; on 1.20.1 with Sodium 0.5 you also need [Indium](https://modrinth.com/mod/indium), otherwise plants are drawn unlowered (the log says so).
+Install the mod on **both client and server**: plant grounding moves plants' outline and collision boxes, which both sides must agree on. On Fabric the lowered plant model is drawn through the Fabric Rendering API, which vanilla's renderer and Sodium 0.6+ provide; on 1.20.1 with Sodium 0.5 you also need [Indium](https://modrinth.com/mod/indium), otherwise plants are drawn unlowered (the log says so). On NeoForge the models use NeoForge's own model API and need nothing extra.
 
 > **AronaLayers-extras before 1.3.0 is incompatible** and the loader will refuse to start with it: it had its own copy of the plant offset, and the two together lower plants twice. Update Extras to 1.3.0.
 
 ## Installation
 
-1. Install Fabric Loader and Fabric API for your Minecraft version (see the table above)
+1. Install Fabric Loader and Fabric API, or NeoForge, for your Minecraft version (see the tables above)
 2. Install Conquest Reforged **or** AronaLayers: Blocks
 3. Optionally install ReTerraForged or Tellus — vanilla worldgen works without either
 4. Optional but strongly recommended, install my [AronaLayers-extras mod](https://github.com/Arona74/AronaLayers-extras) (1.3.0+) for a few layer mechanics: grass spreading, layers falling with sand, wet sand
-5. Place the mod JAR for your Minecraft version in your mods folder
+5. Place the mod JAR for your Minecraft version and loader (`aronalayersgen-fabric-…` or `aronalayersgen-neoforge-…`) in your mods folder
 6. Launch once to generate config files in `config/aronalayersgen/`
 
 ### NBT Trees (Conquest Reforged only)
@@ -358,13 +366,16 @@ Modded plants can be added to `plant_mappings.json` by block ID: give a Conquest
 ./gradlew build
 ```
 
-Each Minecraft version is a Gradle subproject sharing one source tree. JARs land in each subproject's `build/libs/`:
+Each Minecraft version has a folder with one Gradle subproject per loader, all sharing one source tree:
 
-```
-v1_20_1/build/libs/    v1_21_1/build/libs/    v1_21_11/build/libs/    v26_2/build/libs/
-```
+| Folder | Contents |
+|---|---|
+| `src/main/` | code and resources for every version and loader |
+| `src/fabric/`, `src/neoforge/` | one loader's code for every version (entry points) |
+| `vX/common/` | one version's code and resources for every loader (`Compat`, version mixins, data) |
+| `vX/fabric/`, `vX/neoforge/` | one version's loader code (`Platform`, client models) and build |
 
-Build a single version with `./gradlew :v1_21_1:build`.
+JARs land in each loader subproject's `build/libs/`, e.g. `v1_21_1/fabric/build/libs/aronalayersgen-fabric-<version>+mc1.21.1.jar`. Build a single one with `./gradlew :v1_21_1:fabric:build` or `./gradlew :v1_21_1:neoforge:build`.
 
 `scripts/verify_mixins.py` checks that every mixin in a built JAR resolves against its Minecraft version — worth running before releasing, since an unresolvable mixin target still builds successfully and only fails when the game loads.
 

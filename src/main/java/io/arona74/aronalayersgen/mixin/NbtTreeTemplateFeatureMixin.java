@@ -27,6 +27,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * remap=false. When remap=false is set on the @Mixin class, Loom remaps the parameter
  * class in the descriptor but NOT the method name, leaving "generate" as a literal that
  * fails to match RTF's bytecode. Using the intermediary form directly sidesteps this.
+ *
+ * The Mojang-named selector is for runtimes that keep those names: NeoForge, and 26.x where the
+ * game is not obfuscated. Mixin only fails when no selector matches, so one of the two is enough.
  */
 @Pseudo
 @Mixin(targets = {
@@ -36,7 +39,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class NbtTreeTemplateFeatureMixin {
 
     @Inject(
-        method = "method_13151(Lnet/minecraft/class_5821;)Z",
+        method = {
+            "method_13151(Lnet/minecraft/class_5821;)Z",                                    // Fabric (intermediary)
+            "place(Lnet/minecraft/world/level/levelgen/feature/FeaturePlaceContext;)Z"   // NeoForge, unobfuscated 26.x
+        },
         at = @At("HEAD"),
         cancellable = true,
         remap = false

@@ -1,5 +1,7 @@
 // Root project — aggregator only.
-// All build logic lives in the version subprojects (v1_20_1/, v1_21_1/).
+// All build logic lives in the loader subprojects of each Minecraft version (v1_21_1/fabric/,
+// v1_21_1/neoforge/, ...). Each compiles root src/main/, root src/<loader>/, its version's common/
+// folder and its own src/.
 subprojects {
     repositories {
         maven {

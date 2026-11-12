@@ -3,7 +3,7 @@ package io.arona74.aronalayersgen.injection;
 import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
-import net.fabricmc.loader.api.FabricLoader;
+import io.arona74.aronalayersgen.platform.Platform;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
@@ -99,7 +99,7 @@ public class TellusCompat {
     public static boolean isAvailable() {
         if (!modPresentChecked) {
             modPresentChecked = true;
-            modPresent = FabricLoader.getInstance().isModLoaded("tellus");
+            modPresent = Platform.isModLoaded("tellus");
             if (modPresent) {
                 AronaLayersGen.LOGGER.info("[Tellus] Tellus mod detected — layer injection will bind on first Tellus chunk");
             } else {

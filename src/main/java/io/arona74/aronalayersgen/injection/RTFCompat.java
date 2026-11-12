@@ -3,7 +3,7 @@ package io.arona74.aronalayersgen.injection;
 import io.arona74.aronalayersgen.Compat;
 import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
-import net.fabricmc.loader.api.FabricLoader;
+import io.arona74.aronalayersgen.platform.Platform;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
 
@@ -42,7 +42,7 @@ public class RTFCompat {
     public static Flavor flavor() {
         if (!flavorChecked) {
             for (Flavor f : FLAVORS) {
-                if (FabricLoader.getInstance().isModLoaded(f.modId())) { detectedFlavor = f; break; }
+                if (Platform.isModLoaded(f.modId())) { detectedFlavor = f; break; }
             }
             flavorChecked = true;
         }
@@ -52,7 +52,7 @@ public class RTFCompat {
     /** True if any supported TerraForged fork is loaded (used for mixin gating). */
     public static boolean isAnyTerraForgedLoaded() {
         for (Flavor f : FLAVORS) {
-            if (FabricLoader.getInstance().isModLoaded(f.modId())) return true;
+            if (Platform.isModLoaded(f.modId())) return true;
         }
         return false;
     }

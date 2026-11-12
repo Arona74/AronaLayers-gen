@@ -1,0 +1,95 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version "${moddev_version}"
+    id 'maven-publish'
+}
+
+version = rootProject.mod_version + "+mc${minecraft_version}"
+group = rootProject.maven_group
+
+base {
+    archivesName = rootProject.archives_base_name + '-neoforge'
+}
+
+// Sources, most specific first:
+// - src/                 NeoForge code for this Minecraft version (Platform, client setup, models)
+// - ../common/src/       this Minecraft version's code and resources for every loader (Compat,
+//                        version mixins, mixin config, blocks, data)
+// - root src/neoforge/   NeoForge code for every Minecraft version (the @Mod entry point)
+// - root src/main/       code and resources for every Minecraft version and loader
+// 26.3 rewrote worldgen, so the shared files built on the old API are replaced by ../common/src/
+// versions rather than patched; they are left out of the staged shared source. Keep this list the
+// same as the Fabric subproject's (see v26_3/fabric/build.gradle).
+def sharedOverridden = [
+    'io/arona74/aronalayersgen/injection/FractionalSurfaceSampler.java',
+    'io/arona74/aronalayersgen/mixin/NbtTreeFeatureMixin.java',
+    'io/arona74/aronalayersgen/mixin/TreeSoilMixin.java',
+    'io/arona74/aronalayersgen/mixin/NbtTreeTemplateFeatureMixin.java',
+]
+def stagedSharedJava = layout.buildDirectory.dir('sharedJava')
+def stageSharedJava = tasks.register('stageSharedJava', Sync) {
+    from(rootProject.file('src/main/java')) {
+        exclude sharedOverridden
+    }
+    into stagedSharedJava
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs += [file('../common/src/main/java'), rootProject.file('src/neoforge/java')]
+            srcDir(stageSharedJava)
+        }
+        resources {
+            srcDirs += [file('../common/src/main/resources'), rootProject.file('src/neoforge/resources'), rootProject.file('src/main/resources')]
+        }
+    }
+}
+
+neoForge {
+    version = neoforge_version
+
+    runs {
+        client {
+            client()
+        }
+        server {
+            server()
+        }
+    }
+
+    mods {
+        aronalayersgen {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+// Let the dedicated server read commands from the console, as Loom's runServer does.
+tasks.named('runServer', JavaExec) {
+    standardInput = System.in
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand 'version': project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 25
+}
+
+java {
+    withSourcesJar()
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+jar {
+    from(rootProject.file('LICENSE')) {
+        rename { "${it}_${rootProject.archives_base_name}" }
+    }
+}

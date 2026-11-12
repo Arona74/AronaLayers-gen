@@ -3,7 +3,7 @@ package io.arona74.aronalayersgen;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
-import net.fabricmc.loader.api.FabricLoader;
+import io.arona74.aronalayersgen.platform.Platform;
 
 import com.google.gson.JsonArray;
 import java.io.*;
@@ -19,7 +19,7 @@ import java.util.Map;
  */
 public class ConfigLoader {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path CONFIG_DIR = FabricLoader.getInstance().getConfigDir().resolve("aronalayersgen");
+    private static final Path CONFIG_DIR = Platform.configDir().resolve("aronalayersgen");
 
     /**
      * Load mappings from a JSON config file.

@@ -5,7 +5,7 @@ import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.config.ConfigDraft;
 import io.arona74.aronalayersgen.config.ConfigOption;
 import io.arona74.aronalayersgen.config.ConfigTab;
-import net.fabricmc.loader.api.FabricLoader;
+import io.arona74.aronalayersgen.platform.Platform;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.StringWidget;
@@ -160,7 +160,7 @@ public class AronaConfigScreen extends Screen {
     static List<ConfigTab> visibleTabs() {
         List<ConfigTab> tabs = new ArrayList<>();
         for (ConfigTab t : ConfigTab.values()) {
-            if (t.requiredMod == null || FabricLoader.getInstance().isModLoaded(t.requiredMod)) tabs.add(t);
+            if (t.requiredMod == null || Platform.isModLoaded(t.requiredMod)) tabs.add(t);
         }
         return tabs;
     }

@@ -3,7 +3,7 @@ package io.arona74.aronalayersgen;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import net.fabricmc.loader.api.FabricLoader;
+import io.arona74.aronalayersgen.platform.Platform;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -190,7 +190,7 @@ public class NbtTreeRegistry {
         return new NbtTreeRegistry(entries, speciesFiles, saplingSpecies);
     }
 
-    private static final Path NBT_TREES_DIR = FabricLoader.getInstance().getConfigDir()
+    private static final Path NBT_TREES_DIR = Platform.configDir()
         .resolve("aronalayersgen").resolve("nbt_trees");
 
     private static List<Path> scanSpeciesFiles(String species) {

@@ -1,6 +1,6 @@
 package io.arona74.aronalayersgen.mixin;
 
-import net.fabricmc.loader.api.FabricLoader;
+import io.arona74.aronalayersgen.platform.Platform;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
@@ -19,11 +19,11 @@ public class AronaLayersMixinPlugin implements IMixinConfigPlugin {
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (RTF_MIXIN.equals(mixinClassName)) {
             // ReTerraForged or its community fork FreeTerraForged (same TemplateFeature, new package).
-            return FabricLoader.getInstance().isModLoaded("freeterraforged")
-                || FabricLoader.getInstance().isModLoaded("reterraforged");
+            return Platform.isModLoaded("freeterraforged")
+                || Platform.isModLoaded("reterraforged");
         }
         if (TELLUS_TREE_MIXIN.equals(mixinClassName)) {
-            return FabricLoader.getInstance().isModLoaded("tellus");
+            return Platform.isModLoaded("tellus");
         }
         return true;
     }

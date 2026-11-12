@@ -1,70 +1,33 @@
 package io.arona74.aronalayersgen;
 
-import io.arona74.aronalayersgen.block.LayerBlock;
-import io.arona74.aronalayersgen.block.PowderSnowLayerBlock;
-import io.arona74.aronalayersgen.grounding.GroundingFlags;
 import io.arona74.aronalayersgen.command.ChunkDebugCommand;
 import io.arona74.aronalayersgen.command.TellusDebugCommand;
+import io.arona74.aronalayersgen.grounding.GroundingFlags;
 import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
 import io.arona74.aronalayersgen.injection.NbtTreeInjector;
-import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.Item;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.Registry;
+import io.arona74.aronalayersgen.injection.RTFLayerInjector;
+import io.arona74.aronalayersgen.platform.Platform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class AronaLayersGen implements ModInitializer {
+/**
+ * Loader-independent setup. Each loader's entry point (fabric.AronaLayersGenFabric,
+ * neoforge.AronaLayersGenNeoForge) calls {@link ModBlocks#register()} when its block registry is
+ * open, then {@link #init()}.
+ */
+public final class AronaLayersGen {
+    private AronaLayersGen() {}
+
     public static final String MOD_ID = "aronalayersgen";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-    public static final Block POWDER_SNOW_LAYER = new PowderSnowLayerBlock(
-            Compat.blockSettings(Blocks.SNOW, "powder_snow_layer").speedFactor(0.9f)
-    );
-
-    // Native layer blocks for surfaces whose backend has no matching layer block.
-    // At layers=8 they convert to the given full block (like powder_snow_layer -> powder_snow).
-    public static final Block DEEPSLATE_LAYER = new LayerBlock(Compat.blockSettings(Blocks.DEEPSLATE, "deepslate_layer"), Blocks.DEEPSLATE);
-    public static final Block MOSS_LAYER = new LayerBlock(Compat.blockSettings(Blocks.MOSS_BLOCK, "moss_layer"), Blocks.MOSS_BLOCK);
-
-    // Create's zinc ores. Registered whether or not Create is installed (block registries are synced,
-    // and the mappings simply skip create:* ids when it is absent). Properties come from the iron ores,
-    // which zinc ore matches in hardness; Create's own blocks may not exist yet at this point.
-    public static final Block ZINC_ORE_LAYER = new LayerBlock(Compat.blockSettings(Blocks.IRON_ORE, "zinc_ore_layer"),
-            () -> Compat.blockFromId("create:zinc_ore"));
-    public static final Block DEEPSLATE_ZINC_ORE_LAYER = new LayerBlock(Compat.blockSettings(Blocks.DEEPSLATE_IRON_ORE, "deepslate_zinc_ore_layer"),
-            () -> Compat.blockFromId("create:deepslate_zinc_ore"));
-
-    @Override
-    public void onInitialize() {
+    public static void init() {
         LOGGER.info("Initializing Arona Layers Generator");
 
-        Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "powder_snow_layer"), POWDER_SNOW_LAYER);
-        Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "powder_snow_layer"),
-                new BlockItem(POWDER_SNOW_LAYER, Compat.itemSettings("powder_snow_layer")));
-
-        Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "deepslate_layer"), DEEPSLATE_LAYER);
-        Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "deepslate_layer"),
-                new BlockItem(DEEPSLATE_LAYER, Compat.itemSettings("deepslate_layer")));
-
-        Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "moss_layer"), MOSS_LAYER);
-        Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "moss_layer"),
-                new BlockItem(MOSS_LAYER, Compat.itemSettings("moss_layer")));
-
-        Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "zinc_ore_layer"), ZINC_ORE_LAYER);
-        Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "zinc_ore_layer"),
-                new BlockItem(ZINC_ORE_LAYER, Compat.itemSettings("zinc_ore_layer")));
-
-        Registry.register(BuiltInRegistries.BLOCK, Compat.id(MOD_ID, "deepslate_zinc_ore_layer"), DEEPSLATE_ZINC_ORE_LAYER);
-        Registry.register(BuiltInRegistries.ITEM, Compat.id(MOD_ID, "deepslate_zinc_ore_layer"),
-                new BlockItem(DEEPSLATE_ZINC_ORE_LAYER, Compat.itemSettings("deepslate_zinc_ore_layer")));
-
-        ChunkDebugCommand.register();
-        TellusDebugCommand.register();
+        Platform.registerCommands(dispatcher -> {
+            ChunkDebugCommand.register(dispatcher);
+            TellusDebugCommand.register(dispatcher);
+        });
 
         // cr_nbt_trees places Conquest Reforged NBT tree structures; without CR present the
         // referenced blocks don't exist, so the feature must not run even if the flag is on.
@@ -74,11 +37,11 @@ public class AronaLayersGen implements ModInitializer {
             LOGGER.warn("[AronaLayersGen] cr_nbt_trees is enabled but Conquest Reforged is not present — disabling the feature.");
         }
 
-        Compat.registerChunkLoad(NbtTreeInjector::onChunkLoad);
+        Platform.onChunkLoad(NbtTreeInjector::onChunkLoad);
         // Re-map layers whose RTF surface was swapped to beach/river sand after POST_FEATURES
         // injection; runs at chunk-load so it catches spawn/cross-border chunks the in-init pass misses.
-        Compat.registerChunkLoad(io.arona74.aronalayersgen.injection.RTFLayerInjector::onChunkLoadRemap);
-        ServerTickEvents.END_SERVER_TICK.register(server -> NbtTreeInjector.flushReadyChunks());
+        Platform.onChunkLoad(RTFLayerInjector::onChunkLoadRemap);
+        Platform.onServerTickEnd(NbtTreeInjector::flushReadyChunks);
 
         // Plant grounding answers "not grounded" until now: shapes are queried during vanilla's
         // block bootstrap, before the config can safely load (see GroundingFlags).

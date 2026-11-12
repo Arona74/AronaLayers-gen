@@ -9,7 +9,7 @@ import io.arona74.aronalayersgen.injection.LayerBackend;
 import io.arona74.aronalayersgen.injection.FractionalSurfaceSampler;
 import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
 import io.arona74.aronalayersgen.injection.RandomStateHolder;
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -47,16 +47,14 @@ import java.util.Map;
  */
 public class ChunkDebugCommand {
 
-    public static void register() {
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
-            dispatcher.register(
-                Commands.literal("algdebug")
-                    .requires(src -> Compat.hasPermission(src, 2))
-                    .executes(ChunkDebugCommand::execute)
-                    .then(Commands.literal("wall3d").executes(Wall3DDebugCommand::lookedAt))
-                    .then(Commands.literal("walls3d").executes(Wall3DDebugCommand::chunkScan))
-                    .then(Commands.literal("plant").executes(PlantDebugCommand::lookedAt))
-            )
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(
+            Commands.literal("algdebug")
+                .requires(src -> Compat.hasPermission(src, 2))
+                .executes(ChunkDebugCommand::execute)
+                .then(Commands.literal("wall3d").executes(Wall3DDebugCommand::lookedAt))
+                .then(Commands.literal("walls3d").executes(Wall3DDebugCommand::chunkScan))
+                .then(Commands.literal("plant").executes(PlantDebugCommand::lookedAt))
         );
     }
 

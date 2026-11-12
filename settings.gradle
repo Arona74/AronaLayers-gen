@@ -4,15 +4,21 @@ pluginManagement {
             name = 'Fabric'
             url = 'https://maven.fabricmc.net/'
         }
+        mavenCentral()
         gradlePluginPortal()
     }
 }
 
 rootProject.name = 'arona-layers-gen'
 
-include ':v1_20_1'
-include ':v1_21_1'
-include ':v1_21_11'
-include ':v26_1_2'
-include ':v26_2'
-include ':v26_3'
+include ':v1_20_1:fabric'
+include ':v1_21_1:fabric'
+include ':v1_21_1:neoforge'
+include ':v1_21_11:fabric'
+include ':v1_21_11:neoforge'
+include ':v26_1_2:fabric'
+include ':v26_1_2:neoforge'
+include ':v26_2:fabric'
+include ':v26_2:neoforge'
+include ':v26_3:fabric'
+include ':v26_3:neoforge'

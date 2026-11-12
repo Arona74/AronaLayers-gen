@@ -10,7 +10,7 @@ import io.arona74.aronalayersgen.PlantMappingRegistry;
 import io.arona74.aronalayersgen.RockMappingRegistry;
 import io.arona74.aronalayersgen.grounding.GroundingFlags;
 import io.arona74.aronalayersgen.grounding.PlantGrounding;
-import net.fabricmc.loader.api.FabricLoader;
+import io.arona74.aronalayersgen.platform.Platform;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
@@ -75,15 +75,14 @@ public class LayerPlacementHelper {
 
     public static ModBackend getBackend() {
         if (detectedBackend == null) {
-            FabricLoader loader = FabricLoader.getInstance();
-            if (LayerConfig.THREE_D_LAYER_INJECTION && loader.isModLoaded("aronalayers")) {
+            if (LayerConfig.THREE_D_LAYER_INJECTION && Platform.isModLoaded("aronalayers")) {
                 // 3D layers are AronaLayers blocks: its mappings win even with Conquest installed.
                 detectedBackend = ModBackend.ARONA_LAYERS;
                 AronaLayersGen.LOGGER.info("[AronaLayersGen] Detected backend: AronaLayers (3D_layer_injection)");
-            } else if (loader.isModLoaded("conquest")) {
+            } else if (Platform.isModLoaded("conquest")) {
                 detectedBackend = ModBackend.CONQUEST_REFORGED;
                 AronaLayersGen.LOGGER.info("[AronaLayersGen] Detected backend: Conquest Reforged");
-            } else if (loader.isModLoaded("aronalayers")) {
+            } else if (Platform.isModLoaded("aronalayers")) {
                 detectedBackend = ModBackend.ARONA_LAYERS;
                 AronaLayersGen.LOGGER.info("[AronaLayersGen] Detected backend: AronaLayers");
             } else {
@@ -460,7 +459,7 @@ public class LayerPlacementHelper {
      */
     private static Block resolveMaxedLayerBlock(Block layerBlock, int layerCount) {
         if (layerCount < 8) return layerBlock;
-        if (layerBlock == AronaLayersGen.POWDER_SNOW_LAYER) return Blocks.POWDER_SNOW;
+        if (layerBlock == io.arona74.aronalayersgen.ModBlocks.POWDER_SNOW_LAYER) return Blocks.POWDER_SNOW;
         if (layerBlock instanceof io.arona74.aronalayersgen.block.LayerBlock lb) {
             Block full = lb.getFullBlock();
             return full == Blocks.AIR ? layerBlock : full;

@@ -30,7 +30,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * <p>Foreign-mod mixin: {@code @Pseudo} + {@code remap=false} and a raw descriptor whose MC types
  * use intermediary names (class_5281 = WorldGenLevel, class_2338 = BlockPos, class_6880 = Holder)
  * while Tellus's own types keep their real internal names — mirroring {@link NbtTreeTemplateFeatureMixin}.
- * {@link AronaLayersMixinPlugin} gates this so it is only applied when Tellus is present.
+ * {@link AronaLayersMixinPlugin} gates this so it is only applied when Tellus is present. The second,
+ * Mojang-named selector covers NeoForge and unobfuscated 26.x; only one needs to match.
  *
  * <p>This intercept is the sole mechanism for converting Tellus custom trees — there is no post-hoc
  * scan fallback. Trees it does not handle are left as Tellus placed them (see {@link NbtTreeInjector}).
@@ -40,7 +41,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class TellusProceduralTreeMixin {
 
     @Inject(
-        method = "place(Lnet/minecraft/class_5281;Lnet/minecraft/class_2338;Lnet/minecraft/class_6880;Lcom/yucareux/tellus/world/data/resolve/ResolveEcoregion;Lcom/yucareux/tellus/world/data/canopy/TellusCanopyHeightSource$CanopySample;J)Z",
+        method = {
+            // Fabric (intermediary)
+            "place(Lnet/minecraft/class_5281;Lnet/minecraft/class_2338;Lnet/minecraft/class_6880;Lcom/yucareux/tellus/world/data/resolve/ResolveEcoregion;Lcom/yucareux/tellus/world/data/canopy/TellusCanopyHeightSource$CanopySample;J)Z",
+            // NeoForge, unobfuscated 26.x
+            "place(Lnet/minecraft/world/level/WorldGenLevel;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Holder;Lcom/yucareux/tellus/world/data/resolve/ResolveEcoregion;Lcom/yucareux/tellus/world/data/canopy/TellusCanopyHeightSource$CanopySample;J)Z"
+        },
         at = @At("HEAD"),
         cancellable = true,
         remap = false

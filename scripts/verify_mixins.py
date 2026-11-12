@@ -9,13 +9,17 @@ Obfuscated versions (1.20.1 - 1.21.11)
     "could not find any targets matching '<name>'". So every method= value must
     be <init>, an intermediary method_NNNN, or a name that is never obfuscated.
 
-Deobfuscated versions (26.x)
-    Nothing is remapped, so real names are correct there and the check above is
+Deobfuscated versions (26.x, and NeoForge on every version)
+    NeoForge runs on Mojang names, and on 26.x nothing is obfuscated: nothing is remapped, so real names are correct there and the check above is
     meaningless. Instead the target method must actually exist on the class the
-    mixin targets, looked up in the Minecraft jar.
+    mixin targets, looked up in the Minecraft jar (for NeoForge, its patched one: NeoForge
+    rewrites some vanilla methods).
 
 Usage:
-    python scripts/verify_mixins.py [<module_dir> ...]     (no arguments: every v* module)
+    python scripts/verify_mixins.py [<module> ...]     (no arguments: every vX/<loader> module)
+
+A module is a loader subproject (v1_21_1/fabric, v1_21_1/neoforge) or a version folder, which
+stands for all of its loaders.
 
 Exits non-zero if any target fails to resolve.
 """
@@ -40,7 +44,8 @@ def javap(path, cls=None):
 
 
 def module_version(module):
-    for line in open(os.path.join(module, "gradle.properties"), encoding="utf-8"):
+    # minecraft_version lives in the version folder (vX/gradle.properties), above the loader one.
+    for line in open(os.path.join(os.path.dirname(os.path.normpath(module)), "gradle.properties"), encoding="utf-8"):
         if line.startswith("minecraft_version="):
             return line.split("=", 1)[1].strip()
     return ""
@@ -53,6 +58,16 @@ def find_minecraft_jar(version):
         for hit in glob.glob(pat, recursive=True):
             if "sources" not in hit and "merged" in hit:
                 return hit
+    return None
+
+
+def find_neoforge_jar(module):
+    """The patched Minecraft jar ModDevGradle made for this module."""
+    arts = os.path.join(module, "build/moddev/artifacts")
+    for pat in ("*-merged.jar", "minecraft-patched-*.jar"):
+        hits = [h for h in glob.glob(os.path.join(arts, pat)) if "sources" not in h]
+        if hits:
+            return hits[0]
     return None
 
 
@@ -121,7 +136,14 @@ def check(jar, mc_jar, deobf):
 def main():
     bad = 0
     # No arguments used to check nothing and exit 0 - a silent pass. Default to every module.
-    mods = sys.argv[1:] or sorted(d for d in glob.glob("v*") if os.path.isdir(d))
+    args = sys.argv[1:] or sorted(d for d in glob.glob("v*") if os.path.isdir(d))
+    mods = []
+    for a in args:
+        a = os.path.normpath(a)
+        if os.path.isfile(os.path.join(a, "build.gradle")):
+            mods.append(a)
+        else:
+            mods += sorted(os.path.dirname(b) for b in glob.glob(os.path.join(a, "*", "build.gradle")))
     for mod in mods:
         jars = [x for x in glob.glob(os.path.join(mod, "build/libs/*.jar")) if "sources" not in x]
         if not jars:
@@ -129,11 +151,19 @@ def main():
             continue
         jar = max(jars, key=os.path.getmtime)
         version = module_version(mod)
-        deobf = not version.startswith("1.")     # 26.x and later ship deobfuscated
-        mc_jar = find_minecraft_jar(version) if deobf else None
+        neoforge = os.path.basename(mod) == "neoforge"
+        deobf = neoforge or not version.startswith("1.")     # 26.x and later ship deobfuscated
+        if neoforge:
+            mc_jar = find_neoforge_jar(mod)
+        else:
+            mc_jar = find_minecraft_jar(version) if deobf else None
+        if deobf and not mc_jar:
+            print(f"{mod}: no Minecraft jar found to check against")
+            bad += 1
+            continue
         mixins, checked, problems = check(jar, mc_jar, deobf)
         mode = "deobfuscated" if deobf else "intermediary"
-        print(f"{mod:10s} {os.path.basename(jar):40s} {mode:14s} "
+        print(f"{mod:18s} {os.path.basename(jar):48s} {mode:14s} "
               f"{len(mixins)} mixins, {checked} targets: {'OK' if not problems else 'FAILED'}")
         for cls, why in problems:
             print(f"    !! {cls}: {why}")

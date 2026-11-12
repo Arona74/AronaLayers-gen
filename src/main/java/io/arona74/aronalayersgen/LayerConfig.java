@@ -9,7 +9,7 @@ import io.arona74.aronalayersgen.config.ConfigOption;
 import io.arona74.aronalayersgen.config.ConfigOption.Apply;
 import io.arona74.aronalayersgen.config.ConfigOption.Side;
 import io.arona74.aronalayersgen.config.ConfigTab;
-import net.fabricmc.loader.api.FabricLoader;
+import io.arona74.aronalayersgen.platform.Platform;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -44,7 +44,7 @@ import static io.arona74.aronalayersgen.config.ConfigOption.integer;
  */
 public class LayerConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-    private static final Path CONFIG_DIR = FabricLoader.getInstance().getConfigDir().resolve("aronalayersgen");
+    private static final Path CONFIG_DIR = Platform.configDir().resolve("aronalayersgen");
     private static final String CONFIG_FILE = "layer_config.json";
     private static final String LANG_FILE = "assets/aronalayersgen/lang/en_us.json";
 

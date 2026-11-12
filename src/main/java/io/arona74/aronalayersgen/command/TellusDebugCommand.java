@@ -6,7 +6,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.injection.TellusCompat;
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerLevel;
@@ -28,22 +28,20 @@ import net.minecraft.world.level.chunk.ChunkGenerator;
  */
 public class TellusDebugCommand {
 
-    public static void register() {
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
-            dispatcher.register(
-                Commands.literal("algtellus")
-                    .requires(src -> Compat.hasPermission(src, 2))
-                    .executes(ctx -> here(ctx))
-                    .then(Commands.literal("grid")
-                        .executes(ctx -> grid(ctx, 8))
-                        .then(Commands.argument("radius", IntegerArgumentType.integer(1, 24))
-                            .executes(ctx -> grid(ctx, IntegerArgumentType.getInteger(ctx, "radius")))))
-                    .then(Commands.argument("x", IntegerArgumentType.integer())
-                        .then(Commands.argument("z", IntegerArgumentType.integer())
-                            .executes(ctx -> at(ctx,
-                                IntegerArgumentType.getInteger(ctx, "x"),
-                                IntegerArgumentType.getInteger(ctx, "z")))))
-            )
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(
+            Commands.literal("algtellus")
+                .requires(src -> Compat.hasPermission(src, 2))
+                .executes(ctx -> here(ctx))
+                .then(Commands.literal("grid")
+                    .executes(ctx -> grid(ctx, 8))
+                    .then(Commands.argument("radius", IntegerArgumentType.integer(1, 24))
+                        .executes(ctx -> grid(ctx, IntegerArgumentType.getInteger(ctx, "radius")))))
+                .then(Commands.argument("x", IntegerArgumentType.integer())
+                    .then(Commands.argument("z", IntegerArgumentType.integer())
+                        .executes(ctx -> at(ctx,
+                            IntegerArgumentType.getInteger(ctx, "x"),
+                            IntegerArgumentType.getInteger(ctx, "z")))))
         );
     }
 
