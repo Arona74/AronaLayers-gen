@@ -680,11 +680,11 @@ public class LayerConfig {
     private static final ConfigOption<Boolean> O_POSTS_ON_LAYERS = add(bool("posts_on_layers", true,
             () -> POSTS_ON_LAYERS, v -> POSTS_ON_LAYERS = v).in(ConfigTab.VISUALS, "posts")
             .side(Side.BOTH).apply(Apply.RESTART));
-    private static final ConfigOption<PostMode> O_POSTS_MODE = add(choice("posts_on_layers_mode", PostMode.EXTEND,
+    private static final ConfigOption<PostMode> O_POSTS_MODE = add(choice("posts_on_layers_mode", PostMode.LOWER,
             () -> POSTS_MODE, v -> POSTS_MODE = v)
             .in(ConfigTab.VISUALS, "posts").requires(O_POSTS_ON_LAYERS).side(Side.BOTH).apply(Apply.RESTART));
     static {
-        add(bool("lowered_posts_reach_up", true, () -> LOWERED_POSTS_REACH_UP, v -> LOWERED_POSTS_REACH_UP = v)
+        add(bool("lowered_posts_reach_up", false, () -> LOWERED_POSTS_REACH_UP, v -> LOWERED_POSTS_REACH_UP = v)
                 .in(ConfigTab.VISUALS, "posts").requires(O_POSTS_ON_LAYERS).requires(O_POSTS_MODE, PostMode.LOWER)
                 .side(Side.BOTH).apply(Apply.RESOURCE_RELOAD));
     }

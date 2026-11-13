@@ -114,7 +114,7 @@
   "config.aronalayersgen.option.posts_on_layers_mode": "Post Style",
   "config.aronalayersgen.option.posts_on_layers_mode.desc": "EXTEND: the post is drawn down to the layer, its top stays level with its neighbours, and a wall one level lower is joined across the step. LOWER: the whole post is lowered onto the layer like a brewing stand, so it follows the ground; where it meets a post at another height the end of the side is closed instead of showing its inside.",
   "config.aronalayersgen.option.lowered_posts_reach_up": "Reach Up To Blocks",
-  "config.aronalayersgen.option.lowered_posts_reach_up.desc": "A lowered fence or wall reaches back up to a block standing on it (a slab, a lantern), closing the gap lowering opens under that block. Only the parts that reached the top of the post (a fence's post, a wall's post and tall sides) are stretched. false = the gap stays.",
+  "config.aronalayersgen.option.lowered_posts_reach_up.desc": "true: a lowered fence or wall reaches back up to a block standing on it, as if a second post stood under that block (a wall's sides drawn tall, a fence's rails continued). false: a decoration on it (a lantern, a torch) is lowered with the post instead; other blocks on it keep their place over the gap.",
   "config.aronalayersgen.option.cr_nbt_trees": "Conquest NBT Trees",
   "config.aronalayersgen.option.cr_nbt_trees.desc": "Place hand-crafted CR trees from NBT files during world generation. Tree species and biomes are configured in cr_nbt_trees.json. NBT files live in nbt_trees/<species>/.",
   "config.aronalayersgen.option.cr_nbt_trees_vanilla_fallback": "Vanilla Tree Fallback",

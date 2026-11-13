@@ -108,6 +108,11 @@ public class TrunkStemModel implements BakedModel {
         // Sides joining a post across a step, drawn as part of the post itself: towards a post
         // lowered into this level, and (for a lowered post) towards one beside its layer.
         BlockState drawn = PlantGrounding.bridged(state, blockView, pos, true);
+        // Reaching back up to a block on it (see below), a wall's low sides are drawn tall, as vanilla
+        // draws them under a wall, so the whole wall meets that block; the outline follows
+        // (PlantGrounding.loweredDrawn).
+        boolean reachUp = PlantGrounding.reachesUp(state, blockView, pos, drop);
+        if (reachUp) drawn = PlantGrounding.stacked(drawn, 0);
         int open = PlantGrounding.openSides(drawn, blockView, pos, drop);
         if (drop == 0f && open == 0 && drawn == state) {
             wrapped.emitBlockQuads(blockView, state, pos, randomSupplier, context);
@@ -127,13 +132,77 @@ public class TrunkStemModel implements BakedModel {
         wrapped.emitBlockQuads(blockView, drawn, pos, randomSupplier, context);
         context.popTransform();
 
-        if (!PlantGrounding.reachesUp(state, blockView, pos, drop)) return;
-        // A copy of the whole post stacked on the lowered one, cut at the cell top, so the post
-        // reaches the block on it the way a second post would.
+        if (!reachUp) return;
+        // A copy of the whole post stacked on the lowered one, cut at the cell top, so the post meets
+        // the block on it the way a second post would: a fence's rails continue too, and a wall (its
+        // sides drawn tall) has no notch. The outline is cut the same way (PlantGrounding.lowered).
         QuadEmitter emitter = context.getEmitter();
-        for (BakedQuad quad : allQuads(PlantGrounding.stacked(drawn, 0), randomSupplier.get())) {
+        List<BakedQuad> copy = allQuads(drawn, randomSupplier.get());
+        for (BakedQuad quad : copy) {
             emitClipped(emitter, () -> emitter.fromVanilla(quad, material(), null), drop + 1f, 1f + drop, 1f);
         }
+        // The cut goes through the copy's post and maybe its rails, whose top faces lie beyond it and
+        // are dropped: they are drawn at the cut, so a post under a lantern or a torch is not open.
+        List<float[]> crossing = new ArrayList<>();
+        for (BakedQuad quad : copy) {
+            collectCrossing(emitter, () -> emitter.fromVanilla(quad, material(), null), drop + 1f, 1f, crossing);
+        }
+        for (BakedQuad quad : copy) {
+            emitCap(emitter, () -> emitter.fromVanilla(quad, material(), null), drop + 1f, 1f, crossing);
+        }
+    }
+
+    /**
+     * Records the sides of a quad that cross {@code cut} once moved up by {@code shift}, as
+     * {x0, z0, x1, z1}: the parts of the copy the cut at the cell top goes through.
+     */
+    private static void collectCrossing(QuadEmitter emitter, Runnable load, float shift, float cut, List<float[]> crossing) {
+        load.run();
+        if (verticalEdges(emitter) == null) return;
+        float lo = Float.MAX_VALUE, hi = -Float.MAX_VALUE;
+        float x0 = Float.MAX_VALUE, z0 = Float.MAX_VALUE, x1 = -Float.MAX_VALUE, z1 = -Float.MAX_VALUE;
+        for (int i = 0; i < 4; i++) {
+            float y = emitter.y(i) + shift;
+            lo = Math.min(lo, y);
+            hi = Math.max(hi, y);
+            x0 = Math.min(x0, emitter.x(i));
+            x1 = Math.max(x1, emitter.x(i));
+            z0 = Math.min(z0, emitter.z(i));
+            z1 = Math.max(z1, emitter.z(i));
+        }
+        if (lo < cut - 1.0E-4f && hi > cut + 1.0E-4f) crossing.add(new float[] {x0, z0, x1, z1});
+    }
+
+    /**
+     * Closes a part the cut at the cell top goes through (a post, a fence rail): its top face, which
+     * lies beyond the cut, is drawn at the cut instead, culled against the block above as vanilla's
+     * top faces are. A face is a part's top when it lies flat beyond the cut and one of the crossing
+     * sides runs along its edge.
+     */
+    private static void emitCap(QuadEmitter emitter, Runnable load, float shift, float cut, List<float[]> crossing) {
+        load.run();
+        float y = emitter.y(0) + shift;
+        if (y <= cut + 1.0E-4f) return;
+        float x0 = Float.MAX_VALUE, z0 = Float.MAX_VALUE, x1 = -Float.MAX_VALUE, z1 = -Float.MAX_VALUE;
+        for (int i = 0; i < 4; i++) {
+            if (Math.abs(emitter.y(i) + shift - y) > 1.0E-4f) return;
+            x0 = Math.min(x0, emitter.x(i));
+            x1 = Math.max(x1, emitter.x(i));
+            z0 = Math.min(z0, emitter.z(i));
+            z1 = Math.max(z1, emitter.z(i));
+        }
+        float e = 1.0E-4f;
+        boolean over = false;
+        for (float[] side : crossing) {
+            if (side[0] >= x0 - e && side[2] <= x1 + e && side[1] >= z0 - e && side[3] <= z1 + e) {
+                over = true;
+                break;
+            }
+        }
+        if (!over) return;
+        for (int i = 0; i < 4; i++) emitter.pos(i, emitter.x(i), cut, emitter.z(i));
+        emitter.cullFace(cut >= 1f - e ? Direction.UP : null);
+        emitter.emit();
     }
 
     /** Every quad of the model for {@code state}. */

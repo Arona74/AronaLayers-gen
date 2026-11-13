@@ -311,6 +311,12 @@ public final class PlantGrounding {
         }
 
         BlockState soilState = soilLevel.getBlockState(soil);
+        if (isPostBlock(soilState.getBlock())) {
+            // A decoration on a lowered post (a lantern on a fence) goes down with it, unless the
+            // post reaches back up to it (lowered_posts_reach_up).
+            float drop = postDrop(soilState, soilLevel, columnLevel, soil);
+            return drop != 0f && !reachesUp(soilState, soilLevel, soil, drop) ? drop : 0f;
+        }
         if (isGrounded(soilState)) {
             // A plant on a plant (cactus flower on a cactus): the one below may be a column whose
             // base is out of the mesher's reach, so it walks on the column view too.
@@ -635,15 +641,25 @@ public final class PlantGrounding {
         return !isPostBlock(above.getBlock()) || postDrop(above, level, abovePos) != drop;
     }
 
-    /** A lowered post's shape: moved down, and reaching back up to a block on it (see reachesUp). */
+    /**
+     * The state a lowered post is drawn and shaped as: reaching back up to a block on it, a wall's
+     * low sides are tall, as vanilla makes them under a wall, so all of the wall meets that block.
+     */
+    public static BlockState loweredDrawn(BlockState post, BlockState drawn, BlockGetter level, BlockPos pos, float drop) {
+        return reachesUp(post, level, pos, drop) ? stacked(drawn, 0) : drawn;
+    }
+
+    /**
+     * A lowered post's shape: moved down, and reaching back up to a block on it (see reachesUp) with
+     * a copy of itself stacked on the lowered one, cut at the cell top, as the model draws it: a
+     * fence's rails continue up as well as its post.
+     */
     private static VoxelShape lowered(BlockState post, BlockGetter level, BlockPos pos, VoxelShape shape, float drop) {
         VoxelShape moved = shape.move(0.0, drop, 0.0);
         if (!reachesUp(post, level, pos, drop)) return moved;
-        VoxelShape[] out = {moved};
-        shape.forAllBoxes((x0, y0, z0, x1, y1, z1) -> {
-            if (y1 > 1.0 - 1.0E-4) out[0] = Shapes.or(out[0], Shapes.box(x0, Math.max(0.0, y0 + drop), z0, x1, 1.0, z1));
-        });
-        return out[0];
+        VoxelShape gap = Shapes.box(0.0, Math.max(0.0, 1.0 + drop), 0.0, 1.0, 1.0, 1.0);
+        VoxelShape copy = Shapes.join(shape.move(0.0, drop + 1.0, 0.0), gap, BooleanOp.AND);
+        return Shapes.or(moved, copy);
     }
 
     /**
@@ -685,6 +701,7 @@ public final class PlantGrounding {
     public static VoxelShape bridgedCollision(BlockState post, BlockGetter level, BlockPos pos, VoxelShape shape) {
         float drop = postDrop(post, level, pos);
         BlockState drawn = bridged(post, level, pos, drop != 0f);
+        if (drop != 0f) drawn = loweredDrawn(post, drawn, level, pos, drop);
         if (drawn != post) shape = drawn.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
         return drop != 0f ? lowered(post, level, pos, shape, drop) : shape;
     }
@@ -734,6 +751,7 @@ public final class PlantGrounding {
         if (shape.isEmpty()) return shape;
         float drop = postDrop(state, level, pos);
         BlockState drawn = isPostBlock(state.getBlock()) ? bridged(state, level, pos, drop != 0f) : state;
+        if (drop != 0f) drawn = loweredDrawn(state, drawn, level, pos, drop);
         if (drawn != state) shape = drawn.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
         if (drop != 0f) return lowered(state, level, pos, shape, drop);
         boolean trunk = isStandingTrunk(state, level, pos);

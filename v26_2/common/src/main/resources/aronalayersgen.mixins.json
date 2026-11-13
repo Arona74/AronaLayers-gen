@@ -24,6 +24,8 @@
     "ClipContextAccessor",
     "ColumnPlantSurviveMixin",
     "ChorusSurviveMixin",
+    "LayerSupportMixin",
+    "WallPostAboveMixin",
     "MushroomSurviveMixin",
     "TreeShiftMixin",
     "HugeMushroomShiftMixin",
