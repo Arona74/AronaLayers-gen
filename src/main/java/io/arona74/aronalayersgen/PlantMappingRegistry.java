@@ -1,106 +1,76 @@
 package io.arona74.aronalayersgen;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.core.registries.BuiltInRegistries;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
- * Registry for mapping vanilla plants to their Conquest Reforged equivalents.
- * Only used when Conquest Reforged is the active backend.
+ * The plants a layer can be placed under: when a layer is generated where one of them stands, the
+ * plant is moved up one block onto the layer instead of blocking it (plant grounding then draws it
+ * on the layer's surface).
+ *
+ * <p>Read from plant_mappings.json, a {@code "plants"} list of block ids. Files written by earlier
+ * versions hold a {@code "mappings"} object instead (plant to replacement plant); its keys are read
+ * as the list, so those files keep working.
  */
 public class PlantMappingRegistry {
-    private final Map<Block, String> vanillaToConquestPlant;
-    private final Map<String, Block> conquestToVanillaPlant;
+    private final Set<Block> plants = new HashSet<>();
 
     public PlantMappingRegistry() {
-        this.vanillaToConquestPlant = new HashMap<>();
-        this.conquestToVanillaPlant = new HashMap<>();
-        registerDefaultMappings();
+        load();
     }
 
-    private void registerDefaultMappings() {
-        Map<String, String> configMappings = ConfigLoader.loadMappings("plant_mappings.json");
-
-        for (Map.Entry<String, String> entry : configMappings.entrySet()) {
-            String vanillaId = Compat.normalizeId(entry.getKey());
-            if (vanillaId == null) {
-                AronaLayersGen.LOGGER.warn("Invalid vanilla plant ID in config: {}", entry.getKey());
-                continue;
+    private void load() {
+        JsonObject root = ConfigLoader.loadJsonObject("plant_mappings.json");
+        Set<String> ids = new LinkedHashSet<>();
+        if (root != null && root.has("plants") && root.get("plants").isJsonArray()) {
+            for (JsonElement element : root.getAsJsonArray("plants")) {
+                if (!element.isJsonNull()) ids.add(element.getAsString());
             }
-
-            Block vanillaBlock = Compat.blockFromId(vanillaId);
-            if (vanillaBlock == Blocks.AIR) {
-                AronaLayersGen.LOGGER.warn("Vanilla plant not found: {}", entry.getKey());
-                continue;
-            }
-
-            registerPlantMapping(vanillaBlock, entry.getValue());
+        }
+        if (root != null && root.has("mappings") && root.get("mappings").isJsonObject()) {
+            ids.addAll(root.getAsJsonObject("mappings").keySet());
         }
 
-        // 1.21.1 compat: "minecraft:grass" was renamed to "minecraft:short_grass".
-        // If the config used the old name (block not found above) but short_grass exists,
-        // auto-alias it to the same conquest mapping. No-op on 1.20.1 where short_grass is AIR.
-        String grassMapping = configMappings.get("minecraft:grass");
-        if (grassMapping != null) {
+        for (String id : ids) {
+            String plantId = Compat.normalizeId(id);
+            if (plantId == null) {
+                AronaLayersGen.LOGGER.warn("Invalid plant ID in config: {}", id);
+                continue;
+            }
+
+            Block plant = Compat.blockFromId(plantId);
+            if (plant == Blocks.AIR) {
+                AronaLayersGen.LOGGER.warn("Vanilla plant not found: {}", id);
+                continue;
+            }
+
+            plants.add(plant);
+        }
+
+        // "minecraft:grass" was renamed to "minecraft:short_grass" in 1.20.3. A list naming the old
+        // id (not found above on later versions) covers the new one too. No-op on 1.20.1, where
+        // short_grass does not exist.
+        if (ids.contains("minecraft:grass")) {
             String shortGrassId = Compat.normalizeId("minecraft:short_grass");
             if (shortGrassId != null) {
                 Block shortGrass = Compat.blockFromId(shortGrassId);
-                if (shortGrass != Blocks.AIR && !vanillaToConquestPlant.containsKey(shortGrass)) {
-                    registerPlantMapping(shortGrass, grassMapping);
-                    AronaLayersGen.LOGGER.info("Auto-aliased minecraft:short_grass -> {} (renamed from minecraft:grass in 1.21.1)", grassMapping);
+                if (shortGrass != Blocks.AIR && plants.add(shortGrass)) {
+                    AronaLayersGen.LOGGER.info("Auto-aliased minecraft:short_grass (renamed from minecraft:grass)");
                 }
             }
         }
 
-        AronaLayersGen.LOGGER.info("Registered {} plant mappings from config", vanillaToConquestPlant.size());
+        AronaLayersGen.LOGGER.info("Registered {} plants from plant_mappings.json", plants.size());
     }
 
-    private void registerPlantMapping(Block vanillaPlant, String conquestPlantId) {
-        vanillaToConquestPlant.put(vanillaPlant, conquestPlantId);
-        if (conquestPlantId != null) {
-            conquestToVanillaPlant.put(conquestPlantId, vanillaPlant);
-        }
-    }
-
-    public Block getConquestPlant(Block vanillaPlant) {
-        String conquestId = vanillaToConquestPlant.get(vanillaPlant);
-        if (conquestId == null) {
-            return null;
-        }
-
-        String identifier = Compat.normalizeId(conquestId);
-        if (identifier == null) {
-            AronaLayersGen.LOGGER.warn("Invalid conquest plant identifier: {}", conquestId);
-            return null;
-        }
-
-        Block conquestPlant = Compat.blockFromId(identifier);
-        if (conquestPlant == Blocks.AIR) {
-            AronaLayersGen.LOGGER.warn("Conquest plant not found: {}. Is Conquest Reforged installed?", conquestId);
-            return null;
-        }
-
-        return conquestPlant;
-    }
-
-    public Block getVanillaPlant(String conquestPlantId) {
-        return conquestToVanillaPlant.get(conquestPlantId);
-    }
-
-    public Block getVanillaPlant(Block conquestPlant) {
-        String conquestId = Compat.blockId(conquestPlant).toString();
-        return conquestToVanillaPlant.get(conquestId);
-    }
-
+    /** Whether a layer may take this plant's place, moving the plant up onto it. */
     public boolean isReplaceablePlant(Block block) {
-        return vanillaToConquestPlant.containsKey(block);
-    }
-
-    public boolean isConquestPlant(Block block) {
-        String blockId = Compat.blockId(block).toString();
-        return conquestToVanillaPlant.containsKey(blockId);
+        return plants.contains(block);
     }
 }

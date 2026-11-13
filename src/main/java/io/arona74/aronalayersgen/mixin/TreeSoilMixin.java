@@ -22,7 +22,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * In CARVERS mode, layers are placed BEFORE tree features generate.
  * This mixin intercepts tree generation and removes any layer block at the
  * trunk base position, allowing the tree to see the actual soil underneath.
- * Works with both CR and VP layer blocks.
  */
 @Mixin(TreeFeature.class)
 public class TreeSoilMixin {

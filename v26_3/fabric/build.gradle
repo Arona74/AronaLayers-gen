@@ -23,13 +23,10 @@ base {
 // interface with TreeFeature.place(level, generator, random, origin), FeaturePlaceContext and
 // TreeConfiguration removed). The shared files built on the old API are therefore replaced here
 // rather than patched for every version: they are left out of the staged shared source and
-// ../common/src/ supplies the 26.3 versions (the TerraForged template mixin is dropped
-// outright - FreeTerraForged only exists for 1.21.1).
+// ../common/src/ supplies the 26.3 versions.
 def sharedOverridden = [
     'io/arona74/aronalayersgen/injection/FractionalSurfaceSampler.java',
-    'io/arona74/aronalayersgen/mixin/NbtTreeFeatureMixin.java',
     'io/arona74/aronalayersgen/mixin/TreeSoilMixin.java',
-    'io/arona74/aronalayersgen/mixin/NbtTreeTemplateFeatureMixin.java',
 ]
 def stagedSharedJava = layout.buildDirectory.dir('sharedJava')
 def stageSharedJava = tasks.register('stageSharedJava', Sync) {

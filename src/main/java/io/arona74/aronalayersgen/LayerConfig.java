@@ -163,14 +163,11 @@ public class LayerConfig {
     public static boolean DEBUG_LOG_SKIP_ELEVATED;
     public static boolean DEBUG_LOG_STRUCTURE_NO_LAYERS;
     public static boolean DEBUG_LOG_SECOND_PASS;
-    public static boolean DEBUG_LOG_FOLIAGE;
     public static boolean DEBUG_LOG_PLANTS;
-    public static boolean DEBUG_LOG_ROCKS;
     public static boolean DEBUG_LOG_CORRECTION;
     public static boolean DEBUG_LOG_SNOW;
     public static boolean DEBUG_LOG_TREE_SOIL;
     public static boolean DEBUG_LOG_VANILLA;
-    public static boolean DEBUG_LOG_NBT_TREES;
     public static boolean DEBUG_LOG_TELLUS;
 
     public static boolean logChunkInit()         { return DEBUG_LOGGING && DEBUG_LOG_CHUNK_INIT; }
@@ -179,14 +176,11 @@ public class LayerConfig {
     public static boolean logSkipElevated()      { return DEBUG_LOGGING && DEBUG_LOG_SKIP_ELEVATED; }
     public static boolean logStructureNoLayers() { return DEBUG_LOGGING && DEBUG_LOG_STRUCTURE_NO_LAYERS; }
     public static boolean logSecondPass()        { return DEBUG_LOGGING && DEBUG_LOG_SECOND_PASS; }
-    public static boolean logFoliage()           { return DEBUG_LOGGING && DEBUG_LOG_FOLIAGE; }
     public static boolean logPlants()            { return DEBUG_LOGGING && DEBUG_LOG_PLANTS; }
-    public static boolean logRocks()             { return DEBUG_LOGGING && DEBUG_LOG_ROCKS; }
     public static boolean logCorrection()        { return DEBUG_LOGGING && DEBUG_LOG_CORRECTION; }
     public static boolean logSnow()              { return DEBUG_LOGGING && DEBUG_LOG_SNOW; }
     public static boolean logTreeSoil()          { return DEBUG_LOGGING && DEBUG_LOG_TREE_SOIL; }
     public static boolean logVanilla()           { return DEBUG_LOGGING && DEBUG_LOG_VANILLA; }
-    public static boolean logNbtTrees()          { return DEBUG_LOGGING && DEBUG_LOG_NBT_TREES; }
     public static boolean logTellus()            { return DEBUG_LOGGING && DEBUG_LOG_TELLUS; }
 
     /**
@@ -196,9 +190,9 @@ public class LayerConfig {
     public static boolean UNDERWATER_LAYERS;
 
     /**
-     * Enable plant injection during terrain generation.
-     * Requires Conquest Reforged. Layer blocks become transparent to plant placement,
-     * and vanilla plants above layers are converted to CR equivalents.
+     * Enable plant injection during terrain generation. Layer blocks become transparent to plant
+     * placement, and a plant listed in plant_mappings.json (seagrass included) standing where a
+     * layer goes is moved up onto the layer.
      * Requires game restart to take effect.
      */
     public static boolean PLANT_INJECTION;
@@ -408,18 +402,6 @@ public class LayerConfig {
     public static boolean REPLACE_DIRT_PATH;
 
     /**
-     * When placing a sand layer (conquest:sand_layer), substitute conquest:wet_sand_layer
-     * if the layer will be waterlogged or is positioned below Y=63 (sea level).
-     */
-    public static boolean PLACE_WET_SAND;
-
-    /**
-     * Convert vanilla seagrass/tall_seagrass to Conquest equivalents.
-     * Requires PLANT_INJECTION and Conquest Reforged.
-     */
-    public static boolean REPLACE_SEA_GRASS;
-
-    /**
      * Use vanilla snow layers in snowy biomes with original un-reduced layer value.
      * Requires skip_snowy_biomes=false.
      */
@@ -445,62 +427,11 @@ public class LayerConfig {
     public static boolean BREAK_SNOW_LAYERS_TO_MAPPED_LAYERS;
 
     /**
-     * Place rock blocks above layers on mapped surface blocks.
-     * Requires Conquest Reforged and cr_rock_mappings.json.
-     */
-    public static boolean PLACE_ROCKS;
-    public static float CHANCE_TO_PLACE_ROCKS;
-    public static RockDensityMode ROCK_DENSITY_MODE;
-
-    public enum RockDensityMode {
-        RANDOM,
-        DECREASED
-    }
-
-    public static float ROCK_DENSITY_FACTOR;
-
-    /**
-     * Place conquest foliage above layers on mapped surface blocks.
-     * Requires Conquest Reforged and cr_extra_foliage_mappings.json.
-     */
-    public static boolean PLACE_EXTRA_FOLIAGE;
-    public static float CHANCE_TO_PLACE_EXTRA_FOLIAGE;
-
-    /**
-     * Per-biome weighted grass placement using cr_enhanced_extra_foliage.json.
-     * Requires Conquest Reforged. Uses the same chance_to_place_extra_foliage probability.
-     */
-    public static boolean CONQUEST_ENHANCED_EXTRA_FOLIAGE;
-
-    /**
-     * Per-biome weighted rock placement using cr_enhanced_rock_mappings.json.
-     * Requires Conquest Reforged. Uses the same chance_to_place_rocks probability unless overridden per biome.
-     * When enabled and the biome has an entry, falls back to cr_rock_mappings.json for unregistered biomes.
-     */
-    public static boolean CONQUEST_ENHANCED_ROCKS;
-
-    /**
      * When structure_injection or structure_no_layers blocks/removes a layer whose surface
      * block is listed in second_pass_cleanup_blocks.json, taper the 8 in-chunk neighbors:
      * count > 4 → 4, count ≤ 4 → count-1, count 0 → remove (plant above moved down).
      */
     public static boolean SECOND_PASS_CLEANUP;
-
-    /**
-     * Place CR hand-made trees from NBT files during world generation.
-     * NBT files are loaded from nbt_trees/<species>/ bundled in the mod jar.
-     * Biome-to-species mapping is configured in cr_nbt_trees.json.
-     * Requires Conquest Reforged.
-     */
-    public static boolean CR_NBT_TREES;
-
-    /**
-     * When cr_nbt_trees=true and no NBT species is found for a growing sapling
-     * (sapling type not configured, biome not configured, or no NBT files available),
-     * allow vanilla tree generation to proceed as a fallback.
-     * false = suppress vanilla entirely; the sapling will not grow.
-     */
-    public static boolean CR_NBT_TREES_VANILLA_FALLBACK;
 
     /**
      * Lower plants standing on a partial-height layer block so they sit on its surface instead of
@@ -521,8 +452,7 @@ public class LayerConfig {
      * each step (see Layer3DWalls): a floor layer beside a higher terrain block becomes a 3D layer:
      * the floor merged with a wall toward the step, and the open cells up the step
      * get a 3D layer with no floor part (vertical_layers 0), so only hard materials (those with a 3D
-     * layer) get one. Uses al_block_mappings.json, even when Conquest
-     * Reforged is also installed. Read once, at the first world load; changes need a restart.
+     * layer) get one. Read once, at the first world load; changes need a restart.
      */
     public static boolean THREE_D_LAYER_INJECTION;
 
@@ -577,10 +507,20 @@ public class LayerConfig {
     private static final List<ConfigOption<?>> OPTIONS = new ArrayList<>();
 
     /**
-     * Per-backend switches replaced by detection (LayerBackend); dropped from the file on rewrite.
+     * Per-backend switches replaced by detection (LayerBackend); see migrateBackendSwitches.
      * Declared before the options so it is set when the static block below runs loadConfig().
      */
-    private static final List<String> OBSOLETE_KEYS = List.of("rtf_layer_injection", "tellus_layer_injection");
+    private static final List<String> BACKEND_SWITCH_KEYS = List.of("rtf_layer_injection", "tellus_layer_injection");
+
+    /**
+     * Keys of removed options, dropped from the file on rewrite without a warning: the backend
+     * switches above, and the Conquest Reforged options (support for it was removed).
+     */
+    private static final List<String> OBSOLETE_KEYS = List.of("rtf_layer_injection", "tellus_layer_injection",
+            "place_wet_sand", "replace_sea_grass", "cr_nbt_trees", "cr_nbt_trees_vanilla_fallback",
+            "place_rocks", "conquest_enhanced_rocks", "chance_to_place_rocks", "rock_density_mode", "rock_density_factor",
+            "place_extra_foliage", "conquest_enhanced_extra_foliage", "chance_to_place_extra_foliage",
+            "debug_log_foliage", "debug_log_rocks", "debug_log_nbt_trees");
 
     /**
      * Registers an option after the last one of its tab, so each tab's options stay together in
@@ -654,8 +594,6 @@ public class LayerConfig {
                 .in(ConfigTab.WORLDGEN, "surface"));
         add(bool("replace_dirt_path", true, () -> REPLACE_DIRT_PATH, v -> REPLACE_DIRT_PATH = v)
                 .in(ConfigTab.WORLDGEN, "surface"));
-        add(bool("place_wet_sand", true, () -> PLACE_WET_SAND, v -> PLACE_WET_SAND = v)
-                .in(ConfigTab.WORLDGEN, "surface"));
     }
     private static final ConfigOption<Boolean> O_REDUCE_SWAMP_LAYERS = add(bool("reduce_swamp_layers", false,
             () -> REDUCE_SWAMP_LAYERS, v -> REDUCE_SWAMP_LAYERS = v).in(ConfigTab.WORLDGEN, "swamps"));
@@ -667,11 +605,9 @@ public class LayerConfig {
     }
 
     // --- Plants & trees ---
-    private static final ConfigOption<Boolean> O_PLANT_INJECTION = add(bool("plant_injection", true,
-            () -> PLANT_INJECTION, v -> PLANT_INJECTION = v).in(ConfigTab.WORLDGEN, "plants"));
     static {
-        add(bool("replace_sea_grass", true, () -> REPLACE_SEA_GRASS, v -> REPLACE_SEA_GRASS = v)
-                .in(ConfigTab.WORLDGEN, "plants").requires(O_PLANT_INJECTION).mods("conquest"));
+        add(bool("plant_injection", true, () -> PLANT_INJECTION, v -> PLANT_INJECTION = v)
+                .in(ConfigTab.WORLDGEN, "plants"));
         add(bool("tree_injection", true, () -> TREE_INJECTION, v -> TREE_INJECTION = v)
                 .in(ConfigTab.WORLDGEN, "trees"));
         add(bool("trees_on_layers", true, () -> TREES_ON_LAYERS, v -> TREES_ON_LAYERS = v)
@@ -688,13 +624,6 @@ public class LayerConfig {
                 .in(ConfigTab.VISUALS, "posts").requires(O_POSTS_ON_LAYERS).requires(O_POSTS_MODE, PostMode.LOWER)
                 .side(Side.BOTH).apply(Apply.RESOURCE_RELOAD));
     }
-    private static final ConfigOption<Boolean> O_CR_NBT_TREES = add(bool("cr_nbt_trees", true,
-            () -> CR_NBT_TREES, v -> CR_NBT_TREES = v).in(ConfigTab.WORLDGEN, "trees").mods("conquest"));
-    static {
-        add(bool("cr_nbt_trees_vanilla_fallback", true,
-                () -> CR_NBT_TREES_VANILLA_FALLBACK, v -> CR_NBT_TREES_VANILLA_FALLBACK = v)
-                .in(ConfigTab.GAMEPLAY, "saplings").requires(O_CR_NBT_TREES).apply(Apply.LIVE));
-    }
     private static final ConfigOption<Boolean> O_PLANT_GROUNDING = add(bool("plant_grounding", true,
             () -> PLANT_GROUNDING, v -> PLANT_GROUNDING = v).in(ConfigTab.VISUALS, "grounding")
             .side(Side.BOTH).apply(Apply.RESTART));
@@ -709,36 +638,6 @@ public class LayerConfig {
         add(blockList("plant_grounding_exclude_blocks", List.of(),
                 () -> PLANT_GROUNDING_EXCLUDE_BLOCKS, v -> PLANT_GROUNDING_EXCLUDE_BLOCKS = v)
                 .in(ConfigTab.VISUALS, "grounding").requires(O_PLANT_GROUNDING).side(Side.BOTH).apply(Apply.RESOURCE_RELOAD));
-    }
-
-    // --- Rocks & foliage ---
-    private static final ConfigOption<Boolean> O_PLACE_ROCKS = add(bool("place_rocks", true,
-            () -> PLACE_ROCKS, v -> PLACE_ROCKS = v).in(ConfigTab.WORLDGEN, "rocks").mods("conquest"));
-    static {
-        add(bool("conquest_enhanced_rocks", true, () -> CONQUEST_ENHANCED_ROCKS, v -> CONQUEST_ENHANCED_ROCKS = v)
-                .in(ConfigTab.WORLDGEN, "rocks").requires(O_PLACE_ROCKS).mods("conquest"));
-        add(decimal("chance_to_place_rocks", 0.05, 0.0, 1.0, 0.01,
-                () -> toDouble(CHANCE_TO_PLACE_ROCKS), v -> CHANCE_TO_PLACE_ROCKS = v.floatValue())
-                .in(ConfigTab.WORLDGEN, "rocks").requires(O_PLACE_ROCKS).mods("conquest"));
-    }
-    private static final ConfigOption<RockDensityMode> O_ROCK_DENSITY_MODE = add(choice("rock_density_mode", RockDensityMode.DECREASED,
-            () -> ROCK_DENSITY_MODE, v -> ROCK_DENSITY_MODE = v)
-            .in(ConfigTab.WORLDGEN, "rocks").requires(O_PLACE_ROCKS).mods("conquest"));
-    static {
-        add(decimal("rock_density_factor", 4.0, 1.0, 10.0, 0.5,
-                () -> toDouble(ROCK_DENSITY_FACTOR), v -> ROCK_DENSITY_FACTOR = v.floatValue())
-                .in(ConfigTab.WORLDGEN, "rocks").requires(O_PLACE_ROCKS)
-                .requires(O_ROCK_DENSITY_MODE, RockDensityMode.DECREASED).mods("conquest"));
-    }
-    private static final ConfigOption<Boolean> O_PLACE_EXTRA_FOLIAGE = add(bool("place_extra_foliage", true,
-            () -> PLACE_EXTRA_FOLIAGE, v -> PLACE_EXTRA_FOLIAGE = v).in(ConfigTab.WORLDGEN, "foliage").mods("conquest"));
-    static {
-        add(bool("conquest_enhanced_extra_foliage", true,
-                () -> CONQUEST_ENHANCED_EXTRA_FOLIAGE, v -> CONQUEST_ENHANCED_EXTRA_FOLIAGE = v)
-                .in(ConfigTab.WORLDGEN, "foliage").requires(O_PLACE_EXTRA_FOLIAGE).mods("conquest"));
-        add(decimal("chance_to_place_extra_foliage", 0.5, 0.0, 1.0, 0.01,
-                () -> toDouble(CHANCE_TO_PLACE_EXTRA_FOLIAGE), v -> CHANCE_TO_PLACE_EXTRA_FOLIAGE = v.floatValue())
-                .in(ConfigTab.WORLDGEN, "foliage").requires(O_PLACE_EXTRA_FOLIAGE).mods("conquest"));
     }
 
     // --- Structures ---
@@ -842,14 +741,11 @@ public class LayerConfig {
         debugCategory("debug_log_skip_elevated", () -> DEBUG_LOG_SKIP_ELEVATED, v -> DEBUG_LOG_SKIP_ELEVATED = v);
         debugCategory("debug_log_structure_no_layers", () -> DEBUG_LOG_STRUCTURE_NO_LAYERS, v -> DEBUG_LOG_STRUCTURE_NO_LAYERS = v);
         debugCategory("debug_log_second_pass", () -> DEBUG_LOG_SECOND_PASS, v -> DEBUG_LOG_SECOND_PASS = v);
-        debugCategory("debug_log_foliage", () -> DEBUG_LOG_FOLIAGE, v -> DEBUG_LOG_FOLIAGE = v);
         debugCategory("debug_log_plants", () -> DEBUG_LOG_PLANTS, v -> DEBUG_LOG_PLANTS = v);
-        debugCategory("debug_log_rocks", () -> DEBUG_LOG_ROCKS, v -> DEBUG_LOG_ROCKS = v);
         debugCategory("debug_log_correction", () -> DEBUG_LOG_CORRECTION, v -> DEBUG_LOG_CORRECTION = v);
         debugCategory("debug_log_snow", () -> DEBUG_LOG_SNOW, v -> DEBUG_LOG_SNOW = v);
         debugCategory("debug_log_tree_soil", () -> DEBUG_LOG_TREE_SOIL, v -> DEBUG_LOG_TREE_SOIL = v);
         debugCategory("debug_log_vanilla", () -> DEBUG_LOG_VANILLA, v -> DEBUG_LOG_VANILLA = v);
-        debugCategory("debug_log_nbt_trees", () -> DEBUG_LOG_NBT_TREES, v -> DEBUG_LOG_NBT_TREES = v);
         debugCategory("debug_log_tellus", () -> DEBUG_LOG_TELLUS, v -> DEBUG_LOG_TELLUS = v);
     }
 
@@ -864,11 +760,6 @@ public class LayerConfig {
 
     public static Path configDir() {
         return CONFIG_DIR;
-    }
-
-    /** A float field as the decimal it was written as, so 0.05f reads back as 0.05 rather than 0.0500000007. */
-    private static double toDouble(float value) {
-        return Double.parseDouble(Float.toString(value));
     }
 
     // ========== Loading and saving ==========
@@ -923,7 +814,7 @@ public class LayerConfig {
     private static void migrateBackendSwitches(JsonObject json) {
         boolean anyOld = false;
         boolean anyOn = LAYER_INJECTION;
-        for (String key : OBSOLETE_KEYS) {
+        for (String key : BACKEND_SWITCH_KEYS) {
             if (!json.has(key)) continue;
             anyOld = true;
             JsonElement value = json.get(key);
@@ -934,7 +825,7 @@ public class LayerConfig {
             LAYER_INJECTION = anyOn;
             AronaLayersGen.LOGGER.info("[Config] layer_injection is now the master switch; turned on because a removed backend switch was on");
         }
-        AronaLayersGen.LOGGER.info("[Config] Removed {}: each dimension's layer source is now detected", OBSOLETE_KEYS);
+        AronaLayersGen.LOGGER.info("[Config] Removed {}: each dimension's layer source is now detected", BACKEND_SWITCH_KEYS);
     }
 
     private static <T> boolean applyValue(ConfigOption<T> option, JsonElement element) {

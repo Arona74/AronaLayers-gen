@@ -21,10 +21,8 @@ base {
 // versions rather than patched; they are left out of the staged shared source. Keep this list the
 // same as the Fabric subproject's (see v26_3/fabric/build.gradle).
 def sharedOverridden = [
-    'io/arona74/aronalayersgen/injection/FractionalSurfaceSampler.java',
-    'io/arona74/aronalayersgen/mixin/NbtTreeFeatureMixin.java',
-    'io/arona74/aronalayersgen/mixin/TreeSoilMixin.java',
-    'io/arona74/aronalayersgen/mixin/NbtTreeTemplateFeatureMixin.java',
+    'io/arona74/aronalayersgen/injection/FractionalSurfaceSampler.java',
+    'io/arona74/aronalayersgen/mixin/TreeSoilMixin.java',
 ]
 def stagedSharedJava = layout.buildDirectory.dir('sharedJava')
 def stageSharedJava = tasks.register('stageSharedJava', Sync) {

@@ -5,7 +5,6 @@ import io.arona74.aronalayersgen.AronaLayersGen;
 import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.injection.LayerBackend;
 import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
-import io.arona74.aronalayersgen.injection.PlantConversionHelper;
 import io.arona74.aronalayersgen.injection.PreStructureHeightmapStorage;
 import io.arona74.aronalayersgen.injection.RTFCompat;
 import io.arona74.aronalayersgen.injection.RTFLayerInjector;
@@ -124,10 +123,6 @@ public class ChunkGeneratorFeaturesMixin {
             }
 
             LayerPlacementHelper.runSecondPassCleanup(chunk);
-
-            if (LayerConfig.PLANT_INJECTION) {
-                PlantConversionHelper.convertPlantsAboveLayers(chunk);
-            }
 
             // Last, after every pass that can remove a layer.
             LayerPlacementHelper.fillTrunkGaps(chunk);

@@ -24,7 +24,7 @@ public class ConfigLoader {
     /**
      * Load mappings from a JSON config file.
      * First tries to load from the config directory, then falls back to resources.
-     * @param configFileName The name of the config file (e.g., "cr_block_mappings.json")
+     * @param configFileName The name of the config file (e.g., "al_block_mappings.json")
      * @return Map of vanilla block IDs to layer block IDs
      */
     public static Map<String, String> loadMappings(String configFileName) {

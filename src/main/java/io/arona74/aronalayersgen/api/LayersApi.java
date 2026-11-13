@@ -10,9 +10,8 @@ import net.minecraft.world.level.block.state.BlockState;
  * What gen knows about layer blocks, for other mods (LSL, Layer Supported LOD, reads it to draw
  * layers in Distant Horizons and Voxy LODs).
  *
- * <p>Gen's own detection covers the configured block mappings, gen's layer blocks, AronaLayers
- * 3D layers and Conquest Reforged layers, which a mod looking only at shapes cannot fully tell
- * apart. Callers reach this class by reflection, so gen and its callers never need each other's jar
+ * <p>Gen's own detection covers the configured block mappings, gen's layer blocks and AronaLayers
+ * 3D layers, which a mod looking only at shapes cannot fully tell apart. Callers reach this class by reflection, so gen and its callers never need each other's jar
  * to build: keep the class name and these static signatures stable, and bump {@link #VERSION} when a
  * method is added.
  *
@@ -29,7 +28,7 @@ public final class LayersApi {
         return fullBlockOf(block) != null || LayerPlacementHelper.getMappingRegistry().isLayerBlock(block);
     }
 
-    /** Carries a layer property (vanilla {@code layers}, CR {@code layer}, or a 3D layer's). Plants can too. */
+    /** Carries a layer property (vanilla {@code layers}, or a 3D layer's). */
     public static boolean hasLayerProperty(BlockState state) {
         return LayerPlacementHelper.hasLayerProperty(state);
     }
@@ -44,7 +43,7 @@ public final class LayersApi {
         return LayerPlacementHelper.isWallPiece(state);
     }
 
-    /** Layer count in eighths (1-8); CR's 1-4 {@code layer} is converted. 1 when the state has none. */
+    /** Layer count in eighths (1-8). 1 when the state has none. */
     public static int layerCount(BlockState state) {
         return LayerPlacementHelper.readLayerCount(state);
     }

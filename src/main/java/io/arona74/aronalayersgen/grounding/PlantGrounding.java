@@ -72,11 +72,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>has a native random ground offset and no collision, which is what Mojang gives small
  *       ground decoration and what modded plants copy when they don't extend the base class,</li>
  * </ul>
- * and does not already position itself on layers: a {@code layers}/{@code layer} integer property
- * (Conquest Reforged plants carry vanilla's {@code layers}, older CR used {@code layer}) or CR's
- * {@code offset_toggle} custom offsetter. Grounding those would lower them a second time. Lily pads
- * float and hanging states attach from above, so both are skipped. The config lists override all of
- * this by id.
+ * and is not a layer itself (a {@code layers} integer property). Lily pads float and hanging states
+ * attach from above, so both are skipped. The config lists override all of this by id.
  *
  * <p>The offset only opens when the block below carries a layer property, so a wrongly matched
  * block on ordinary ground, farmland, soul sand or mud never moves.
@@ -194,12 +191,10 @@ public final class PlantGrounding {
             || block instanceof BasePressurePlateBlock || block instanceof BrewingStandBlock || block instanceof CakeBlock;
     }
 
-    /** A block that already places itself on layer blocks: grounding it would double the drop. */
+    /** A block with a layer count of its own is a layer, not something standing on one. */
     private static boolean positionsItself(Block block) {
         for (Property<?> property : block.getStateDefinition().getProperties()) {
-            String name = property.getName();
-            if (property instanceof IntegerProperty && (name.equals("layers") || name.equals("layer"))) return true;
-            if (property instanceof BooleanProperty && name.equals("offset_toggle")) return true;
+            if (property instanceof IntegerProperty && property.getName().equals("layers")) return true;
         }
         return false;
     }
@@ -249,12 +244,11 @@ public final class PlantGrounding {
         return below == plant;
     }
 
-    /** Soil the offset may open on: a layer block, vanilla or Conquest Reforged. */
+    /** Soil the offset may open on: a layer block (a {@code layers} property). */
     public static boolean isLayerSoil(BlockState state) {
         return LAYER_SOIL_CACHE.computeIfAbsent(state.getBlock(), b -> {
             for (Property<?> property : b.getStateDefinition().getProperties()) {
-                String name = property.getName();
-                if (property instanceof IntegerProperty && (name.equals("layers") || name.equals("layer"))) return true;
+                if (property instanceof IntegerProperty && property.getName().equals("layers")) return true;
             }
             return false;
         });

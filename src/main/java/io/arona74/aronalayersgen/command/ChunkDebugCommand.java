@@ -605,9 +605,8 @@ public class ChunkDebugCommand {
         if (mappedBlock != null) {
             BlockState mappedState = mappedBlock.defaultBlockState();
             boolean supportsWaterlogged = mappedState.hasProperty(BlockStateProperties.WATERLOGGED);
-            boolean hasCRLayer = LayerPlacementHelper.getCRLayerProperty(mappedBlock) != null;
             send(source, "  mappedLayerBlock: " + Compat.blockId(mappedBlock)
-                    + " (WATERLOGGED=" + supportsWaterlogged + " CRlayer=" + hasCRLayer + ")");
+                    + " (WATERLOGGED=" + supportsWaterlogged + ")");
             if (aboveIsWater && !supportsWaterlogged) {
                 send(source, "  !! FAIL: above pos has water/ice but mapped block has no WATERLOGGED -> injectLayerAt will skip");
             }
@@ -727,8 +726,7 @@ public class ChunkDebugCommand {
     }
 
     private static boolean hasLayerProperty(BlockState state) {
-        if (state.hasProperty(BlockStateProperties.LAYERS)) return true;
-        return LayerPlacementHelper.getCRLayerProperty(state.getBlock()) != null;
+        return state.hasProperty(BlockStateProperties.LAYERS);
     }
 
     private static void send(CommandSourceStack source, String msg) {

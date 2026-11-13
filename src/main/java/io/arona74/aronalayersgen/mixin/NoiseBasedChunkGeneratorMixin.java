@@ -6,7 +6,6 @@ import io.arona74.aronalayersgen.LayerConfig;
 import io.arona74.aronalayersgen.injection.LayerBackend;
 import io.arona74.aronalayersgen.injection.LayerPlacementHelper;
 import io.arona74.aronalayersgen.injection.VanillaLayerInjector;
-import io.arona74.aronalayersgen.injection.PlantConversionHelper;
 import io.arona74.aronalayersgen.injection.PreStructureHeightmapStorage;
 import io.arona74.aronalayersgen.injection.RTFCompat;
 import io.arona74.aronalayersgen.injection.RTFLayerInjector;
@@ -150,16 +149,6 @@ public class NoiseBasedChunkGeneratorMixin {
                 AronaLayersGen.LOGGER.info("[ChunkInit] second_pass DONE {},{} ms={}",
                     Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), (System.nanoTime() - stepStart) / 1_000_000L);
                 stepStart = System.nanoTime();
-            }
-
-            // Convert vanilla plants above layers to conquest equivalents (CR only)
-            if (LayerConfig.PLANT_INJECTION) {
-                if (LayerConfig.logChunkInit())
-                    AronaLayersGen.LOGGER.info("[ChunkInit] plant convert START {},{}", Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()));
-                PlantConversionHelper.convertPlantsAboveLayers(chunk);
-                if (LayerConfig.logChunkInit())
-                    AronaLayersGen.LOGGER.info("[ChunkInit] plant convert DONE {},{} ms={}",
-                        Compat.chunkX(chunk.getPos()), Compat.chunkZ(chunk.getPos()), (System.nanoTime() - stepStart) / 1_000_000L);
             }
 
             if (LayerConfig.logChunkInit())

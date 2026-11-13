@@ -15,7 +15,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
  *
  * <p>When break_snow_layers_to_mapped_layers is enabled and a snow layer is
  * broken, the snow is replaced by the mapped layer block for the surface below,
- * with the layer count reduced by one. Works with both the CR and VP backends.
+ * with the layer count reduced by one.
  *
  * <p>The mixin is per-version: up to 1.21.1 the hook is
  * BlockBehaviour.onRemove(state, level, pos, newState, moved), but 1.21.11

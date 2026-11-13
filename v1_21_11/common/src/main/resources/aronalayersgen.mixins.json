@@ -3,7 +3,6 @@
   "minVersion": "0.8",
   "package": "io.arona74.aronalayersgen.mixin",
   "compatibilityLevel": "JAVA_21",
-  "plugin": "io.arona74.aronalayersgen.mixin.AronaLayersMixinPlugin",
   "mixins": [
     "NoiseBasedChunkGeneratorMixin",
     "ChunkGeneratorMixin",
@@ -12,10 +11,6 @@
     "PlantBlockMixin",
     "LeafLitterBlockMixin",
     "TreeFeatureMixin",
-    "NbtTreeFeatureMixin",
-    "NbtTreeTemplateFeatureMixin",
-    "TellusProceduralTreeMixin",
-    "SaplingBlockGrowMixin",
     "TreeSoilMixin",
     "SnowBlockMixin",
     "EntityTouchingPowderSnowAccessor",

@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /**
  * Makes layer blocks transparent to plant placement checks, so that when
  * plant_injection is enabled canSurvive() looks through a layer block to the
- * real surface below. Only meaningful when Conquest Reforged is the backend.
+ * real surface below.
  *
  * <p>Per-version target: BushBlock is the plant base class in this version.
  */

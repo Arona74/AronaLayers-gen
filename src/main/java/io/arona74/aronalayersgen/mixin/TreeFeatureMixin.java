@@ -14,7 +14,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * Makes layer blocks replaceable by tree features.
  * When tree_injection is enabled, TreeFeature.canReplace() treats layer blocks
  * as replaceable, allowing tree trunks and foliage to overwrite them.
- * Works with both CR and VP layer blocks.
  */
 @Mixin(TreeFeature.class)
 public class TreeFeatureMixin {

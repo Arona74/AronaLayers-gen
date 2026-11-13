@@ -9,9 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Registry for mapping vanilla blocks to their layer block equivalents.
- * Supports both Conquest Reforged (cr_block_mappings.json) and
- * AronaLayers (al_block_mappings.json) backends.
+ * Registry for mapping vanilla blocks to their layer block equivalents (al_block_mappings.json).
  */
 public class BlockMappingRegistry {
     private final Map<Block, String> blockToLayerMapping;
@@ -50,7 +48,7 @@ public class BlockMappingRegistry {
             blockToLayerMapping.put(vanillaBlock, entry.getValue());
 
             // Track the resolved layer block so we can distinguish actual layer blocks
-            // from foliage/rock blocks that also happen to have a "layer" property.
+            // from other blocks that also happen to have a layer property.
             String layerId = Compat.normalizeId(entry.getValue());
             if (layerId != null) {
                 Block layerBlock = Compat.blockFromId(layerId);
@@ -124,7 +122,7 @@ public class BlockMappingRegistry {
     /**
      * Returns true if the given block is a known layer block (i.e. appears as a value
      * in the surface→layer mapping). Used to distinguish layer blocks from other blocks
-     * (e.g. CR foliage) that also happen to carry a "layer" integer property.
+     * that also happen to carry a layer property.
      */
     public boolean isLayerBlock(Block block) {
         return knownLayerBlocks.contains(block) || Layer3D.is(block);

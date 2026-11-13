@@ -651,7 +651,7 @@ public class TellusCompat {
             p.heightmapY = floorY;
             p.rawTopSolidY = floorY - 1;
 
-            // Some CR layer blocks (slab-style ones) count as solid for OCEAN_FLOOR, so a layer
+            // A layer block that counts as solid for OCEAN_FLOOR (slab-style ones), so a layer
             // this mod placed on an earlier run gets measured as terrain and inflates the
             // heightmap by a block. Walk down past any layer blocks to find the NATURAL top,
             // otherwise MISMATCH reports our own output as a DEM disagreement.
